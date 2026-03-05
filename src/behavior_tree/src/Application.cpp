@@ -71,6 +71,7 @@ namespace BehaviorTree {
         pub_gimbal_control_  = node_->create_publisher<gimbal_driver::msg::GimbalAngles>(ly_control_angles::Name, 10);
         pub_gimbal_firecode_ = node_->create_publisher<std_msgs::msg::UInt8>(ly_control_firecode::Name, 10);
         pub_gimbal_posture_  = node_->create_publisher<std_msgs::msg::UInt8>(ly_control_posture::Name, 10);
+        pub_gimbal_vel_      = node_->create_publisher<gimbal_driver::msg::Vel>(ly_control_vel::Name, 10);
         pub_navi_vel_        = node_->create_publisher<gimbal_driver::msg::Vel>(ly_navi_vel::Name, 10);
         pub_navi_goal_       = node_->create_publisher<std_msgs::msg::UInt8>(ly_navi_goal::Name, 10);
         pub_navi_goal_pos_   = node_->create_publisher<std_msgs::msg::UInt16MultiArray>(ly_navi_goal_pos::Name, 10);

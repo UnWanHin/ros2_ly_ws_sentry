@@ -32,10 +32,10 @@
 1. 姿态控制未下发到串口协议  
    当前 `/ly/control/posture` 仅在 ROS 内回环到 `/ly/gimbal/posture`，`GimbalControlData` 不含 posture 字段，未真正发到下位机。
 
-2. `/ly/control/vel` 在仓库内无发布者  
-   `gimbal_driver` 有订阅，但当前工程里没有节点发布该 topic。
+2. `/ly/control/vel` 由 `behavior_tree` 速度桥接发布  
+   当前链路为：`/ly/navi/vel -> behavior_tree -> /ly/control/vel -> gimbal_driver`。
 
-3. 导航 topic 缺少本仓库内消费者  
+3. 导航 topic 缺少本仓库内执行消费者  
    behavior_tree 会发 `/ly/navi/*`，但仓库内未见对应导航执行节点（可能在外部仓库/下位机）。
 
 4. 比赛开始门控  

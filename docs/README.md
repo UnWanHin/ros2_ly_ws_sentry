@@ -37,6 +37,7 @@ docs/
 [guides/config_setup_guide.md](guides/config_setup_guide.md)  
 [guides/auto_aim_tuning_handover.md](guides/auto_aim_tuning_handover.md)  
 [guides/auto_aim_yamlization_checklist.md](guides/auto_aim_yamlization_checklist.md)  
+[guides/external_topic_boundary.md](guides/external_topic_boundary.md)  
 [guides/self_check_dual_suite.md](guides/self_check_dual_suite.md)  
 [guides/module_standalone_test.md](guides/module_standalone_test.md)  
 [guides/test_guide.md](guides/test_guide.md)  
