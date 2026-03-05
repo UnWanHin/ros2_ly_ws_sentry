@@ -49,12 +49,13 @@ namespace BehaviorTree {
         GlobalBlackboard_->set<bool>("IsFindTarget", IsFindTarget);
         GlobalBlackboard_->set<std::uint8_t>("PostureState", postureState);
         GlobalBlackboard_->set<std::uint8_t>("PostureCommand", postureCommand);
-        
-        LoggerPtr->Info("-------- update blackboard ----------");
-        LoggerPtr->Info("TimeLeft: {}", timeLeft);
-        LoggerPtr->Info("SelfHealth: {}, AmmoLeft: {}", SelfHealth, ammoLeft);
-        LoggerPtr->Info("EnemyOutpostHealth: {}, SelfOutpostHealth: {}", enemyOutpostHealth, selfOutpostHealth);
-        LoggerPtr->Info("-------- update blackboard successfully --------");
+
+        const auto now = std::chrono::steady_clock::now();
+        if (now - lastUpdateBlackboardLogTime_ > std::chrono::seconds(2)) {
+            LoggerPtr->Debug("Blackboard updated: TimeLeft={}, SelfHealth={}, AmmoLeft={}, EnemyOutpostHealth={}, SelfOutpostHealth={}",
+                timeLeft, SelfHealth, ammoLeft, enemyOutpostHealth, selfOutpostHealth);
+            lastUpdateBlackboardLogTime_ = now;
+        }
     }
 
     /**
@@ -70,8 +71,12 @@ namespace BehaviorTree {
         // targetArmor = ArmorType::Infantry1;
         // 设置数据内容
         PublishTogether();
-        PrintMessageAll();
-        LoggerPtr->Info("send BlackBoard data successfully!");
+        const auto now = std::chrono::steady_clock::now();
+        if (now - lastTransportLogTime_ > std::chrono::seconds(1)) {
+            PrintMessageAll();
+            LoggerPtr->Debug("TransportData: published control data.");
+            lastTransportLogTime_ = now;
+        }
     }
 
      /**
@@ -112,28 +117,37 @@ namespace BehaviorTree {
         }
         if (config.AimDebugSettings.StopRotate) gimbalControlData.FireCode.Rotate = 0;
 
-        LoggerPtr->Info("Rotate Speed: {}", gimbalControlData.FireCode.Rotate);
+        static auto last_rotate_log = std::chrono::steady_clock::time_point{};
+        if (now_time >= 0) {
+            const auto log_now = std::chrono::steady_clock::now();
+            if (log_now - last_rotate_log > std::chrono::seconds(2)) {
+                LoggerPtr->Debug("Rotate Speed: {}", gimbalControlData.FireCode.Rotate);
+                last_rotate_log = log_now;
+            }
+        }
 
 
         /*----------云台----------*/
         bool FindTarget = isFindTargetAtomic;
         auto now = std::chrono::steady_clock::now();
         if (FindTarget) {
-            LoggerPtr->Info("Find Target");
+            const bool allow_fire = (aimMode == AimMode::Buff) ? buffAimData.FireStatus
+                                 : (aimMode == AimMode::Outpost ? outpostAimData.FireStatus : true);
+            LoggerPtr->Debug("Find Target, AimMode={}, AllowFire={}", static_cast<int>(aimMode), allow_fire);
             if (!config.AimDebugSettings.StopFire){
-                if(aimMode != AimMode::Buff) { // 非打符模式，即打前哨和打车
-                    if(fireRateClock.trigger()){
-                        fireRateClock.tick();
-                        RecFireCode.FlipFireStatus();
-                        gimbalControlData.FireCode.FireStatus = RecFireCode.FireStatus;
-                    }
-                }else{ // 打符模式
+                if(aimMode == AimMode::Buff) { // 打符模式
                     if(buffAimData.FireStatus){
-                        /// 立刻响应不需要tick;
+                        /// 立刻响应不需要tick
                         RecFireCode.FlipFireStatus();
                         gimbalControlData.FireCode.FireStatus = RecFireCode.FireStatus;
                         buffAimData.FireStatus = false;
                         buff_shoot_count++;
+                    }
+                } else if (allow_fire) { // 非打符模式（打前哨和打车），需允许开火
+                    if(fireRateClock.trigger()){
+                        fireRateClock.tick();
+                        RecFireCode.FlipFireStatus();
+                        gimbalControlData.FireCode.FireStatus = RecFireCode.FireStatus;
                     }
                 }
             }
@@ -148,7 +162,7 @@ namespace BehaviorTree {
                 gimbalControlData.GimbalAngles = outpostAimData.Angles;
             } else {
                 gimbalControlData.GimbalAngles = autoAimData.Angles;
-                LoggerPtr->Info("Pitch: {}, Yaw: {}", autoAimData.Angles.Pitch, autoAimData.Angles.Yaw);
+                LoggerPtr->Debug("AutoAim Angles -> Pitch: {}, Yaw: {}", autoAimData.Angles.Pitch, autoAimData.Angles.Yaw);
             }
         }
         else { // 未识别到目标
@@ -156,7 +170,11 @@ namespace BehaviorTree {
                 /// 云台控制数据均匀变化
                 if (!config.AimDebugSettings.StopScan && now - lastFoundEnemyTime > std::chrono::milliseconds(2000)) {
                     gimbalControlData.FireCode.AimMode = 0;
-                    LoggerPtr->Info("Searching Target...");
+                    static auto last_searching_log = std::chrono::steady_clock::time_point{};
+                    if (now - last_searching_log > std::chrono::seconds(2)) {
+                        LoggerPtr->Debug("Searching Target...");
+                        last_searching_log = now;
+                    }
                     const auto current_time = std::chrono::steady_clock::now();
                     gimbalControlData.GimbalAngles.Yaw = gimbalAngles.Yaw + 3 * delta_yaw;
                     // gimbalControlData.GimbalAngles.Yaw = gimbalAngles.Yaw + delta_yaw;
@@ -169,7 +187,7 @@ namespace BehaviorTree {
                 } else { // 丢失目标之后，两秒钟只能依旧转发旧角度
                     // if(aimMode != AimMode::Buff){
                         gimbalControlData.GimbalAngles = autoAimData.Angles;
-                        LoggerPtr->Info("Pitch: {}, Yaw: {}", autoAimData.Angles.Pitch, autoAimData.Angles.Yaw);
+                        LoggerPtr->Debug("Hold Angles -> Pitch: {}, Yaw: {}", autoAimData.Angles.Pitch, autoAimData.Angles.Yaw);
                     // }
                     // else if(aimMode == AimMode::Buff) gimbalControlData.GimbalAngles = buffAimData.Angles;
                 }
@@ -233,9 +251,12 @@ namespace BehaviorTree {
 
         while (rclcpp::ok()) {
             rclcpp::spin_some(node_); // 处理回调函数
-            LoggerPtr->Info("--------------------> BehaviorTree Root Tick! <--------------------");
+            const auto now = std::chrono::steady_clock::now();
+            if (now - lastTreeTickLogTime_ > std::chrono::seconds(2)) {
+                LoggerPtr->Debug("BehaviorTree Root Tick...");
+                lastTreeTickLogTime_ = now;
+            }
             TreeTick();
-            LoggerPtr->Info("--------------------> BehaviorTree Root Tick Done! <--------------------");
             treeTickRateClock.sleep();
         }
     }

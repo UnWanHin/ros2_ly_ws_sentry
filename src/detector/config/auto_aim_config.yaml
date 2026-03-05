@@ -115,18 +115,12 @@
           coef_d2: 0.5
 
     # ----------------------------------------------------
-    # 4. 測試模式配置
-    # ----------------------------------------------------
-    test_mode:
-      enable: false  # 設為 true 啟用"看到就打"測試模式，false 則等待 behavior_tree 決策
-
-    # ----------------------------------------------------
-    # 5. IO 配置
+    # 4. IO 配置
     # ----------------------------------------------------
     io_config:
       use_virtual_device: false        # 是否使用虚拟设备 (本地測試設為 true)
-      device_name: "/dev/ttyACM0"     # 記得加上這個，不然 Gimbal 會報錯
-      baud_rate: 115200 
+      device_name: "/dev/ttyACM0"     # 预留字段：当前 gimbal_driver 主程序未读取
+      baud_rate: 115200               # 预留字段：当前 gimbal_driver 主程序未读取
     "io_config/use_virtual_device": false
     "io_config/device_name": "/dev/ttyACM0"
     "io_config/baud_rate": 115200

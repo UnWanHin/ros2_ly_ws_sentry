@@ -107,6 +107,8 @@ private:
     std::chrono::steady_clock::time_point gameStartTime{std::chrono::steady_clock::now()};
     std::chrono::steady_clock::time_point lastFoundEnemyTime{std::chrono::steady_clock::now()}; 
     GimbalAnglesType gimbalAngles{0, 0}; 
+    std::atomic<bool> hasReceivedGimbalAngles_{false};
+    std::chrono::steady_clock::time_point lastGimbalAnglesRxTime{};
     std::vector<UnitType> reliableEnemyPosuition; 
     std::vector<UnitType> hitableTargets; 
 
@@ -150,6 +152,9 @@ private:
 
     Config config{}; // 配置文件
     PostureManager postureManager_{};
+    std::chrono::steady_clock::time_point lastUpdateBlackboardLogTime_{};
+    std::chrono::steady_clock::time_point lastTreeTickLogTime_{};
+    std::chrono::steady_clock::time_point lastTransportLogTime_{};
 
     RateClock fireRateClock{20}, treeTickRateClock{100}, naviCommandRateClock{2}; // 频率控制
     TimerClock rotateTimerClock{Seconds{2}}; // 旋转时间

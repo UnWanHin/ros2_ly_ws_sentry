@@ -16,8 +16,8 @@ shooting_table_calib/
 ├── README.md                       # 標定使用說明（3KB）
 ├── shooting_table_node.cpp         # 主節點（全部邏輯，957行）
 ├── launch/
-│   ├── shooting_table.launch.py    # 正式相機模式
-│   └── shooting_table_video.launch.py  # 視頻回放模式
+│   ├── shooting_table_calib.launch.py  # ROS 2 主入口（推薦）
+│   └── shooting_table_calib.launch     # ROS 2 XML 兼容入口
 └── include/                        # 空目錄
 ```
 
@@ -163,6 +163,7 @@ pitch_compensation = intercept
 ## 標定流程（参考 README.md）
 
 1. 啟動 `gimbal_driver` + `shooting_table_calib`
+   `ros2 launch shooting_table_calib shooting_table_calib.launch.py`
 2. 將靶板放在不同距離（建議 2m/3m/4m/5m）
 3. 每個距離按 `a` 鎖定靶板
 4. 用 `↑↓←→` 微調校正偏差

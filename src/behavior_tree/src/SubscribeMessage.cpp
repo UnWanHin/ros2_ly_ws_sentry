@@ -43,6 +43,8 @@ namespace BehaviorTree{
         GenSub<ly_gimbal_angles>([](Application& app, auto msg) {
             app.gimbalAngles.Yaw = msg->yaw; //ROS2改成小寫
             app.gimbalAngles.Pitch = msg->pitch;
+            app.hasReceivedGimbalAngles_ = true;
+            app.lastGimbalAnglesRxTime = std::chrono::steady_clock::now();
         });
 
         // ly_gimbal_firecode
@@ -210,7 +212,7 @@ namespace BehaviorTree{
             auto &obj = app;
             obj.outpostAimData.Angles.Yaw = msg->yaw;
             obj.outpostAimData.Angles.Pitch = msg->pitch;
-            obj.outpostAimData.FireStatus = true;
+            obj.outpostAimData.FireStatus = msg->status;
             obj.outpostAimData.BuffFollow = false;
             obj.isFindTargetAtomic = true;
             obj.lastTargetSeenTime = std::chrono::steady_clock::now();

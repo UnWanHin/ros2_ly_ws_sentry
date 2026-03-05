@@ -12,24 +12,23 @@
 
 #### [`src/detector/launch/auto_aim.launch.py`](../../src/detector/launch/auto_aim.launch.py)
 - **用途**: 裝甲板自瞄測試
-- **啟動節點**: gimbal_driver + detector + tracker_solver + predictor + simple_bridge_node
+- **啟動節點**: gimbal_driver + detector + tracker_solver + predictor
 - **啟動命令**: `ros2 launch detector auto_aim.launch.py`
 
 #### [`src/detector/launch/outpost.launch.py`](../../src/detector/launch/outpost.launch.py)
 - **用途**: 前哨站打擊測試
-- **啟動節點**: gimbal_driver + outpost_hitter + simple_bridge_node
+- **啟動節點**: gimbal_driver + outpost_hitter
 - **啟動命令**: `ros2 launch detector outpost.launch.py`
 
 #### [`src/detector/launch/buff.launch.py`](../../src/detector/launch/buff.launch.py)
 - **用途**: 能量機關打擊測試
-- **啟動節點**: gimbal_driver + buff_hitter + simple_bridge_node
+- **啟動節點**: gimbal_driver + buff_hitter
 - **啟動命令**: `ros2 launch detector buff.launch.py`
 
-### 3. 測試模式橋接節點
-- ✅ [`simple_bridge_node.cpp`](../../src/detector/simple_bridge_node.cpp) - 測試用橋接節點
-- ✅ 讀取 `test_mode.enable` 參數控制是否轉發
-- ✅ `test_mode: true` 時自動轉發開火指令（看到就打）
-- ✅ `test_mode: false` 時等待 behavior_tree 決策
+### 3. 單獨火控測試腳本
+- ✅ [`mapper_node.py`](../../src/detector/script/mapper_node.py) - `Target -> /ly/control/angles + /ly/control/firecode`
+- ✅ [`fire_flip_test.py`](../../src/detector/script/fire_flip_test.py) - 純火控翻轉壓測（不依賴目標）
+- ✅ 測試按需單獨啟動，不和正式 BT 鏈路耦合
 
 ### 4. 配置文件統一
 - ✅ 所有 launch 檔案都使用統一配置：[`src/detector/config/auto_aim_config.yaml`](../../src/detector/config/auto_aim_config.yaml)
@@ -57,21 +56,7 @@
 ```
 **原因**: `use_video: true` 是從視頻文件讀取，實機必須從相機讀取。
 
-#### 2. 測試模式（第 110 行）
-```yaml
-# 測試時（看到就打）：
-test_mode:
-  enable: true
-
-# 正式比賽（智能決策）：
-test_mode:
-  enable: false
-```
-**原因**:
-- `test_mode: true` - simple_bridge_node 會自動轉發開火指令（看到就打）
-- `test_mode: false` - 等待 behavior_tree 決策模塊控制（智能決策）
-
-#### 3. 虛擬設備（第 110 行）
+#### 2. 虛擬設備（第 110 行）
 ```yaml
 # 測試時（無下位機）：
 io_config:
@@ -89,12 +74,12 @@ io_config:
 
 ### Topic 通訊鏈路
 
-#### 測試模式（test_mode: true）
+#### 快速火控測試（mapper_node / fire_flip_test）
 
 **自瞄模式**:
 ```
 相機 → gimbal_driver → detector → tracker_solver → predictor
-     → /ly/predictor/target → simple_bridge_node
+     → /ly/predictor/target → mapper_node（單獨啟動）
      → /ly/control/angles + /ly/control/firecode → gimbal_driver
      → 下位機（開火）
 ```
@@ -102,7 +87,7 @@ io_config:
 **前哨模式**:
 ```
 相機 → gimbal_driver → outpost_hitter
-     → /ly/outpost/target → simple_bridge_node
+     → /ly/outpost/target → mapper_node（按需改訂閱）
      → /ly/control/angles + /ly/control/firecode → gimbal_driver
      → 下位機（開火）
 ```
@@ -110,12 +95,12 @@ io_config:
 **能量機關模式**:
 ```
 相機 → gimbal_driver → buff_hitter
-     → /ly/buff/target → simple_bridge_node
+     → /ly/buff/target → mapper_node（按需改訂閱）
      → /ly/control/angles + /ly/control/firecode → gimbal_driver
      → 下位機（開火）
 ```
 
-#### 正常模式（test_mode: false）
+#### 正常模式（behavior_tree）
 
 需要額外啟動 behavior_tree：
 ```
@@ -180,11 +165,13 @@ ros2 launch detector auto_aim.launch.py
 ```bash
 ros2 launch detector outpost.launch.py
 ```
+可選：另起終端執行 `python3 src/detector/script/fire_flip_test.py --fire-hz 8.0`
 
 ### 5. 測試能量機關模式
 ```bash
 ros2 launch detector buff.launch.py
 ```
+可選：另起終端執行 `python3 src/detector/script/fire_flip_test.py --fire-hz 8.0`
 
 ### 6. 檢查 Topic 通訊
 ```bash

@@ -21,6 +21,7 @@
 [`docs/sentry/sentry_posture_interface_change_2026-03-03.md`](docs/sentry/sentry_posture_interface_change_2026-03-03.md)
 5. 上车前和实机检查  
 [`docs/guides/config_setup_guide.md`](docs/guides/config_setup_guide.md)  
+[`docs/guides/module_standalone_test.md`](docs/guides/module_standalone_test.md)  
 [`docs/guides/preflight_checklist.md`](docs/guides/preflight_checklist.md)  
 [`docs/guides/test_guide.md`](docs/guides/test_guide.md)
 

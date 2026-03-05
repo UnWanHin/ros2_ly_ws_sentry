@@ -1,5 +1,4 @@
 <launch>
-  <node pkg="gimbal_driver" type="gimbal_driver_node" name="gimbal_driver" output="log">
-    <env name="ROS_LOG_DIR" value="$HOME/workspace/logs/gimbal_driver/log" />
-  </node>
+  <!-- ROS 2 XML launch (frontend) -->
+  <node pkg="gimbal_driver" exec="gimbal_driver_node" name="gimbal_driver" output="screen"/>
 </launch>

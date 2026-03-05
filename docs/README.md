@@ -35,8 +35,12 @@ docs/
 [sentry/sentry_posture_interface_change_2026-03-03.md](sentry/sentry_posture_interface_change_2026-03-03.md)
 5. 落地执行与上车前检查  
 [guides/config_setup_guide.md](guides/config_setup_guide.md)  
+[guides/self_check_dual_suite.md](guides/self_check_dual_suite.md)  
+[guides/module_standalone_test.md](guides/module_standalone_test.md)  
 [guides/test_guide.md](guides/test_guide.md)  
 [guides/preflight_checklist.md](guides/preflight_checklist.md)
+6. 近期稳定性修复记录（接口不变）  
+[reports/stability_fix_no_interface_change_2026-03-05.md](reports/stability_fix_no_interface_change_2026-03-05.md)
 
 ## 分类说明
 
@@ -52,6 +56,10 @@ docs/
   - 历史检查结果，可能与当前代码存在时间差。
 - `plans/`
   - 方案设计记录，不代表最终已合入实现。
+
+## 脚本说明入口
+
+- `scripts/README.md`：脚本用途与命令总览（离车自检、上车自检、基础套件）。
 
 ## 历史与兼容文档
 

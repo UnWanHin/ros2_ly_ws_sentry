@@ -58,17 +58,33 @@ namespace BehaviorTree {
 
     void Application::WaitBeforeGame() {
         LoggerPtr->Info("Waiting Before Game");
-        /// 取得第一个云台数据包
+        /// 取得第一个云台数据包（不能用 yaw/pitch 非 0 判定，0 也是合法角度）
+        const auto wait_begin = std::chrono::steady_clock::now();
+        auto last_wait_log = wait_begin;
+        constexpr auto kMaxWait = std::chrono::seconds(10);
         while (rclcpp::ok()) {
             rclcpp::spin_some(node_);
-            if (gimbalAngles.Yaw != 0 || gimbalAngles.Pitch != 0) {
-                LoggerPtr->Info("Waiting For First Gimbal Data");
+
+            if (hasReceivedGimbalAngles_.load()) {
+                LoggerPtr->Info("First gimbal message received.");
                 break;
             }
-            /// 休眠
-            std::this_thread::sleep_for(1s);
+
+            const auto now = std::chrono::steady_clock::now();
+            if (now - wait_begin > kMaxWait) {
+                LoggerPtr->Warning("No gimbal message within {}s, continue with current angles (Yaw={}, Pitch={}).",
+                    std::chrono::duration_cast<std::chrono::seconds>(kMaxWait).count(),
+                    gimbalAngles.Yaw, gimbalAngles.Pitch);
+                break;
+            }
+            if (now - last_wait_log > std::chrono::seconds(2)) {
+                LoggerPtr->Warning("Waiting for first gimbal message...");
+                last_wait_log = now;
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
-        LoggerPtr->Info("Stop Waiting For First Gimbal Data");
+        LoggerPtr->Info("Stop waiting for first gimbal data.");
 
         WaitForGameStart();
 

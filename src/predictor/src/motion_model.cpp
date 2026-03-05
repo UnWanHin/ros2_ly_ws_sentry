@@ -1,4 +1,5 @@
 #include "predictor/motion_model.hpp"
+#include <rclcpp/rclcpp.hpp>
 
 namespace ly_auto_aim::inline predictor{
     inline Eigen::Matrix3d build_Q_PVA(double q_jerk_base, double dt) {
@@ -206,12 +207,11 @@ void MotionModel::Update(const VectorY& measure_vec, const Time::TimeStamp& time
         //std::cout<<"P trace:"<<ekf.getX().trace()<<std::endl;
         //calc residual
         VectorY residual = measure_adjust - measure_pred;
-        std::cout<<"residual0:"<<residual[0]<<std::endl;
-        std::cout<<"residual1:"<<residual[1]<<std::endl;
-        std::cout<<"residual2:"<<residual[2]<<std::endl;
-        std::cout<<"residual3:"<<residual[3]<<std::endl;
-        std::cout<<"residual4:"<<residual[4]<<std::endl;
-        std::cout<<"residual5:"<<residual[5]<<std::endl;
+        static auto residual_logger = rclcpp::get_logger("predictor.motion_model");
+        RCLCPP_DEBUG(
+            residual_logger,
+            "residual: [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f]",
+            residual[0], residual[1], residual[2], residual[3], residual[4], residual[5]);
 
         // according to residual
         // determine whole car stable & armor stable

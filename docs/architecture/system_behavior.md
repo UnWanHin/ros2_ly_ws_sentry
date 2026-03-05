@@ -2,25 +2,23 @@
 
 ## ❓ 問題：現在 launch 後會自動打嗎？
 
-### 📋 答案：取決於測試模式開關
+### 📋 答案：取決於是否啟動「控制端」節點
 
-**現在有測試模式開關了！**
+目前倉庫有兩種控制來源：
+- 測試控制：`mapper_node.py` / `fire_flip_test.py`
+- 比賽控制：`behavior_tree`
 
 ---
 
 ## 🔍 兩種工作模式
 
-### 模式 1: 測試模式（test_mode.enable: true）
-
-**配置**: [`src/detector/config/auto_aim_config.yaml:110`](../../src/detector/config/auto_aim_config.yaml:110)
-```yaml
-test_mode:
-  enable: true  # 啟用測試模式
-```
+### 模式 1: 快速測試（mapper_node / fire_flip_test）
 
 **啟動**:
 ```bash
 ros2 launch detector auto_aim.launch.py
+python3 src/detector/script/mapper_node.py --target-id 6 --enable-fire true --auto-fire true
+# 或 python3 src/detector/script/fire_flip_test.py --fire-hz 8.0
 ```
 
 **啟動的節點**:
@@ -28,25 +26,19 @@ ros2 launch detector auto_aim.launch.py
 - detector
 - tracker_solver
 - predictor
-- **simple_bridge_node** (測試橋接)
+- **mapper_node / fire_flip_test** (測試控制)
 
 **結果**: ✅ **會自動打（看到就打）**
 
 **原因**:
 - predictor 發布 `/ly/predictor/target`
-- **simple_bridge_node 轉發到 `/ly/control/angles` 和 `/ly/control/firecode`**
+- `mapper_node` 轉發到 `/ly/control/angles` 和 `/ly/control/firecode`
 - gimbal_driver 訂閱 `/ly/control/angles` 和 `/ly/control/firecode`
 - **直接發送到下位機開火**
 
 ---
 
-### 模式 2: 正常模式（test_mode.enable: false）
-
-**配置**: [`src/detector/config/auto_aim_config.yaml:110`](../../src/detector/config/auto_aim_config.yaml:110)
-```yaml
-test_mode:
-  enable: false  # 關閉測試模式
-```
+### 模式 2: 正常模式（behavior_tree）
 
 **啟動**:
 ```bash
@@ -62,13 +54,11 @@ ros2 launch behavior_tree behavior_tree.launch.py
 - detector
 - tracker_solver
 - predictor
-- simple_bridge_node (不轉發，等待 behavior_tree)
 - **behavior_tree** (決策模塊)
 
 **結果**: ✅ **會智能決策後開火**
 
 **原因**:
-- simple_bridge_node 檢測到 `test_mode: false`，不轉發消息
 - behavior_tree 接管決策，根據遊戲狀態決定是否開火
 
 ---

@@ -59,11 +59,7 @@ namespace {
             // 如果需要 enable 回调，可以解开注释
             // node.GenSubscriber<ly_outpost_enable>([this](const std_msgs::msg::Bool::ConstSharedPtr msg) { outpost_enable_callback(msg); });
 
-            // 初始化各個模塊
-            // 注意：PoseSolver 的無參構造函數會使用全局變量 SOLVER::global_solver_node
-            // 所以我們必須在 main 函數裡先設置好那个全局变量
-            solver = std::make_unique<SOLVER::PoseSolver>();
-            
+            // 初始化其餘模塊（PoseSolver 需要在 main 設置 global_solver_node 後再初始化）
             outpost_predictor = std::make_unique<PREDICTOR::OutpostPredictor>();
             derection_judger = std::make_unique<PREDICTOR::DirectionJudger>();
             top_filter = std::make_unique<PREDICTOR::TopFilter>();
@@ -73,16 +69,33 @@ namespace {
             // 初始化時間戳
             last_time_stamp = node.now();
 
-            RCLCPP_WARN(node.get_logger(), "OutpostHitterNode> Initialized.");
+            RCLCPP_INFO(node.get_logger(), "OutpostHitterNode> Initialized base modules.");
         }
 
         ~OutpostHitterNode() = default;
+
+        bool InitializeSolver() {
+            if (solver) return true;
+            try {
+                solver = std::make_unique<SOLVER::PoseSolver>();
+                RCLCPP_INFO(node.get_logger(), "OutpostHitterNode> PoseSolver initialized.");
+                return true;
+            } catch (const std::exception& e) {
+                RCLCPP_ERROR(node.get_logger(), "OutpostHitterNode> PoseSolver init failed: %s", e.what());
+                return false;
+            }
+        }
 
         // [ROS 2] Callback 修正：類型為 ConstSharedPtr
         void outpost_detection_callback(const auto_aim_common::msg::Armors::ConstSharedPtr msg) {
             // if(!outpost_enable.load()) return;
 
-            RCLCPP_WARN(node.get_logger(), "OutpostHitterNode> Received outpost detection message.");
+            if (!solver) {
+                RCLCPP_WARN_THROTTLE(node.get_logger(), *node.get_clock(), 2000, "OutpostHitterNode> PoseSolver is not ready, skip frame.");
+                return;
+            }
+
+            RCLCPP_DEBUG(node.get_logger(), "OutpostHitterNode> Received outpost detection message.");
 
             // ** 步驟一：detection的獲取 **
             rclcpp::Time stamp = msg->header.stamp;
@@ -94,18 +107,16 @@ namespace {
 
             Detections detections;
             convertToDetections(msg, detections);
-            RCLCPP_WARN(node.get_logger(), "Conrners converted");
+            RCLCPP_DEBUG(node.get_logger(), "OutpostHitterNode> Corners converted.");
             
             if(detections.empty()) {
-                RCLCPP_WARN(node.get_logger(), "OutpostHitterNode> outpost not found.");
+                RCLCPP_DEBUG_THROTTLE(node.get_logger(), *node.get_clock(), 1000, "OutpostHitterNode> outpost not found.");
                 return;
             }
-            
-            RCLCPP_INFO(node.get_logger(), "#####1");
 
             // ** 步驟二: 解算 **
             SOLVER::ArmorPoses armor_poses = solver->solveArmorPoses(detections, yaw_now, pitch_now);
-            RCLCPP_INFO(node.get_logger(), "Armor poses solved");
+            RCLCPP_DEBUG(node.get_logger(), "OutpostHitterNode> Armor poses solved.");
 
             // ** 步驟三： 預測 **
             /// 取出最近的裝甲板
@@ -113,24 +124,24 @@ namespace {
                                                     { return a.pyd.distance < b.pyd.distance; });
 
             if (min_pitch_armor == armor_poses.end()) {
-                RCLCPP_WARN(node.get_logger(), "OutpostHitterNode> No valid armor poses found.");
+                RCLCPP_DEBUG_THROTTLE(node.get_logger(), *node.get_clock(), 1000, "OutpostHitterNode> No valid armor poses found.");
                 return;
             }
             PREDICTOR::OutpostInformation outpost_info;
             /// 判斷方向
             if(!derection_judger->isDerectionJudged()){
-                RCLCPP_WARN(node.get_logger(), "Direction Judging ...");
+                RCLCPP_DEBUG_THROTTLE(node.get_logger(), *node.get_clock(), 1000, "OutpostHitterNode> Direction judging.");
                 /// 更新世界坐標系下的yaw角和距離
                 derection_judger->updateWorldPYD(min_pitch_armor->pyd.pitch, min_pitch_armor->pyd.yaw, min_pitch_armor->pyd.distance);
             }
             if(derection_judger->isDerectionJudged()){
-                RCLCPP_WARN(node.get_logger(), "Direction Judged");
+                RCLCPP_DEBUG(node.get_logger(), "OutpostHitterNode> Direction judged.");
                 if(!outpost_predictor->is_initialized) { // 初始化
-                    RCLCPP_WARN(node.get_logger(), "OutpostHitterNode> Initializing outpost predictor.");
+                    RCLCPP_INFO(node.get_logger(), "OutpostHitterNode> Initializing outpost predictor.");
                     outpost_predictor->initPredictor(*(min_pitch_armor), derection_judger->getDirection());
                     last_time_stamp = stamp;
                 } else { // 量測更新
-                    RCLCPP_WARN(node.get_logger(), "OutpostHitterNode> Running outpost predictor.");
+                    RCLCPP_DEBUG(node.get_logger(), "OutpostHitterNode> Running outpost predictor.");
                     
                     // [修復] seconds() 返回 double，cast 成 int 會截斷幀間隔（~13ms → 0）
                     // 改用毫秒整數，符合 OutpostPredictor::runPredictor 的 dt 單位
@@ -138,20 +149,17 @@ namespace {
                     last_time_stamp = stamp;
                     outpost_info = outpost_predictor->runPredictor(delta_time, *(min_pitch_armor), USE_MEASURE_UPDATE);
 
-                    RCLCPP_WARN(node.get_logger(), "Predicted Outpost outpost_theta: %f ",outpost_info.outpost_theta);
-                    RCLCPP_WARN(node.get_logger(), "Predicted Outpost outpost_omega: %f ",outpost_info.outpost_omega);
+                    RCLCPP_DEBUG(node.get_logger(), "OutpostHitterNode> outpost_theta: %.4f, outpost_omega: %.4f", outpost_info.outpost_theta, outpost_info.outpost_omega);
                     
                     if (!outpost_info.is_valid) {
-                        RCLCPP_WARN(node.get_logger(), "OutpostHitterNode> Outpost info is not valid.");
+                        RCLCPP_DEBUG_THROTTLE(node.get_logger(), *node.get_clock(), 1000, "OutpostHitterNode> Outpost info is not valid.");
                         return;
                     }
                 }
             } else {
-                RCLCPP_WARN(node.get_logger(), "Dierection Judging ...");
+                RCLCPP_DEBUG_THROTTLE(node.get_logger(), *node.get_clock(), 1000, "OutpostHitterNode> Direction judging...");
                 return;
             }
-            
-            RCLCPP_INFO(node.get_logger(), "######2");
 
             // ** 步驟四：計算角度 **
             muzzle_solver->setBulletSpeed(23.0);
@@ -160,16 +168,13 @@ namespace {
 
             if(board_info.size()==0) return ;
 
-            RCLCPP_INFO(node.get_logger(), "########3");
             auto best_board = board_selector->selectBestBoard(board_info);
-            RCLCPP_INFO(node.get_logger(), "########4");
             double pitch_setpoint = best_board.aim_pitch;
             pitch_setpoint *= 180 / M_PI;
             pitch_setpoint -= 2.0; // 需要減去2度的偏差
             double yaw_setpoint = best_board.aim_yaw;
             yaw_setpoint *= 180 / M_PI;
             yaw_setpoint = (float)(yaw_setpoint + std::round((yaw_now - yaw_setpoint) / 360.0) * 360.0);
-            RCLCPP_INFO(node.get_logger(), "#######5");
             if(yaw_setpoint - yaw_now > 80 || yaw_setpoint - yaw_now < -80){
                 // roslog::warn("OutpostHitterNode> Yaw setpoint is too far from current yaw, skipping.");
                 return;
@@ -178,6 +183,8 @@ namespace {
             // ** 步驟五: 發布消息 **
             auto_aim_common::msg::Target target_msg;
             target_msg.header.stamp = stamp;
+            target_msg.status = true;
+            target_msg.buff_follow = false;
             target_msg.yaw = yaw_setpoint;
             target_msg.pitch = pitch_setpoint;
             
@@ -239,7 +246,14 @@ int main(int argc, char** argv){
     // 確保 PoseSolver::PoseSolver() 能拿到節點
     SOLVER::global_solver_node = node_ptr;
 
-    // 5. 運行
+    // 5. 在全局節點就緒後再初始化 PoseSolver，避免啟動時序崩潰
+    if (!app->InitializeSolver()) {
+        RCLCPP_FATAL(node_ptr->get_logger(), "OutpostHitterNode> Fatal: PoseSolver initialization failed.");
+        rclcpp::shutdown();
+        return 1;
+    }
+
+    // 6. 運行
     rclcpp::spin(node_ptr);
     
     rclcpp::shutdown();

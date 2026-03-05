@@ -1,40 +1,18 @@
 <launch>
-  <!-- 加载配置文件 -->
-  <rosparam file="$(find detector)/config/auto_aim_config.yaml" command="load"/>
-  
-  <!-- 设置日志目录 -->
-  <env name="ROS_LOG_DIR" value="$(env HOME)/workspace/logs/shooting_table_calib/log" />
-  
-  <!-- 启动gimbal_driver节点 -->
-  <node pkg="gimbal_driver" type="gimbal_driver_node" name="gimbal_driver" output="log">
-    <env name="ROS_LOG_DIR" value="$(env HOME)/workspace/logs/gimbal_driver/log" />
+  <!-- ROS 2 XML launch (frontend) -->
+  <arg name="config_file" default="$(find-pkg-share detector)/config/auto_aim_config.yaml"/>
+
+  <node pkg="gimbal_driver" exec="gimbal_driver_node" name="gimbal_driver" output="screen">
+    <param from="$(var config_file)"/>
   </node>
-  
-  <!-- 启动shooting_table_calib节点 -->
-  <node pkg="shooting_table_calib" type="shooting_table_calib_node" name="shooting_table_calib" output="screen">
-    <env name="ROS_LOG_DIR" value="$(env HOME)/workspace/logs/shooting_table_calib/log" />
-    <rosparam>
-      # 相机序列号统一由 detector/config/auto_aim_config.yaml 管理，
-      # 避免在 launch 文件里出现硬编码 SN。
-      camera_param:
-        ExposureTime: 4000.0
-        Gain: 12.0
-        RedBalanceRatio: 1.2266
-        GreenBalanceRatio: 1.0
-        BlueBalanceRatio: 1.3711
-      
-      # detector配置路径
-      detector_config:
-        classifier_path: "$(find detector)/models/classifier.onnx"
-        detector_path: "$(find detector)/models/detector.onnx"
-        car_model_path: "$(find detector)/models/car_model.onnx"
-      
-      # 队伍颜色
-      team_red: true
-      
-      # 显示设置
-      web_show: true
-      draw_image: true
-    </rosparam>
+
+  <node pkg="shooting_table_calib" exec="shooting_table_calib_node" name="shooting_table_calib" output="screen">
+    <param from="$(var config_file)"/>
+    <param name="detector_config.classifier_path" value="$(find-pkg-share detector)/Extras/classifier.xml"/>
+    <param name="detector_config.detector_path" value="$(find-pkg-share detector)/Extras/armor_detector_model.xml"/>
+    <param name="detector_config.car_model_path" value="$(find-pkg-share detector)/Extras/car_detector_model.xml"/>
+    <param name="team_red" value="true"/>
+    <param name="web_show" value="true"/>
+    <param name="draw_image" value="true"/>
   </node>
 </launch>

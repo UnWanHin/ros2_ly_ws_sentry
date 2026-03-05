@@ -28,11 +28,4 @@ def generate_launch_description():
             output='screen',
             parameters=[config_file]
         ),
-        Node(
-            package='detector',
-            executable='simple_bridge_node',
-            name='simple_bridge',
-            output='screen',
-            parameters=[config_file]
-        ),
     ])

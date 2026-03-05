@@ -4,11 +4,17 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_NAME="$(basename "$0")"
 
+: "${ROS_LOG_DIR:=/tmp/ros2_logs}"
+mkdir -p "${ROS_LOG_DIR}"
+export ROS_LOG_DIR
+
 AUTO_LAUNCH=0
 WAIT_SECONDS=18
 CMD_TIMEOUT=6
 HZ_SECONDS=6
 SKIP_HZ=0
+STATIC_ONLY=0
+RUNTIME_ONLY=0
 LAUNCH_ARGS=()
 
 PASS_COUNT=0
@@ -35,7 +41,7 @@ fi
 usage() {
   cat <<EOF
 Usage:
-  ${SCRIPT_NAME} [--launch] [--wait SECONDS] [--cmd-timeout SECONDS] [--hz-seconds SECONDS] [--skip-hz] [-- <launch_args...>]
+  ${SCRIPT_NAME} [--launch] [--wait SECONDS] [--cmd-timeout SECONDS] [--hz-seconds SECONDS] [--skip-hz] [--static-only|--runtime-only] [-- <launch_args...>]
 
 Examples:
   # 檢查當前已在運行的系統
@@ -43,6 +49,12 @@ Examples:
 
   # 自動啟動整套節點後再檢查
   ./${SCRIPT_NAME} --launch
+
+  # 只做離車靜態檢查（不依賴 ROS 圖）
+  ./${SCRIPT_NAME} --static-only
+
+  # 只做運行時圖檢查（跳過文件/配置靜態檢查）
+  ./${SCRIPT_NAME} --runtime-only --launch
 
   # 自動啟動 + 自定義 launch 參數
   ./${SCRIPT_NAME} --launch -- --config_file:=/abs/path/auto_aim_config.yaml use_buff:=false
@@ -53,6 +65,8 @@ Options:
   --cmd-timeout SECONDS  單次 ros2 命令超時（默認: ${CMD_TIMEOUT}）
   --hz-seconds SECONDS   ros2 topic hz 採樣時長（默認: ${HZ_SECONDS}）
   --skip-hz              跳過頻率檢查（更快）
+  --static-only          只執行靜態檢查（文件、配置、BT XML）
+  --runtime-only         只執行運行時檢查（node/topic/hz）
   --help                 顯示幫助
 EOF
 }
@@ -157,6 +171,14 @@ while [[ $# -gt 0 ]]; do
       SKIP_HZ=1
       shift
       ;;
+    --static-only)
+      STATIC_ONLY=1
+      shift
+      ;;
+    --runtime-only)
+      RUNTIME_ONLY=1
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -173,6 +195,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if (( STATIC_ONLY == 1 && RUNTIME_ONLY == 1 )); then
+  fail "--static-only and --runtime-only are mutually exclusive"
+  exit 2
+fi
 
 check_cmd() {
   local cmd="$1"
@@ -263,7 +290,13 @@ check_camera_sn_config() {
 
 check_legacy_hardcoded_camera_sn() {
   local hits
-  hits="$(rg -n 'KE[0-9A-Za-z]+' "${ROOT_DIR}/src/shooting_table_calib/launch" --glob '*.launch' --glob '*.launch.py' || true)"
+  if command -v rg >/dev/null 2>&1; then
+    hits="$(rg -n 'KE[0-9A-Za-z]+' "${ROOT_DIR}/src/shooting_table_calib/launch" --glob '*.launch' --glob '*.launch.py' || true)"
+  else
+    hits="$(find "${ROOT_DIR}/src/shooting_table_calib/launch" -type f \( -name '*.launch' -o -name '*.launch.py' \) -print0 \
+      | xargs -0 grep -nE 'KE[0-9A-Za-z]+' 2>/dev/null || true)"
+    warn "rg not found; fallback to grep for hardcoded camera SN scan"
+  fi
   if [[ -n "${hits}" ]]; then
     warn "Legacy launch still contains hardcoded camera SN candidates: ${hits//$'\n'/; }"
   else
@@ -447,31 +480,35 @@ check_cmd grep
 source_ros
 source_workspace
 
-print_section "Static Files"
-check_file_exists "${ROOT_DIR}/src/behavior_tree/Scripts/main.xml"
-check_file_exists "${ROOT_DIR}/src/behavior_tree/Scripts/config.json"
-check_file_exists "${ROOT_DIR}/src/behavior_tree/launch/sentry_all.launch.py"
-check_file_exists "${ROOT_DIR}/src/detector/config/auto_aim_config.yaml"
-check_file_exists "${ROOT_DIR}/scripts/start_sentry_all.sh"
-check_file_exists "${ROOT_DIR}/src/behavior_tree/include/BTNodes.hpp"
-check_camera_sn_config "${ROOT_DIR}/src/detector/config/auto_aim_config.yaml"
-check_legacy_hardcoded_camera_sn
+if (( RUNTIME_ONLY == 0 )); then
+  print_section "Static Files"
+  check_file_exists "${ROOT_DIR}/src/behavior_tree/Scripts/main.xml"
+  check_file_exists "${ROOT_DIR}/src/behavior_tree/Scripts/config.json"
+  check_file_exists "${ROOT_DIR}/src/behavior_tree/launch/sentry_all.launch.py"
+  check_file_exists "${ROOT_DIR}/src/detector/config/auto_aim_config.yaml"
+  check_file_exists "${ROOT_DIR}/scripts/start_sentry_all.sh"
+  check_file_exists "${ROOT_DIR}/src/behavior_tree/include/BTNodes.hpp"
+  check_camera_sn_config "${ROOT_DIR}/src/detector/config/auto_aim_config.yaml"
+  check_legacy_hardcoded_camera_sn
 
-if grep -Fq 'BTCPP_format="4"' "${ROOT_DIR}/src/behavior_tree/Scripts/main.xml"; then
-  pass "BT XML format is v4"
-else
-  fail "BT XML format is not v4"
+  if grep -Fq 'BTCPP_format="4"' "${ROOT_DIR}/src/behavior_tree/Scripts/main.xml"; then
+    pass "BT XML format is v4"
+  else
+    fail "BT XML format is not v4"
+  fi
+
+  if grep -Fq '<SelectStrategyMode/>' "${ROOT_DIR}/src/behavior_tree/Scripts/main.xml"; then
+    pass "BT XML contains dynamic strategy switch node"
+  else
+    fail "BT XML missing SelectStrategyMode node"
+  fi
 fi
 
-if grep -Fq '<SelectStrategyMode/>' "${ROOT_DIR}/src/behavior_tree/Scripts/main.xml"; then
-  pass "BT XML contains dynamic strategy switch node"
-else
-  fail "BT XML missing SelectStrategyMode node"
+if (( STATIC_ONLY == 0 )); then
+  print_section "Runtime Graph"
 fi
 
-print_section "Runtime Graph"
-
-if (( AUTO_LAUNCH == 1 )); then
+if (( STATIC_ONLY == 0 && AUTO_LAUNCH == 1 )); then
   LAUNCH_LOG="$(mktemp /tmp/sentry_self_check.XXXXXX.log)"
   info "Launching stack by scripts/start_sentry_all.sh (log: ${LAUNCH_LOG})"
   (
@@ -488,16 +525,17 @@ if (( AUTO_LAUNCH == 1 )); then
   fi
 fi
 
-NODE_LIST="$(run_ros2 node list || true)"
-GRAPH_AVAILABLE=1
-if [[ -z "${NODE_LIST}" ]]; then
-  fail "No ROS2 nodes found. Start stack first or run with --launch"
-  GRAPH_AVAILABLE=0
-else
-  pass "ROS2 graph has active nodes"
-fi
+if (( STATIC_ONLY == 0 )); then
+  NODE_LIST="$(run_ros2 node list || true)"
+  GRAPH_AVAILABLE=1
+  if [[ -z "${NODE_LIST}" ]]; then
+    fail "No ROS2 nodes found. Start stack first or run with --launch"
+    GRAPH_AVAILABLE=0
+  else
+    pass "ROS2 graph has active nodes"
+  fi
 
-if (( GRAPH_AVAILABLE == 1 )); then
+  if (( GRAPH_AVAILABLE == 1 )); then
   check_node_online "/gimbal_driver" "${NODE_LIST}"
   check_node_online "/detector" "${NODE_LIST}"
   check_node_online "/tracker_solver" "${NODE_LIST}"
@@ -580,8 +618,9 @@ if (( GRAPH_AVAILABLE == 1 )); then
     check_topic_hz "/ly/gimbal/angles" 1 warn
     check_topic_hz "/ly/detector/armors" 1 warn
   fi
-else
-  warn "Runtime graph checks skipped because no ROS2 nodes are active"
+  else
+    warn "Runtime graph checks skipped because no ROS2 nodes are active"
+  fi
 fi
 
 print_section "Summary"

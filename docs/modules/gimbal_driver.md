@@ -18,7 +18,8 @@ gimbal_driver/
 ├── package.xml
 ├── main.cpp                    # 主節點，Application 類
 ├── launch/
-│   └── gimbal_driver.launch.py
+│   ├── gimbal_driver.launch.py  # ROS 2 主入口（推薦）
+│   └── gimbal_driver.launch     # ROS 2 XML 兼容入口
 ├── msg/                        # 自定義消息類型
 │   ├── GimbalAngles.msg        # 雲台角度
 │   ├── GameData.msg            # 比賽數據（彙總）
@@ -34,6 +35,26 @@ gimbal_driver/
     ├── crc_checker.hpp         # CRC校驗
     ├── no_ranges_error.hpp     # 範圍錯誤處理
     └── pp_span.hpp             # 數據包解析輔助
+```
+
+---
+
+## 單獨啟動（建議）
+
+```bash
+ros2 launch gimbal_driver gimbal_driver.launch.py
+```
+
+虛擬串口測試：
+
+```bash
+ros2 launch gimbal_driver gimbal_driver.launch.py use_virtual_device:=true
+```
+
+兼容 XML 入口：
+
+```bash
+ros2 launch gimbal_driver gimbal_driver.launch
 ```
 
 ---

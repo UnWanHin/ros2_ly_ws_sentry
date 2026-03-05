@@ -234,7 +234,7 @@ ros2 topic hz /ly/detector/armors
 - `buff_hitter`
 - `behavior_tree`
 
-`simple_bridge` 默認不啟（避免干擾 BT 決策鏈路）。
+快速火控測試請另起終端按需啟動 `mapper_node.py` 或 `fire_flip_test.py`，默認不隨 `sentry_all` 自動啟動。
 
 ### 8.2 常用參數
 

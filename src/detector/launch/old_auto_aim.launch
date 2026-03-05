@@ -1,4 +1,7 @@
 <launch>
+  <!-- Legacy all-in-one launcher kept for standalone debugging.
+       Recommended entry for daily use is:
+       ros2 launch behavior_tree sentry_all.launch.py -->
   <arg name="config_file" default="$(find-pkg-share detector)/config/auto_aim_config.yaml"/>
 
   <node pkg="gimbal_driver" exec="gimbal_driver_node" name="gimbal_driver" output="log">

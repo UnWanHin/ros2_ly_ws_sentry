@@ -1,5 +1,6 @@
 #include <atomic>
 #include <mutex>
+#include <rclcpp/rclcpp.hpp>
 
 #include "BuffCalculator.hpp"
 
@@ -16,13 +17,12 @@ bool BuffCalculator::calculate(const Frame &frame, std::vector<cv::Point2f> &cam
     int yaw_a = -1.9; //左正
     m_receivePitch = frame.m_pitch + COMPANSATE_PITCH;
     m_receiveYaw = frame.m_yaw + COMPANSATE_YAW;
-    std::cout<<"m_receiveRoll:"<<m_receiveRoll<<std::endl;
-    std::cout<<"m_receivePitch:"<<m_receivePitch<<std::endl;
-    std::cout<<"m_receiveYaw:"<<m_receiveYaw<<std::endl;
+    static auto logger = rclcpp::get_logger("buff_hitter.calculator");
+    RCLCPP_DEBUG(logger, "rx imu: roll=%.4f pitch=%.4f yaw=%.4f", m_receiveRoll, m_receivePitch, m_receiveYaw);
 
     //設彈速bullet Speed
     m_bulletSpeed = actual_bullet_speed;
-    std::cout << "m_bulletSpeed:" << m_bulletSpeed << std::endl;
+    RCLCPP_DEBUG(logger, "bullet speed: %.4f", m_bulletSpeed);
     
     //此處就直接調用矩陣解算來對"世界坐标系"2"相机坐标系"等轉換
     //TODO 此處前完成了所有特征點的坐标提取
@@ -33,7 +33,7 @@ bool BuffCalculator::calculate(const Frame &frame, std::vector<cv::Point2f> &cam
     // if(++count == 10) {angleCal(); count = 0;}
     angleCal();
     directionCal();
-    std::cout<<"111111111111111111111"<<std::endl;
+    RCLCPP_DEBUG(logger, "buff direction evaluated.");
     if (m_direction == Direction::UNKNOWN) {
         return false;
     }

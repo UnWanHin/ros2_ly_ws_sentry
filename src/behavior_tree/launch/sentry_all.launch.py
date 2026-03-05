@@ -23,7 +23,6 @@ def generate_launch_description():
     use_outpost = LaunchConfiguration("use_outpost")
     use_buff = LaunchConfiguration("use_buff")
     use_behavior_tree = LaunchConfiguration("use_behavior_tree")
-    use_simple_bridge = LaunchConfiguration("use_simple_bridge")
 
     launch_args = [
         DeclareLaunchArgument(
@@ -43,11 +42,6 @@ def generate_launch_description():
         DeclareLaunchArgument("use_outpost", default_value="true"),
         DeclareLaunchArgument("use_buff", default_value="true"),
         DeclareLaunchArgument("use_behavior_tree", default_value="true"),
-        DeclareLaunchArgument(
-            "use_simple_bridge",
-            default_value="false",
-            description="Only for test mode. Keep false in normal BT control.",
-        ),
     ]
 
     nodes = [
@@ -106,14 +100,6 @@ def generate_launch_description():
             output=output,
             emulate_tty=True,
             condition=IfCondition(use_behavior_tree),
-        ),
-        Node(
-            package="detector",
-            executable="simple_bridge_node",
-            name="simple_bridge",
-            output=output,
-            parameters=[config_file],
-            condition=IfCondition(use_simple_bridge),
         ),
     ]
 

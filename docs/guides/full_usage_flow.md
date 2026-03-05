@@ -4,38 +4,36 @@
 
 ✅ **所有包編譯成功**  
 ✅ **消息通訊鏈路完整**  
-✅ **測試模式開關已添加**
+✅ **單獨火控測試腳本已提供**
 
 ---
 
 ## 🎯 兩種工作模式
 
-### 模式 1: 測試模式（看到就打）
+### 模式 1: 快速火控測試（看到就打）
 
 **適用場景**: 快速功能測試，無需決策模塊
-
-**配置**: [`src/detector/config/auto_aim_config.yaml`](../../src/detector/config/auto_aim_config.yaml:109)
-```yaml
-test_mode:
-  enable: true  # 設為 true 啟用測試模式
-```
 
 **啟動方式**:
 ```bash
 cd ~/ros2_ly_ws_sentary
 source install/setup.bash
 
-# 選擇一種模式啟動
-ros2 launch detector auto_aim.launch.py    # 自瞄模式
-ros2 launch detector outpost.launch.py     # 前哨模式
-ros2 launch detector buff.launch.py        # 能量機關模式
+# 終端 1: 啟動檢測鏈路（自瞄/前哨/打符三選一）
+ros2 launch detector auto_aim.launch.py
+
+# 終端 2: 啟動測試控制（有目標才翻轉開火）
+python3 src/detector/script/mapper_node.py --target-id 6 --enable-fire true --auto-fire true
+
+# 或純火控翻轉壓測（不依賴目標）
+python3 src/detector/script/fire_flip_test.py --fire-hz 8.0
 ```
 
 **工作流程**:
 ```
-相機 → detector/outpost/buff → simple_bridge_node → gimbal_driver → 下位機
-                                      ↓
-                              自動開火（看到就打）
+相機 → detector/outpost/buff → mapper_node / fire_flip_test → gimbal_driver → 下位機
+                                           ↓
+                                   測試控制（翻轉開火）
 ```
 
 **特點**:
@@ -49,12 +47,6 @@ ros2 launch detector buff.launch.py        # 能量機關模式
 ### 模式 2: 正常模式（智能決策）
 
 **適用場景**: 正式比賽，需要完整決策邏輯
-
-**配置**: [`src/detector/config/auto_aim_config.yaml`](../../src/detector/config/auto_aim_config.yaml:109)
-```yaml
-test_mode:
-  enable: false  # 設為 false 等待 behavior_tree
-```
 
 **啟動方式**:
 ```bash
@@ -98,18 +90,7 @@ ros2 launch behavior_tree behavior_tree.launch.py
 "detector_config/use_video": false  # ← 必須改為 false
 ```
 
-#### 2. 測試模式（第 110 行）
-```yaml
-# 測試時（看到就打）
-test_mode:
-  enable: true
-
-# 正式比賽（智能決策）
-test_mode:
-  enable: false  # ← 正式比賽改為 false
-```
-
-#### 3. 虛擬設備（第 110 行）
+#### 2. 虛擬設備（第 110 行）
 ```yaml
 # 測試時（無下位機）
 io_config:
@@ -126,12 +107,13 @@ io_config:
 
 ### 開火指令流程
 
-**simple_bridge_node** ([`src/detector/simple_bridge_node.cpp:43`](../../src/detector/simple_bridge_node.cpp:43)):
-```cpp
-// 發射指令
-std_msgs::msg::UInt8 fire;
-fire.data = 1;  // 1 = 開火
-fire_pub_->publish(fire);  // 發布到 /ly/control/firecode
+**mapper_node.py** ([`src/detector/script/mapper_node.py:83`](../../src/detector/script/mapper_node.py:83)):
+```python
+# 有目標時翻轉 0b00/0b11 以觸發連續開火
+self.fire_status = 0b11 if self.fire_status == 0 else 0b00
+fire_msg = UInt8()
+fire_msg.data = self.fire_status
+self.firecode_pub.publish(fire_msg)
 ```
 
 **gimbal_driver** ([`src/gimbal_driver/main.cpp:90`](../../src/gimbal_driver/main.cpp:90)):
@@ -147,13 +129,13 @@ Device.Write(data);  // 通過串口發送
 
 ### 角度控制流程
 
-**simple_bridge_node** ([`src/detector/simple_bridge_node.cpp:36`](../../src/detector/simple_bridge_node.cpp:36)):
-```cpp
-// 角度指令
-gimbal_driver::msg::GimbalAngles angles;
-angles.yaw = msg->yaw;
-angles.pitch = msg->pitch;
-angles_pub_->publish(angles);  // 發布到 /ly/control/angles
+**mapper_node.py** ([`src/detector/script/mapper_node.py:61`](../../src/detector/script/mapper_node.py:61)):
+```python
+gimbal_msg = GimbalAngles()
+gimbal_msg.header = msg.header
+gimbal_msg.yaw = msg.yaw
+gimbal_msg.pitch = msg.pitch
+self.gimbal_pub.publish(gimbal_msg)
 ```
 
 **gimbal_driver** ([`src/gimbal_driver/main.cpp:84`](../../src/gimbal_driver/main.cpp:84)):
@@ -188,13 +170,13 @@ tracker_solver (追蹤)
 predictor (預測 + 彈道解算)
   ↓ 發布: /ly/predictor/target
   
-【測試模式】
-simple_bridge_node (test_mode.enable: true)
+【測試鏈路】
+mapper_node / fire_flip_test
   ↓ 發布: /ly/control/angles
   ↓ 發布: /ly/control/firecode
   
-【正常模式】
-behavior_tree (test_mode.enable: false)
+【比賽鏈路】
+behavior_tree
   ↓ 發布: /ly/control/angles
   ↓ 發布: /ly/control/firecode
   
@@ -212,7 +194,7 @@ gimbal_driver
   ↓
 outpost_hitter (檢測 + 預測 + 解算)
   ↓ 發布: /ly/outpost/target
-simple_bridge_node / behavior_tree
+mapper_node（測試） / behavior_tree（比賽）
   ↓ 發布: /ly/control/angles + /ly/control/firecode
 gimbal_driver
   ↓
@@ -228,7 +210,7 @@ gimbal_driver
   ↓
 buff_hitter (檢測 + 預測 + 解算)
   ↓ 發布: /ly/buff/target
-simple_bridge_node / behavior_tree
+mapper_node（測試） / behavior_tree（比賽）
   ↓ 發布: /ly/control/angles + /ly/control/firecode
 gimbal_driver
   ↓
@@ -239,47 +221,35 @@ gimbal_driver
 
 ## 🔄 模式切換方法
 
-### 從測試模式切換到正常模式
+### 從快速測試切換到正常模式
 
-1. **修改配置文件**:
+1. **停止測試節點**:
 ```bash
-vim ~/ros2_ly_ws_sentary/src/detector/config/auto_aim_config.yaml
+pkill -f mapper_node
+pkill -f fire_flip_test
 ```
 
-2. **修改參數**:
-```yaml
-test_mode:
-  enable: false  # 改為 false
-```
-
-3. **重新啟動**:
+2. **啟動感知鏈路**:
 ```bash
-# 不需要重新編譯，直接重啟即可
 ros2 launch detector auto_aim.launch.py
 ```
 
-4. **啟動決策模塊**:
+3. **啟動決策模塊**:
 ```bash
-# 新終端
 ros2 launch behavior_tree behavior_tree.launch.py
 ```
 
-### 從正常模式切換到測試模式
+### 從正常模式切換到快速測試
 
 1. **停止 behavior_tree**:
 ```bash
-# 在 behavior_tree 終端按 Ctrl+C
+pkill -f behavior_tree_node
 ```
 
-2. **修改配置**:
-```yaml
-test_mode:
-  enable: true  # 改為 true
-```
-
-3. **重新啟動感知模塊**:
+2. **啟動感知鏈路 + 測試節點**:
 ```bash
 ros2 launch detector auto_aim.launch.py
+python3 src/detector/script/mapper_node.py --target-id 6 --enable-fire true --auto-fire true
 ```
 
 ---
@@ -317,14 +287,12 @@ source install/setup.bash
 
 **測試模式**:
 ```bash
-# 確保 test_mode.enable: true
 ros2 launch detector auto_aim.launch.py
+python3 src/detector/script/mapper_node.py --target-id 6 --enable-fire true --auto-fire true
 ```
 
 **正常模式**:
 ```bash
-# 確保 test_mode.enable: false
-
 # 終端 1
 ros2 launch detector auto_aim.launch.py
 
@@ -357,13 +325,13 @@ ros2 topic echo /ly/control/firecode
 ### 查看節點狀態
 ```bash
 ros2 node list
-ros2 node info /simple_bridge
+ros2 node info /target_to_gimbal_mapper
 ```
 
 ### 查看參數
 ```bash
-ros2 param list /simple_bridge
-ros2 param get /simple_bridge test_mode.enable
+ros2 param list /target_to_gimbal_mapper
+ros2 param get /target_to_gimbal_mapper use_sim_time
 ```
 
 ---
@@ -383,10 +351,9 @@ ros2 param get /simple_bridge test_mode.enable
 1. **上車前必須修改**:
    - `use_video: false` (使用相機)
    - `use_virtual_device: false` (連接下位機)
-   - `test_mode.enable: false` (使用決策模塊，如果需要)
 
 2. **測試時注意**:
-   - `test_mode: true` 會立即開火，注意安全
+   - `mapper_node`/`fire_flip_test` 會輸出開火翻轉，注意安全
    - 確保下位機已連接（或使用虛擬設備測試）
 
 3. **決策模塊**:

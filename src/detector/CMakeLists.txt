@@ -82,11 +82,6 @@ add_executable(${PROJECT_NAME}_node
     detector_node.cpp
 )
 
-# 簡單橋接節點 (測試用)
-add_executable(simple_bridge_node
-    simple_bridge_node.cpp
-)
-
 target_include_directories(${PROJECT_NAME}_node PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     ${GalaxySDK_Headers}
@@ -107,17 +102,10 @@ ament_target_dependencies(${PROJECT_NAME}_node
     gimbal_driver
 )
 
-ament_target_dependencies(simple_bridge_node
-    rclcpp
-    auto_aim_common
-    gimbal_driver
-    std_msgs
-)
-
 # =========================================================
 # 4. 安裝規則 (Install) - 這裡是重點
 # =========================================================
-install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_node simple_bridge_node
+install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_node
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION lib/${PROJECT_NAME}

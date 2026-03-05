@@ -20,14 +20,13 @@ detector/
 ├── CMakeLists.txt
 ├── package.xml
 ├── detector_node.cpp           # 主節點（多線程圖像循環）
-├── simple_bridge_node.cpp      # 簡單橋接節點（測試用）
 ├── config/
-│   └── detector_config.yaml    # 配置文件
+│   └── auto_aim_config.yaml    # 統一配置文件（全鏈路共用）
 ├── launch/
-│   ├── detector.launch.py
-│   ├── detector_video.launch.py
-│   ├── detector_rosbag.launch.py
-│   └── ...
+│   ├── auto_aim.launch.py      # 自瞄檢測鏈路
+│   ├── outpost.launch.py       # 前哨鏈路
+│   ├── buff.launch.py          # 打符鏈路
+│   └── old_auto_aim.launch     # 歷史兼容入口（僅調試對照）
 ├── include/
 │   ├── armor_detector/         # 裝甲板檢測器頭文件
 │   │   ├── armor_detector.hpp
@@ -54,12 +53,55 @@ detector/
 ├── module/
 │   └── Camera.hpp              # 相機封裝（工業相機+視頻+ROS bag）
 ├── script/
-│   └── web_show.py             # 網頁實時預覽腳本
+│   ├── fire_flip_test.py       # 火控翻轉壓測（可選自啟 detector）
+│   └── mapper_node.py          # Target->雲台角映射與測試火控
 └── Extras/                     # 模型文件
     ├── armor_detector_model.xml/bin    # 裝甲板 YOLO 模型（OpenVINO格式）
     ├── car_detector_model.xml/bin      # 車輛 YOLO 模型
     ├── classifier.xml/bin/svm          # 數字分類器模型
     └── *.zip                           # 備份壓縮包
+```
+
+---
+
+## 啟動入口（ROS 2）
+
+推薦按模式啟動：
+
+```bash
+ros2 launch detector auto_aim.launch.py
+ros2 launch detector outpost.launch.py
+ros2 launch detector buff.launch.py
+```
+
+保留舊入口（僅調試對照，不建議日常使用）：
+
+```bash
+ros2 launch detector old_auto_aim.launch
+```
+
+---
+
+## 測試腳本（script/）
+
+所有腳本均建議在工作區根目錄執行，並先完成：
+
+```bash
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+```
+
+`fire_flip_test.py`：持續翻轉 `/ly/control/firecode`，用於硬件火控鏈路測試。
+
+```bash
+python3 src/detector/script/fire_flip_test.py --fire-hz 8.0
+python3 src/detector/script/fire_flip_test.py --start-detector true --params-file src/detector/config/auto_aim_config.yaml
+```
+
+`mapper_node.py`：訂閱 `/ly/predictor/target`，轉發到 `/ly/control/angles`，並可按目標狀態翻轉火控。
+
+```bash
+python3 src/detector/script/mapper_node.py --target-id 6 --enable-fire true --auto-fire true
 ```
 
 ---
@@ -210,7 +252,7 @@ struct CarAndArmorDetector {
 
 ---
 
-## 配置文件 `detector_config.yaml`
+## 配置文件 `auto_aim_config.yaml`
 
 | 參數路徑 | 類型 | 默認值 | 說明 |
 |----------|------|--------|------|
@@ -268,4 +310,4 @@ Armors.msg
 - `detector_node.cpp` 是你最近修改的文件，用於即時測試瞄準
 - 你增加了 `ImageQueue`（帶鎖）替換原來的隊列，並新增了 `angle_image_stack`（無鎖棧）用於打符圖像
 - `use_ros_bag` 模式下從 `/ly/compressed/image` 接收圖像，**注意** `image_callback` 只在此模式下被綁定
-- `simple_bridge_node.cpp` 是一個獨立的調試橋接節點，通常不在正式比賽中使用
+- 單獨火控鏈路測試統一使用 `script/mapper_node.py` 與 `script/fire_flip_test.py`

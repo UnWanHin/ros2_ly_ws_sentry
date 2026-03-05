@@ -9,20 +9,30 @@ using namespace LangYa;
 using namespace BehaviorTree;
 
 namespace BehaviorTree {
+
+#ifndef BT_DIAG_CONSOLE
+#define BT_DIAG_CONSOLE 0
+#endif
+
+#if BT_DIAG_CONSOLE
+#define BT_DIAG_LOG(...) std::fprintf(stderr, __VA_ARGS__)
+#else
+#define BT_DIAG_LOG(...) ((void)0)
+#endif
     
     Application::Application(int argc, char **argv) {
-        std::fprintf(stderr, "[BT_DIAG] ctor enter\n");
+        BT_DIAG_LOG("[BT_DIAG] ctor enter\n");
         // 1. [ROS 2] 初始化 ROS Context
         // 雖然通常在 main 裡做，但在這裡確保 options 可以傳入
         if (!rclcpp::ok()) {
             rclcpp::init(argc, argv);
         }
-        std::fprintf(stderr, "[BT_DIAG] rclcpp init ok\n");
+        BT_DIAG_LOG("[BT_DIAG] rclcpp init ok\n");
 
         // 2. [ROS 2] 創建節點實例
         // [DIAG] 极简 Node 构造，排除 NodeOptions 影响
         node_ = std::make_shared<rclcpp::Node>(nodeName);
-        std::fprintf(stderr, "[BT_DIAG] node created\n");
+        BT_DIAG_LOG("[BT_DIAG] node created\n");
 
         // 3. 初始化日誌 (Logger)
         if(InitLogger()) {
@@ -33,7 +43,7 @@ namespace BehaviorTree {
             RCLCPP_ERROR(node_->get_logger(), "Logger Init Failed!");
             throw std::runtime_error("Logger Init Failed!");
         }
-        std::fprintf(stderr, "[BT_DIAG] logger initialized\n");
+        BT_DIAG_LOG("[BT_DIAG] logger initialized\n");
 
         // 4. [ROS 2] 動態獲取 Config 和 XML 路徑
         try {
@@ -47,11 +57,11 @@ namespace BehaviorTree {
             RCLCPP_ERROR(node_->get_logger(), "Error: Could not find package 'behavior_tree'.");
             throw e;
         }
-        std::fprintf(stderr, "[BT_DIAG] paths resolved\n");
+        BT_DIAG_LOG("[BT_DIAG] paths resolved\n");
 
         // 5. 初始化配置與通訊
         SubscribeMessageAll();  // 建立訂閱
-        std::fprintf(stderr, "[BT_DIAG] subscriptions ready\n");
+        BT_DIAG_LOG("[BT_DIAG] subscriptions ready\n");
 
         // [修復] 初始化所有發布者指針 — 必須在 PublishMessageAll() 之前完成
         // 每個指針對應 Topic.hpp 中的 topic 名稱和 Application.hpp 中聲明的類型
@@ -67,23 +77,23 @@ namespace BehaviorTree {
         pub_navi_speed_level_= node_->create_publisher<std_msgs::msg::UInt8>(ly_navi_speed_level::Name, 10);
         pub_navi_lower_head_ = node_->create_publisher<std_msgs::msg::UInt8>(ly_navi_lower_head::Name, 10);
         pub_bt_target_       = node_->create_publisher<std_msgs::msg::UInt8>(ly_bt_target::Name, 10);
-        std::fprintf(stderr, "[BT_DIAG] publishers ready\n");
+        BT_DIAG_LOG("[BT_DIAG] publishers ready\n");
 
         ConfigurationInit();    // 讀取 config.json
-        std::fprintf(stderr, "[BT_DIAG] config ready\n");
+        BT_DIAG_LOG("[BT_DIAG] config ready\n");
 
         // 6. 註冊與加載行為樹
         if(!RegisterTreeNodes()) {
             throw std::runtime_error("Behavior Tree Node Register Failed!");
         }
-        std::fprintf(stderr, "[BT_DIAG] register nodes ready\n");
+        BT_DIAG_LOG("[BT_DIAG] register nodes ready\n");
         
         // 建議這裡也把 LoadBehaviorTree 加上，除非你是在 GameLoop 裡動態加載
         if (!LoadBehaviorTree()) {
             LoggerPtr->Error("Behavior Tree Load Failed!");
              throw std::runtime_error("Behavior Tree Load Failed!");
         }
-        std::fprintf(stderr, "[BT_DIAG] tree loaded\n");
+        BT_DIAG_LOG("[BT_DIAG] tree loaded\n");
 
         LoggerPtr->Info("Application Start!");
     }

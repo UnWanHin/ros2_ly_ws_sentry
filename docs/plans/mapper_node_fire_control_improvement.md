@@ -242,14 +242,15 @@ node = TargetToGimbalNode(
 
 1. **启动节点**：
    ```bash
+   # 在工作区根目录执行，并先 source ROS2 + 工作区环境
    # 默认配置（启用火控，自动开火）
-   ros2 run detector mapper_node.py
+   python3 src/detector/script/mapper_node.py
    
    # 禁用火控
-   ros2 run detector mapper_node.py --enable-fire=false
+   python3 src/detector/script/mapper_node.py --enable-fire false
    
    # 启用火控但不自动开火
-   ros2 run detector mapper_node.py --auto-fire=false
+   python3 src/detector/script/mapper_node.py --auto-fire false
    ```
 
 2. **监听话题**：
@@ -301,14 +302,17 @@ node = TargetToGimbalNode(
 ### 7.1 配置文件更新
 如果使用 launch 文件，建议添加参数配置：
 ```python
-# 在 launch 文件中
-Node(
-    package='detector',
-    executable='mapper_node.py',
-    parameters=[
-        {'enable_fire': True},
-        {'auto_fire': True}
-    ]
+from launch.actions import ExecuteProcess
+
+# 在 launch 文件中（脚本方式）
+ExecuteProcess(
+    cmd=[
+        'python3',
+        'src/detector/script/mapper_node.py',
+        '--enable-fire', 'true',
+        '--auto-fire', 'true',
+    ],
+    output='screen'
 )
 ```
 
