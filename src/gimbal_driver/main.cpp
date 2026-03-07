@@ -1,5 +1,6 @@
 #include <chrono>
 #include <thread>
+#include <algorithm>
 #include <rclcpp/utilities.hpp>
 #include <rclcpp/executors.hpp>
 
@@ -77,9 +78,57 @@ namespace
         MultiCallback<GimbalControlData> CallbackGenerator;
         std::uint8_t postureCommand_{0}; // 0=不控制, 1=进攻, 2=防御, 3=移动
         std::uint8_t postureState_{0};   // 0=未知, 1=进攻, 2=防御, 3=移动
+        std::uint8_t postureTxTypeID_{PostureControlTypeID};
+        int postureTxRepeatCount_{3};
+        std::chrono::milliseconds postureTxInterval_{20};
+        std::uint8_t posturePendingToSend_{0};
+        std::uint8_t postureLastSent_{0};
+        int posturePendingRepeat_{0};
+        std::chrono::steady_clock::time_point postureNextSendTime_{
+            std::chrono::steady_clock::time_point::min()
+        };
 
         static bool IsValidPosture(std::uint8_t posture) noexcept {
             return posture >= 1 && posture <= 3;
+        }
+
+        void ArmPostureTx(std::uint8_t posture) {
+            if (!IsValidPosture(posture)) {
+                return;
+            }
+            if (posture == postureLastSent_ && posturePendingRepeat_ == 0) {
+                return;
+            }
+            posturePendingToSend_ = posture;
+            posturePendingRepeat_ = std::max(1, postureTxRepeatCount_);
+            postureNextSendTime_ = std::chrono::steady_clock::now();
+            roslog::info("Posture TX armed: cmd=%u, repeat=%d, type_id=%u",
+                         posturePendingToSend_, posturePendingRepeat_, postureTxTypeID_);
+        }
+
+        void MaybeSendPostureTx() {
+            if (posturePendingRepeat_ <= 0) {
+                return;
+            }
+            const auto now = std::chrono::steady_clock::now();
+            if (now < postureNextSendTime_) {
+                return;
+            }
+
+            PostureControlMessage frame{};
+            frame.TypeID = postureTxTypeID_;
+            frame.Data[0] = posturePendingToSend_;
+            frame.Tail = 0;
+            if (!Device.WriteRaw(frame)) {
+                DeviceError = true;
+                return;
+            }
+
+            posturePendingRepeat_--;
+            postureNextSendTime_ = now + postureTxInterval_;
+            if (posturePendingRepeat_ == 0) {
+                postureLastSent_ = posturePendingToSend_;
+            }
         }
 
         void PublishPosture(std::uint8_t posture) {
@@ -126,6 +175,11 @@ namespace
                     postureCommand_ = cmd;
                     // 在下位机尚未回传姿态前，先把控制量透传到 /ly/gimbal/posture 便于联调。
                     PublishPosture(postureCommand_);
+                    if (cmd == 0) {
+                        posturePendingRepeat_ = 0;
+                        return;
+                    }
+                    ArmPostureTx(cmd);
                 });
         }
 
@@ -408,6 +462,9 @@ namespace
             rclcpp::Rate rate(250);
             bool useVirtualDevice = false;
             Node.GetParam<bool>("io_config/use_virtual_device", useVirtualDevice, false);
+            roslog::warn("posture_tx fixed mode: type_id=%u repeat_count=%d repeat_interval_ms=%d",
+                         postureTxTypeID_, postureTxRepeatCount_,
+                         static_cast<int>(postureTxInterval_.count()));
 
             while (rclcpp::ok())
             {
@@ -415,9 +472,14 @@ namespace
                 std::this_thread::sleep_for(1s);
                 if (!Device.Initialize(useVirtualDevice)) continue;
                 DeviceError = false;
+                postureLastSent_ = 0;
+                if (IsValidPosture(postureCommand_)) {
+                    ArmPostureTx(postureCommand_);
+                }
                 std::jthread reading{ [this, useVirtualDevice] { useVirtualDevice ? TestVirtualLoopback() : LoopRead(); } };
                 while (!DeviceError) {
                     rclcpp::spin_some(node);
+                    MaybeSendPostureTx();
                     rate.sleep();
                 }
             }

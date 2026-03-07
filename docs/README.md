@@ -32,7 +32,9 @@ docs/
 4. 哨兵专项（2026 姿态机制）  
 [sentry/sentry_decision_autoaim_manual.md](sentry/sentry_decision_autoaim_manual.md)  
 [sentry/sentry_posture_system.md](sentry/sentry_posture_system.md)  
-[sentry/sentry_posture_interface_change_2026-03-03.md](sentry/sentry_posture_interface_change_2026-03-03.md)
+[sentry/sentry_posture_interface_change_2026-03-03.md](sentry/sentry_posture_interface_change_2026-03-03.md)  
+[sentry/posture_lower_firmware_integration.md](sentry/posture_lower_firmware_integration.md)  
+[sentry/lower_downlink_message_contract.md](sentry/lower_downlink_message_contract.md)
 5. 落地执行与上车前检查  
 [guides/config_setup_guide.md](guides/config_setup_guide.md)  
 [guides/auto_aim_tuning_handover.md](guides/auto_aim_tuning_handover.md)  

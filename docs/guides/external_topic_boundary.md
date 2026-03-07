@@ -37,7 +37,8 @@
 
 - `behavior_tree` 已恢复速度桥接：`/ly/navi/vel -> /ly/control/vel`。  
   即：导航回传速度先进入 BT，再由 BT 转发给 gimbal_driver。
-- 姿态 topic `/ly/control/posture` 当前为上位机链路接口；是否落地下位机串口协议由电控端协议版本决定。
+- 姿态 topic `/ly/control/posture` 已接入下位机下发通道（独立 `TypeID=7` 幀），不改变旧主控制幀。
+- 下发全量规格见：`docs/sentry/lower_downlink_message_contract.md`。
 
 ## 4. 联调建议
 

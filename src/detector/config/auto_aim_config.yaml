@@ -54,29 +54,29 @@
     # 是否开启调试模式
     # 比赛建议: false
     # 调试建议: true（仅在需要详细日志时开启）
-    "detector_config.debug_mode": false
-    "detector_config/debug_mode": false
+    "detector_config.debug_mode": true
+    "detector_config/debug_mode": true
     # 颜色调试开关
     # 比赛建议: 按真实敌我颜色设置（通常 false）
     # 调试建议: 误识别时临时切换排查
-    "detector_config.debug_team_blue": false
-    "detector_config/debug_team_blue": false 
+    "detector_config.debug_team_blue": true
+    "detector_config/debug_team_blue": true 
     
     # 图像显示相关
     # 比赛建议: web_show=false, show=false, draw=false/true(看算力)
     # 调试建议: web_show=true, show=true, draw=true
     "detector_config.web_show": true
     "detector_config/web_show": true
-    "detector_config.show": false
-    "detector_config/show": false       # 是否发布相机话题 pub_image（RQT看图需要开）
+    "detector_config.show": true
+    "detector_config/show": true       # 是否发布相机话题 pub_image（RQT看图需要开）
     "detector_config.draw": true
     "detector_config/draw": true        # 是否开启绘制 (畫框框)
     "detector_config.use_ros_bag": false
     "detector_config/use_ros_bag": false
     "detector_config.save_video": false
     "detector_config/save_video": false # 比赛建议 false；调试可开（当前功能受环境影响）
-    "detector_config.use_video": false
-    "detector_config/use_video": false   # 比赛建议 false；离车调试建议 true
+    "detector_config.use_video": true
+    "detector_config/use_video": true   # 比赛建议 false；离车调试建议 true
 
     # ----------------------------------------------------
     # 2. Solver 配置 (雙重相容區)

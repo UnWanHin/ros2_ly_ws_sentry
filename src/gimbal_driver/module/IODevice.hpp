@@ -3,6 +3,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #include <boost/asio.hpp>
 
@@ -133,6 +134,19 @@ public:
     }
     catch (const std::exception &ex) {
         roslog::error("IODevice::Write: {}", ex.what());
+        return false;
+    }
+
+    template<typename TOtherWrite>
+    requires std::is_trivially_copyable_v<TOtherWrite>
+    bool WriteRaw(const TOtherWrite& item) noexcept try {
+        if (!DevicePtr) return false;
+        boost::asio::write(
+            *DevicePtr, boost::asio::buffer(reinterpret_cast<const std::uint8_t*>(&item), sizeof(TOtherWrite)));
+        return true;
+    }
+    catch (const std::exception &ex) {
+        roslog::error("IODevice::WriteRaw: {}", ex.what());
         return false;
     }
 };

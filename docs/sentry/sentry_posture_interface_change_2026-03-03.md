@@ -74,10 +74,14 @@
 
 - ROS 接口层已打通（Topic 命名、收发、状态变量、文档）
 - 与现有 `angles/firecode/vel` 链路兼容
+- `gimbal_driver` 已支持姿态独立下行幀（固定协议）：
+  - 帧格式：`TypedMessage<1>`（`TypeID=7`，`Data[0]=posture`）
+  - 固定重发：3 次，间隔 20ms
 
 ### 尚未完成（需下位机配合）
 
-- 姿态控制尚未真正写入当前 `GimbalControlData` 串口写包（本次刻意不改包长，避免破坏兼容）
+- 姿态控制不会写入 `GimbalControlData`（刻意保持旧包兼容）
+- 需要下位机新增独立姿态帧解析（`TypeID=7`）
 - 真实姿态状态回读依赖下位机把姿态值塞进 `ExtendData.Reserve_16` 低 2 bit
 
 ---
@@ -105,6 +109,9 @@
 ---
 
 ## 5. 下位机电控需要做的事
+
+详细版本见：
+- `docs/sentry/posture_lower_firmware_integration.md`
 
 ## 5.1 指令下发链路
 
