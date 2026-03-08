@@ -80,13 +80,13 @@ class BuffCalculator {
                             {(float)(0.5 * json_param["buff"]["armor_width"].Double()), 0.0, 0.0},
                             {0.0, (float)(0.5 * json_param["buff"]["armor_width"].Double()), 0.0},
                             {(float)(-0.5 * json_param["buff"]["armor_width"].Double()), 0.0, 0.0}};
+            FPS = json_param["buff"]["buff_calculate_FPS"].Double();
             // m_directionThresh = {100 / (1000 / FPS) < 2 ? 2 : 100 / (1000 / FPS)};
             m_directionThresh = {static_cast<int>(100 / (1000 / FPS) < 2.0 ? 2 : 100 / (1000 / FPS))};
             COMPANSATE_TIME = json_param["buff"]["COMPANSATE_TIME"].Double();
             COMPANSATE_PITCH = json_param["buff"]["COMPANSATE_PITCH"].Double();
             COMPANSATE_YAW = json_param["buff"]["COMPANSATE_YAW"].Double();
             GRAVITY = json_param["buff"]["GRAVITY"].Double();
-            FPS = json_param["buff"]["buff_calculate_FPS"].Double();
             
             m_fitData.reserve(FPS * 20);
             m_fitThread = std::thread(&BuffCalculator::fit, this);

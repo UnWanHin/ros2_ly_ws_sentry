@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(buff_hitter)
 
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 NEW)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -13,7 +17,6 @@ find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(auto_aim_common REQUIRED)
 find_package(gimbal_driver REQUIRED)
-find_package(behaviortree_cpp REQUIRED)
 
 # 系統庫依賴
 find_package(OpenCV REQUIRED)
@@ -67,7 +70,6 @@ ament_target_dependencies(${PROJECT_NAME}_node
     cv_bridge
     auto_aim_common  # 這樣就不用自己去 get_filename_component 了
     gimbal_driver
-    behaviortree_cpp
 )
 
 # 5. 安裝規則 (Explicit Include)
@@ -87,7 +89,6 @@ endif()
 ament_export_dependencies(
     rclcpp 
     auto_aim_common 
-    behaviortree_cpp
     OpenCV
     Ceres
     Sophus

@@ -26,33 +26,41 @@ bool YoloDetector::LoadModel(const std::string& model_path,
 {
     // 设置 OpenVINO 运行时的设备
     std::string device = use_gpu ? "GPU.0" : "CPU";
-    // 设置模型精度
-    ov::Core core;
-    std::string precision_str;
+    // 读取模型并编译
+    model = core.read_model(model_path);
+
+    // 注意：INFERENCE_PRECISION_HINT 仅接受 bf16/f16/f32/undefined。
+    // 对量化 INT8 模型不要强行设置 i8 hint，否则 CPU 插件会直接报错。
     switch (precision) {
         case Precision::FP32:
-            precision_str = "FP32";
+            compiled_model = core.compile_model(
+                model,
+                device,
+                ov::hint::performance_mode(ov::hint::PerformanceMode::LATENCY),
+                ov::inference_num_threads(4),
+                ov::hint::inference_precision(ov::element::f32)
+            );
             break;
         case Precision::FP16:
-            precision_str = "FP16";
+            compiled_model = core.compile_model(
+                model,
+                device,
+                ov::hint::performance_mode(ov::hint::PerformanceMode::LATENCY),
+                ov::inference_num_threads(4),
+                ov::hint::inference_precision(ov::element::f16)
+            );
             break;
         case Precision::INT8:
-            precision_str = "INT8";
+            compiled_model = core.compile_model(
+                model,
+                device,
+                ov::hint::performance_mode(ov::hint::PerformanceMode::LATENCY),
+                ov::inference_num_threads(4)
+            );
             break;
         default:
             throw std::invalid_argument("Unsupported precision type");
     }
-    // 读取模型并编译
-    model = core.read_model(model_path);
-    compiled_model = core.compile_model(
-        model,
-        device,
-        ov::hint::performance_mode(ov::hint::PerformanceMode::LATENCY),
-        ov::inference_num_threads(4),
-        ov::hint::inference_precision(precision_str)//,
-        //ov::hint::enable_cpu_pinning(true),
-        //ov::hint::enable_hyper_threading(true)
-    );
     infer_request = compiled_model.create_infer_request();
 
     return true;

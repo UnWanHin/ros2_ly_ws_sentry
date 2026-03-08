@@ -77,7 +77,6 @@
   <build_export_depend>gimbal_driver</build_export_depend>
   <exec_depend>gimbal_driver</exec_depend> -->
 
-  <depend>behaviortree_cpp</depend>
   <depend>rclcpp</depend>
   <depend>std_msgs</depend>
   <depend>gimbal_driver</depend>
