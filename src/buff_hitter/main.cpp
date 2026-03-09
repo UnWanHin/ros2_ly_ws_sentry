@@ -1,3 +1,13 @@
+/*
+ * buff_hitter_node（打符）
+ *
+ * 功能：
+ * - 输入视觉角度图像/云台状态，计算打符目标角度
+ * - 输出 /ly/buff/target（供上层决策或外部桥接）
+ *
+ * 说明：
+ * - 本节点默认不直接写 /ly/control/*，由上层决策决定是否接管火控。
+ */
 #include "module/RosTools.hpp"
 #include "module/BasicTypes.hpp"
 #include "module/BuffCalculator.hpp"

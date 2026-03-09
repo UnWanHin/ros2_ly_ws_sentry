@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+"""
+哨兵整链路启动入口（比赛/联调主入口）。
+
+职责：
+- 拉起 gimbal_driver / detector / tracker_solver / predictor / outpost_hitter / buff_hitter / behavior_tree。
+- 支持通过 offline 参数统一覆盖“虚拟串口 + 视频回放”。
+
+注意：
+- behavior_tree 会接管 /ly/control/*，调试外部控制脚本时不要并行启动。
+"""
 import os
 
 from launch import LaunchDescription
@@ -10,6 +20,7 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
+    # detector 包内统一参数文件（被多个节点共享）
     detector_share = get_package_share_directory("detector")
     default_config_file = os.path.join(detector_share, "config", "auto_aim_config.yaml")
 
@@ -57,6 +68,7 @@ def generate_launch_description():
     ]
 
     nodes = [
+        # gimbal_driver: offline=true 时强制 use_virtual_device
         GroupAction(
             actions=[
                 Node(
@@ -86,6 +98,7 @@ def generate_launch_description():
             ],
             condition=IfCondition(use_gimbal),
         ),
+        # detector: offline=true 时强制 use_video
         GroupAction(
             actions=[
                 Node(
@@ -115,6 +128,7 @@ def generate_launch_description():
             ],
             condition=IfCondition(use_detector),
         ),
+        # 下游链路节点
         Node(
             package="tracker_solver",
             executable="tracker_solver_node",
@@ -151,6 +165,7 @@ def generate_launch_description():
             on_exit=Shutdown(reason="buff_hitter exited"),
             condition=IfCondition(use_buff),
         ),
+        # 最后启动 behavior_tree（决策接管）
         Node(
             package="behavior_tree",
             executable="behavior_tree_node",

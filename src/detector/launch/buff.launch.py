@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+"""
+打符链路启动入口。
+
+默认启动：
+- gimbal_driver
+- buff_hitter
+
+说明：
+- 本 launch 仅覆盖打符相关链路，不包含 detector/tracker/predictor。
+"""
 import os
 
 from launch import LaunchDescription

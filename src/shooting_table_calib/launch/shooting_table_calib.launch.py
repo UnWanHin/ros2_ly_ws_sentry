@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+"""
+射表标定链路启动入口。
+
+默认启动：
+- gimbal_driver
+- shooting_table_calib_node
+
+说明：
+- 会额外向标定节点注入 detector 模型路径和可视化参数。
+"""
 import os
 
 from launch import LaunchDescription

@@ -1,3 +1,13 @@
+/*
+ * car_tracker_solver_node
+ *
+ * 链路位置：
+ * /ly/detector/armors -> tracker+solver -> /ly/tracker/results
+ *
+ * 主要功能：
+ * - 检测结果融合、目标关联与跟踪
+ * - 在统一时间源下执行坐标解算，输出给 predictor
+ */
 // [ROS 2] 引入頭文件
 #include <rclcpp/rclcpp.hpp>
 #include "car_tracker/tracker.hpp"

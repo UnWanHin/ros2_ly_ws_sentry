@@ -1,4 +1,12 @@
 // 改用SOLVER::global_solver_node = my_node_ptr;
+/*
+ * outpost_hitter_node（打前哨）
+ *
+ * 功能：
+ * - 输入 /ly/outpost/armors 检测结果
+ * - 执行姿态估计、方向判定与弹道求解
+ * - 输出 /ly/outpost/target（供上层决策或外部桥接）
+ */
 
 #include <rclcpp/rclcpp.hpp>
 #include <opencv2/opencv.hpp>

@@ -1,3 +1,14 @@
+/*
+ * gimbal_driver 主节点
+ *
+ * 核心职责：
+ * 1) 订阅 /ly/control/*（上位机控制指令）
+ * 2) 与下位机串口设备交互（真实设备或虚拟设备）
+ * 3) 发布 /ly/gimbal/* 与 /ly/game/*（回传状态）
+ *
+ * 备注：
+ * - /ly/control/posture 为姿态指令输入，/ly/gimbal/posture 仅发布下位机回传状态。
+ */
 #include <chrono>
 #include <thread>
 #include <algorithm>

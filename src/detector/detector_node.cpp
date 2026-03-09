@@ -1,3 +1,14 @@
+/*
+ * detector_node
+ *
+ * 核心职责：
+ * 1) 输入图像（相机/视频），执行装甲板+车辆检测
+ * 2) 输出 /ly/detector/armors 供 tracker_solver 使用
+ * 3) 读取 /ly/me/is_team_red 与 /ly/bt/target 做目标过滤
+ *
+ * 兼容策略：
+ * - 参数同时支持 dot/slash 两种命名，统一读 auto_aim_config.yaml。
+ */
 #include <auto_aim_common/msg/armor.hpp>
 #include <auto_aim_common/msg/armors.hpp>
 #include <gimbal_driver/msg/gimbal_angles.hpp>

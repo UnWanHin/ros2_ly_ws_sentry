@@ -1,3 +1,11 @@
+/*
+ * shooting_table_calib_node（射表标定）
+ *
+ * 功能：
+ * - 独立运行检测/跟踪/预测链路
+ * - 支持手动微调 pitch/yaw 并记录射击数据
+ * - 输出 CSV 供离线拟合和系数回填
+ */
 #include <rclcpp/rclcpp.hpp>
 #include <fmt/format.h>
 

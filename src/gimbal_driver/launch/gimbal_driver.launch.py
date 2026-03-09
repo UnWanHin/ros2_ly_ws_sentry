@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+"""
+gimbal_driver 独立启动入口。
+
+用途：
+- 单独调试串口收发和 /ly/control/* -> /ly/gimbal/* 转发行为。
+
+关键参数：
+- use_virtual_device：是否使用虚拟设备（离车调试建议 true）。
+"""
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration

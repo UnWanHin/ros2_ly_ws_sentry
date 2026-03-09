@@ -1,3 +1,14 @@
+/*
+ * predictor_node
+ *
+ * 链路位置：
+ * /ly/tracker/results -> predictor/controller -> /ly/predictor/target
+ *
+ * 主要功能：
+ * - 根据 tracker 结果做状态预测
+ * - 结合当前目标类型(/ly/bt/target)与弹速(/ly/bullet/speed)输出控制目标
+ * - 发布 debug_filter 供可视化和调参
+ */
 #include <rclcpp/rclcpp.hpp>
 #include <RosTools/RosTools.hpp>
 #include "Logger/Logger.hpp"

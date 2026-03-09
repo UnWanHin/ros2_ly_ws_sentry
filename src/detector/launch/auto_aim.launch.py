@@ -1,4 +1,16 @@
 #!/usr/bin/env python3
+"""
+自瞄链路启动入口（不含 behavior_tree）。
+
+默认链路：
+- gimbal_driver + detector + tracker_solver + predictor
+
+可选：
+- use_mapper=true 时附加 mapper_node（用于 BT 外火控联调）
+
+离线模式：
+- offline=true 会强制 use_virtual_device/use_video 覆盖，便于离车调试。
+"""
 import os
 
 from launch import LaunchDescription
@@ -10,6 +22,7 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
+    # detector 包内共享配置
     detector_share = get_package_share_directory("detector")
     default_config_file = os.path.join(detector_share, "config", "auto_aim_config.yaml")
 
@@ -79,6 +92,7 @@ def generate_launch_description():
     ]
 
     nodes = [
+        # gimbal_driver: offline=true 时强制虚拟设备
         GroupAction(
             actions=[
                 Node(
@@ -108,6 +122,7 @@ def generate_launch_description():
             ],
             condition=IfCondition(use_gimbal),
         ),
+        # detector: offline=true 时强制视频输入
         GroupAction(
             actions=[
                 Node(
@@ -137,6 +152,7 @@ def generate_launch_description():
             ],
             condition=IfCondition(use_detector),
         ),
+        # 跟踪与预测
         Node(
             package="tracker_solver",
             executable="tracker_solver_node",
@@ -155,6 +171,7 @@ def generate_launch_description():
             on_exit=Shutdown(reason="predictor_node exited"),
             condition=IfCondition(use_predictor),
         ),
+        # 可选 mapper（默认输出到 debug 话题，避免抢 /ly/control/*）
         Node(
             package="detector",
             executable="mapper_node",

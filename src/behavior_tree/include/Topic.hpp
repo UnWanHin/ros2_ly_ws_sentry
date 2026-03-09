@@ -1,4 +1,14 @@
 #pragma once
+/*
+ * behavior_tree 统一话题定义
+ *
+ * 作用：
+ * - 以 LY_DEF_ROS_TOPIC 统一 topic 名称和消息类型
+ * - 作为 behavior_tree 与其他模块的通信契约中心
+ *
+ * 维护建议：
+ * - 新增或变更话题时，同时更新 docs/architecture/message_and_link_flow.md
+ */
 
 // #include <ros/ros.h>
 // #include <std_msgs/Bool.h>

@@ -1,3 +1,10 @@
+/*
+ * behavior_tree_node 入口
+ *
+ * 说明：
+ * - 负责创建 Application 并进入决策主循环。
+ * - BT 内部会等待比赛开始信号，再执行策略 tick。
+ */
 #include "include/Application.hpp"
 #include <rclcpp/rclcpp.hpp>
 
