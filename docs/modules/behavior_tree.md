@@ -260,6 +260,17 @@ void TreeTick() {
 - `bt_config_file:=Scripts/ConfigJson/regional_competition.json`
   - 顯式指定某份 BT JSON 配置
 
+推薦啟動方式（腳本入口）：
+
+- `./scripts/start_sentry_all.sh`
+  - 啟動時可選 `1/2`：`1=league`、`2=regional`
+  - 腳本會自動對齊 `competition_profile` 與 `bt_config_file`
+  - 腳本會強制 `config_file` 為實機配置 `scripts/config/auto_aim_config_competition.yaml`
+- `./scripts/start_sentry_all.sh --mode 1 --no-prompt`
+  - 非交互固定聯盟賽
+- `./scripts/start_sentry_all.sh --mode 2 --no-prompt`
+  - 非交互固定分區賽
+
 ### 聯盟賽決策（當前實作）
 
 聯盟賽現在是單獨的一條簡化策略分支：
@@ -277,6 +288,13 @@ void TreeTick() {
 - `Area::OccupyArea` 只保留兼容坐標，占位給舊的 `goal_pos` 鏈路，不建議聯盟賽依賴它。
 - `bt_tree_file:=Scripts/main.xml`
   - 顯式指定 BT XML 文件
+
+### 黑板結構（兩種賽制一致）
+
+- 分區賽與聯盟賽都共用同一套 BT 主循環與雙黑板結構。
+- `GlobalBlackboard_`：跨 tick 保留比賽狀態、策略模式、導航目標等。
+- `TickBlackboard_`：每 tick 暫存中間決策資料。
+- 差異只在策略分派與導航目標選擇，不在黑板架構。
 
 ---
 

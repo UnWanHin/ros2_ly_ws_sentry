@@ -11,6 +11,10 @@
 - `GlobalBlackboard_`：跨 tick 持久資料（比賽狀態、血量、策略模式、AimMode 等）
 - `TickBlackboard_`：單次 tick 中間資料（可打目標、可靠敵方位置、當前目標等）
 
+說明：
+- 聯盟賽與分區賽共用同一套雙黑板結構。
+- 兩種賽制差異在策略分支與配置值，不在黑板架構。
+
 決策輸出仍沿用原本業務資料與接口：
 - 雲台控制：`/ly/control/angles`、`/ly/control/firecode`
 - 模式使能：`/ly/aa/enable`、`/ly/ra/enable`、`/ly/outpost/enable`
@@ -135,8 +139,14 @@ BT 節點實際調用的就是這些函數。
 ## 5. 輔瞄調參在哪裡改
 
 ### 結論
-是，主入口就是 `detector` 的 YAML，而且現在是：
-- `src/detector/config/auto_aim_config.yaml`
+是，主入口仍是 `detector` 的 YAML。
+
+但要分兩種啟動方式看：
+- 直接 `ros2 launch behavior_tree sentry_all.launch.py`：
+  - 默認讀 `src/detector/config/auto_aim_config.yaml`
+- `./scripts/start_sentry_all.sh`：
+  - 腳本會強制用實機 YAML：`scripts/config/auto_aim_config_competition.yaml`
+  - 即使外部傳 `config_file` 也會被覆蓋（避免現場混入調試配置）
 
 同一份參數會被多個節點共用（detector / predictor / gimbal_driver 等 launch 都載這份）。
 
@@ -261,6 +271,14 @@ ros2 topic hz /ly/detector/armors
 也提供工作區快捷腳本：
 - `./scripts/start_sentry_all.sh`
 
+腳本模式選擇（推薦）：
+- 交互選擇（1=league, 2=regional）
+  - `./scripts/start_sentry_all.sh`
+- 非交互聯盟賽
+  - `./scripts/start_sentry_all.sh --mode 1 --no-prompt`
+- 非交互分區賽
+  - `./scripts/start_sentry_all.sh --mode 2 --no-prompt`
+
 ### 8.1 默認行為
 
 默認會啟動：
@@ -313,3 +331,25 @@ ros2 launch behavior_tree sentry_all.launch.py \
 ros2 launch behavior_tree sentry_all.launch.py \
   bt_config_file:=Scripts/ConfigJson/league_competition.json
 ```
+
+---
+
+## 9. 鏈路對齊檢查（2026-03-12）
+
+本次對齊檢查結論：
+- `start_sentry_all.sh` -> `sentry_all.launch.py` -> `behavior_tree` 的參數鏈路已對齊
+  - `competition_profile`：可選 1/2 或顯式傳入
+  - `bt_config_file`：按 profile 自動對齊（league/regional）
+  - `config_file`：腳本層強制實機 YAML（防止誤用調試配置）
+- BT 層策略鏈路已對齊
+  - `league`：固定走 `LeagueSimple`
+  - `regional`：保持原分區賽策略切換
+- 導航發布鏈路已對齊
+  - `UseXY=false` -> 發 `/ly/navi/goal`
+  - `UseXY=true` -> 發 `/ly/navi/goal_pos`
+
+驗證記錄：
+- `./scripts/self_check_sentry.sh --static-only`：通過（PASS 19 / FAIL 0）
+- `./scripts/self_check_sentry.sh --runtime-only --launch --wait 5 --skip-hz`：
+  - 在當前沙箱環境受 DDS 權限限制（`RTPS_TRANSPORT_SHM/UDP permission denied`）未通過
+  - 屬於環境限制，不是策略鏈路配置錯配
