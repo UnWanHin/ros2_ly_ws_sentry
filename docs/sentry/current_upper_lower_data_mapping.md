@@ -410,8 +410,8 @@ struct ExtendData {
 | 串口字段 | 解析方式 | 发布 topic | 备注 |
 |---|---|---|---|
 | `UWBAngleYaw` | 直接读 `uint16` | `/ly/me/uwb_yaw` | 自身朝向角 |
-| `Reserve_16` bit0~1 | `data.Reserve_16 & 0x03u` | `/ly/gimbal/posture` | 仅 `1/2/3` 才发布 |
-| `Reserve_16` bit2~15 | 当前未解析 | 无 | 本仓库当前未发现解析/发布逻辑 |
+| `Reserve_16` bit8~15（高8位） | 按 `uint8` 姿态值解析 | `/ly/gimbal/posture` | 仅 `1/2/3` 才发布 |
+| `Reserve_16` bit0~7（低8位） | 当前未解析 | 无 | 预留 |
 | `Reserve_32_1` | 当前未解析 | 无 | 本仓库当前未发现解析/发布逻辑 |
 | `Reserve_32_2` | 当前未解析 | 无 | 本仓库当前未发现解析/发布逻辑 |
 
@@ -475,7 +475,7 @@ struct ExtendData {
 | `5` | 自身 UWB 坐标 | `PositionData.Friend.X/Y` | `/ly/me/uwb_pos` |
 | `5` | 弹速 | `PositionData.BulletSpeed` | `/ly/bullet/speed` |
 | `6` | 自身朝向 | `ExtendData.UWBAngleYaw` | `/ly/me/uwb_yaw` |
-| `6` | 姿态回读 | `ExtendData.Reserve_16` 低 2 bit | `/ly/gimbal/posture` |
+| `6` | 姿态回读 | `ExtendData.Reserve_16` 高 8 位 | `/ly/gimbal/posture` |
 
 ---
 
@@ -486,7 +486,7 @@ struct ExtendData {
 | 结构 | 字段 | 当前状态 |
 |---|---|---|
 | `RFIDAndBuffData.BuffStatus` | `reserve` | 未发布 |
-| `ExtendData` | `Reserve_16` 高 14 bit | 未解析 |
+| `ExtendData` | `Reserve_16` 剩余位（除 posture 编码） | 未解析 |
 | `ExtendData` | `Reserve_32_1` | 未解析 |
 | `ExtendData` | `Reserve_32_2` | 未解析 |
 | `ExtEventDataType` | 各 bit 子字段 | 仅整体透传，未单独拆 topic |
@@ -496,12 +496,12 @@ struct ExtendData {
 ## 8. 代码定位
 
 - 串口结构：`src/gimbal_driver/module/BasicTypes.hpp`
-- 上位机下发订阅：`src/gimbal_driver/main.cpp:157`
-- 上位机上行解析分发：`src/gimbal_driver/main.cpp:402`
-- `TypeID=0`：`src/gimbal_driver/main.cpp:195`
-- `TypeID=1`：`src/gimbal_driver/main.cpp:225`
-- `TypeID=2`：`src/gimbal_driver/main.cpp:345`
-- `TypeID=3`：`src/gimbal_driver/main.cpp:365`
-- `TypeID=4`：`src/gimbal_driver/main.cpp:293`
-- `TypeID=5`：`src/gimbal_driver/main.cpp:313`
-- `TypeID=6`：`src/gimbal_driver/main.cpp:385`
+- 上位机下发订阅：`src/gimbal_driver/main.cpp:163`
+- 上位机上行解析分发：`src/gimbal_driver/main.cpp:406`
+- `TypeID=0`：`src/gimbal_driver/main.cpp:201`
+- `TypeID=1`：`src/gimbal_driver/main.cpp:231`
+- `TypeID=2`：`src/gimbal_driver/main.cpp:351`
+- `TypeID=3`：`src/gimbal_driver/main.cpp:371`
+- `TypeID=4`：`src/gimbal_driver/main.cpp:299`
+- `TypeID=5`：`src/gimbal_driver/main.cpp:319`
+- `TypeID=6`：`src/gimbal_driver/main.cpp:391`

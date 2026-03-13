@@ -103,6 +103,12 @@ namespace
             return posture >= 1 && posture <= 3;
         }
 
+        static std::uint8_t DecodePostureFromReserve16(std::uint16_t reserve16) noexcept {
+            // 姿态回读统一约定：Reserve_16 高 8 位。
+            const auto high8 = static_cast<std::uint8_t>((reserve16 >> 8) & 0xFFu);
+            return IsValidPosture(high8) ? high8 : 0u;
+        }
+
         void ArmPostureTx(std::uint8_t posture) {
             if (!IsValidPosture(posture)) {
                 return;
@@ -390,9 +396,7 @@ namespace
                 Node.Publisher<topic>()->publish(msg);
             }
 
-            // 约定: ExtendData.Reserve_16 的低 2 bit 为姿态状态(1/2/3)，0 表示未知。
-            // 这样不改报文长度，先做兼容接入。
-            const auto posture_raw = static_cast<std::uint8_t>(data.Reserve_16 & 0x03u);
+            const auto posture_raw = DecodePostureFromReserve16(data.Reserve_16);
             if (IsValidPosture(posture_raw)) {
                 postureState_ = posture_raw;
                 PublishPosture(postureState_);

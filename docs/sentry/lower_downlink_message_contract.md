@@ -80,7 +80,7 @@
 
 ### 3.5 姿态回读语义（联调约定）
 
-- `/ly/gimbal/posture` 表示**下位机回读状态**，来源 `ExtendData.Reserve_16` 低 2 bit（1/2/3）。
+- `/ly/gimbal/posture` 表示**下位机回读状态**，来源 `ExtendData.Reserve_16` 高 8 位（1/2/3）。
 - 不建议将 `/ly/control/posture` 直接镜像回 `/ly/gimbal/posture`，否则会掩盖“已下发但未执行”的链路问题。
 - 若下位机暂未实现回读，`/ly/gimbal/posture` 可保持未更新，上位机会按无回读路径处理（含重试/超时策略）。
 
@@ -92,7 +92,7 @@
 2. 解析 `Posture` 字段，仅接受 `1/2/3`，`0` 视为保留值。  
 3. 将姿态映射到裁判链路 `0x0120 bit21-22`。  
 4. 建议维护 `sentry_cmd_shadow`，只改 bit21-22，不重置其他控制位。  
-5. 上行继续把姿态状态写入 `ExtendData.Reserve_16` 低 2 bit（1/2/3，其他为0）。  
+5. 上行把姿态状态写入 `ExtendData.Reserve_16` 高 8 位。  
 
 ---
 

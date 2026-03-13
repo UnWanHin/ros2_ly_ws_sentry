@@ -37,7 +37,7 @@
 
 ## D. 上行回传改造（闭环）
 
-- [ ] 当前姿态已回填到上行 `TypeID=6` `ExtendData.Reserve_16` 低 2 bit
+- [ ] 当前姿态已回填到上行 `TypeID=6` `ExtendData.Reserve_16` 高 8 位
 - [ ] 姿态回填值范围为 `0/1/2/3`
 - [ ] 上位机可稳定收到 `/ly/gimbal/posture`
 

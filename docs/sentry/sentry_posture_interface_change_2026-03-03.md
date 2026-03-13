@@ -54,7 +54,7 @@
   - 新增对 `/ly/control/posture` 的订阅与校验（0/1/2/3）
   - 当前下发直接写入 `GimbalControlData.Posture`，不再发送独立 `TypeID=7`
   - 在 `PubExtendData()` 中增加姿态回读发布逻辑：
-    - 约定上行 `TypeID=6` 的 `ExtendData.Reserve_16` 低 2 bit 作为姿态状态（仅 1/2/3 视为有效）
+    - 当前实现约定：`Reserve_16` 高 8 位为姿态状态（仅 `1/2/3` 视为有效）
 
 ### 2.2 文档改动
 
@@ -82,13 +82,13 @@
   - 切换重发：默认 3 次，间隔 20ms
 - `gimbal_driver` 串口上行姿态回读已固定为：
   - `TypeID=6` `ExtendData`
-  - `Reserve_16` 低 2 bit = 姿态状态
+  - `Reserve_16` 高 8 位 = 姿态状态
 
 ### 尚未完成（需下位机配合）
 
 - 下位机主控制幀解析需从 13B 升级为 14B（含 `Posture` 字段）
 - 需同步更新 `Tail` 偏移与长度校验
-- 真实姿态状态回读依赖下位机把姿态值塞进 `ExtendData.Reserve_16` 低 2 bit
+- 真实姿态状态回读依赖下位机把姿态值写入 `ExtendData.Reserve_16` 高 8 位
 
 ---
 
@@ -132,7 +132,7 @@
 ## 5.2 状态回读链路
 
 1. 从裁判反馈读取当前姿态（建议用 `0x020D` 对应姿态位）。
-2. 将当前姿态编码进上行 `TypeID=6` `ExtendData.Reserve_16` 低 2 bit（1/2/3，其他为0）。
+2. 将当前姿态编码进上行 `TypeID=6` `ExtendData.Reserve_16` 高 8 位（`1/2/3`，其他为0）。
 3. 保持 `ExtendData` 总长度不变，确保上位机兼容。
 
 ## 5.3 失败处理建议

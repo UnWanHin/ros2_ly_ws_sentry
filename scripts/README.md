@@ -236,6 +236,31 @@
 - `scripts/feature_test/standalone/tools/control_mode_publisher.py`
 - `scripts/feature_test/standalone/tools/target_to_control_bridge.py`
 
+## 5.4 `start_navi_goal_cli.sh`（导航点位序号联调）
+
+用途：
+- 手动联调导航链路，交互输入并持续发布：
+  - `/ly/navi/goal`（点位序号）
+  - `/ly/navi/speed_level`（可选）
+- 适合和导航同学联调“序号链路是否打通”。
+
+常用命令：
+
+```bash
+# 进入交互模式
+./scripts/start_navi_goal_cli.sh
+
+# 可调发布频率
+./scripts/start_navi_goal_cli.sh --hz 5
+```
+
+交互命令：
+- `<id>`：设置并持续发布 goal 序号（0~255）
+- `s <speed>`：设置 speed_level
+- `<id> <speed>`：同时设置 goal 和 speed
+- `p`：查看当前值
+- `q`：退出
+
 ## 6. `feature_test/run_feature_test.sh`（BT 外功能测试框架，单控制源）
 
 用途：

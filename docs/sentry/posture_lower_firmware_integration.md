@@ -10,7 +10,7 @@
 - 保留 `/ly/control/posture` ROS 接口不变
 - 串口层将姿态写入 `GimbalControlData.Posture`
 - 不再下发独立 `TypeID=7` 姿态幀
-- 姿态回读沿用上行 `TypeID=6` 的 `ExtendData`，从 `Reserve_16` 低 2 bit 取值
+- 姿态回读沿用上行 `TypeID=6` 的 `ExtendData`，从 `Reserve_16` 高 8 bit 取值
 
 ---
 
@@ -109,13 +109,13 @@ static inline uint32_t set_sentry_posture_bits(uint32_t sentry_cmd, uint8_t post
 
 ## 4. 状态回传约定
 
-上位机继续从上行 `TypeID=6` 的 `ExtendData.Reserve_16` 低 2 bit 读取姿态并发布 `/ly/gimbal/posture`：
+上位机继续从上行 `TypeID=6` 的 `ExtendData.Reserve_16` 高 8 位读取姿态并发布 `/ly/gimbal/posture`：
 - `0` 未知
 - `1` 进攻
 - `2` 防御
 - `3` 移动
 
-建议下位机在姿态状态稳定后回填该字段，便于上位机闭环确认。
+建议下位机在姿态状态稳定后回填该字段，便于上位机闭环确认。姿态编码固定写入 `Reserve_16` 高 8 位。
 
 ---
 

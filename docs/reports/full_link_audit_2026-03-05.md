@@ -31,7 +31,7 @@
 
 1. （已闭环）姿态控制已并入串口主控制幀  
    当前 `GimbalControlData` 已包含 `Posture` 字段（14B 主幀），`/ly/control/posture` 会下发到下位机；  
-   `/ly/gimbal/posture` 语义为下位机回读（来源 `ExtendData.Reserve_16` 低 2 bit），不再建议作为命令镜像使用。
+   `/ly/gimbal/posture` 语义为下位机回读（当前代码读取 `ExtendData.Reserve_16` 高 8 位），不再建议作为命令镜像使用。
 
 2. `/ly/control/vel` 由 `behavior_tree` 速度桥接发布  
    当前链路为：`/ly/navi/vel -> behavior_tree -> /ly/control/vel -> gimbal_driver`。
