@@ -6,8 +6,8 @@
   ros__parameters:
     "camera_param.camera_sn": "KE0200060396"
     "camera_param/camera_sn": "KE0200060396"
-    "camera_param.ExposureTime": 5000.0
-    "camera_param/ExposureTime": 5000.0
+    "camera_param.ExposureTime": 8000.0
+    "camera_param/ExposureTime": 8000.0
     "camera_param.Gain": 16.0
     "camera_param/Gain": 16.0
     "camera_param.RedBalanceRatio": 1.2266
@@ -31,12 +31,12 @@
     "detector_config.debug_team_blue": false
     "detector_config/debug_team_blue": false
 
-    "detector_config.web_show": false
-    "detector_config/web_show": false
+    "detector_config.web_show": true
+    "detector_config/web_show": true
     "detector_config.show": false
     "detector_config/show": false
-    "detector_config.draw": false
-    "detector_config/draw": false
+    "detector_config.draw": true
+    "detector_config/draw": true
     "detector_config.use_ros_bag": false
     "detector_config/use_ros_bag": false
     "detector_config.save_video": false
@@ -62,7 +62,7 @@
     "solver_config/camera_distortion_coefficients": [-0.1059, -0.3427, 0.0072, 0.0, 1.4125]
 
     controller_config:
-      bullet_speed: 23.0
+      bullet_speed: 30.0 #23
       shoot_delay: 0.02
       shoot_table_adjust:
         enable: true

@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_NAME="$(basename "$0")"
 LOCK_FILE="/tmp/sentry_autoaim_debug.lock"
+ONLINE_CONFIG_FILE="${ROOT_DIR}/scripts/config/auto_aim_config_competition.yaml"
 
 : "${ROS_LOG_DIR:=/tmp/ros2_logs}"
 mkdir -p "${ROS_LOG_DIR}"
@@ -84,7 +85,8 @@ Examples:
   ./${SCRIPT_NAME} --mode perception --offline
   ./${SCRIPT_NAME} --mode fire --offline --angles-topic /ly/control/angles --firecode-topic /ly/control/firecode
   ./${SCRIPT_NAME} --mode mapper --publish-team true --red true
-  ./${SCRIPT_NAME} --online -- --config_file:=/abs/path/auto_aim_config.yaml
+  ./${SCRIPT_NAME} --online
+  ./${SCRIPT_NAME} --online --config-file /abs/path/auto_aim_config.yaml
 EOF
 }
 
@@ -98,6 +100,16 @@ warn() {
 
 err() {
   printf "[AUTOAIM-DEBUG][ERROR] %s\n" "$*" >&2
+}
+
+require_option_value() {
+  local option_name="$1"
+  local option_value="${2-}"
+  if [[ -z "${option_value}" || "${option_value}" == --* ]]; then
+    err "Option ${option_name} requires a value."
+    usage >&2
+    exit 2
+  fi
 }
 
 cleanup() {
@@ -153,6 +165,7 @@ acquire_lock() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --mode)
+      require_option_value "$1" "${2-}"
       MODE="$2"
       shift 2
       ;;
@@ -177,66 +190,82 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --wait)
+      require_option_value "$1" "${2-}"
       WAIT_SECONDS="$2"
       shift 2
       ;;
     --cmd-timeout)
+      require_option_value "$1" "${2-}"
       CMD_TIMEOUT="$2"
       shift 2
       ;;
     --output)
+      require_option_value "$1" "${2-}"
       OUTPUT_MODE="$2"
       shift 2
       ;;
     --config-file)
+      require_option_value "$1" "${2-}"
       CONFIG_FILE="$2"
       shift 2
       ;;
     --red)
+      require_option_value "$1" "${2-}"
       MAPPER_RED="$2"
       shift 2
       ;;
     --target-id)
+      require_option_value "$1" "${2-}"
       MAPPER_TARGET_ID="$2"
       shift 2
       ;;
     --target-priority)
+      require_option_value "$1" "${2-}"
       MAPPER_TARGET_PRIORITY="$2"
       shift 2
       ;;
     --publish-team)
+      require_option_value "$1" "${2-}"
       MAPPER_PUBLISH_TEAM="$2"
       shift 2
       ;;
     --publish-target)
+      require_option_value "$1" "${2-}"
       MAPPER_PUBLISH_TARGET="$2"
       shift 2
       ;;
     --enable-fire)
+      require_option_value "$1" "${2-}"
       MAPPER_ENABLE_FIRE="$2"
       shift 2
       ;;
     --auto-fire)
+      require_option_value "$1" "${2-}"
       MAPPER_AUTO_FIRE="$2"
       shift 2
       ;;
     --target-timeout)
+      require_option_value "$1" "${2-}"
       MAPPER_TARGET_TIMEOUT="$2"
       shift 2
       ;;
     --diag-period)
+      require_option_value "$1" "${2-}"
       MAPPER_DIAG_PERIOD="$2"
       shift 2
       ;;
     --angles-topic)
+      require_option_value "$1" "${2-}"
       MAPPER_ANGLES_TOPIC="$2"
       shift 2
       ;;
     --firecode-topic)
+      require_option_value "$1" "${2-}"
       MAPPER_FIRECODE_TOPIC="$2"
       shift 2
       ;;
     --bt-target-topic)
+      require_option_value "$1" "${2-}"
       MAPPER_BT_TARGET_TOPIC="$2"
       shift 2
       ;;
@@ -317,6 +346,25 @@ source_workspace() {
   fi
   err "${ROOT_DIR}/install/setup.bash not found. Run: colcon build"
   exit 1
+}
+
+select_default_config_if_needed() {
+  if [[ -n "${CONFIG_FILE}" ]]; then
+    return 0
+  fi
+
+  if (( OFFLINE_MODE == 1 )); then
+    return 0
+  fi
+
+  if [[ -f "${ONLINE_CONFIG_FILE}" ]]; then
+    CONFIG_FILE="${ONLINE_CONFIG_FILE}"
+    info "Online mode: defaulting to on-robot config ${CONFIG_FILE}"
+    return 0
+  fi
+
+  warn "Online default config not found: ${ONLINE_CONFIG_FILE}. Falling back to launch default config."
+  return 0
 }
 
 has_launch_arg_key() {
@@ -500,6 +548,7 @@ cd "${ROOT_DIR}"
 acquire_lock
 
 cleanup_existing_stack_if_needed
+select_default_config_if_needed
 
 build_launch_cmd
 build_mapper_cmd

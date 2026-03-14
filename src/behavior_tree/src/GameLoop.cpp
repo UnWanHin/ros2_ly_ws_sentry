@@ -16,6 +16,7 @@ namespace BehaviorTree {
 
     namespace {
     constexpr std::uint8_t kMaxBaseGoalId = LangYa::OccupyArea.ID;
+    constexpr auto kLostTargetHold = std::chrono::milliseconds(2000);
 
     bool IsValidBaseGoalId(const std::uint8_t goal_id) {
         return goal_id <= kMaxBaseGoalId;
@@ -180,7 +181,7 @@ namespace BehaviorTree {
         else { // 未识别到目标
             if(aimMode != AimMode::Buff) {
                 /// 云台控制数据均匀变化
-                if (!config.AimDebugSettings.StopScan && now - lastFoundEnemyTime > std::chrono::milliseconds(2000)) {
+                if (!config.AimDebugSettings.StopScan && now - lastFoundEnemyTime > kLostTargetHold) {
                     gimbalControlData.FireCode.AimMode = 0;
                     static auto last_searching_log = std::chrono::steady_clock::time_point{};
                     if (now - last_searching_log > std::chrono::seconds(2)) {
@@ -196,7 +197,7 @@ namespace BehaviorTree {
                     if (aimMode == AimMode::Outpost) {
                         gimbalControlData.GimbalAngles.Pitch += 15.0f;
                     }
-                } else { // 丢失目标之后，两秒钟只能依旧转发旧角度
+                } else { // 丢失目标后的短暂保持阶段，继续转发上一组角度
                     // if(aimMode != AimMode::Buff){
                         gimbalControlData.GimbalAngles = autoAimData.Angles;
                         LoggerPtr->Debug("Hold Angles -> Pitch: {}, Yaw: {}", autoAimData.Angles.Pitch, autoAimData.Angles.Yaw);
@@ -229,7 +230,8 @@ namespace BehaviorTree {
             }
             gimbalControlData.FireCode.FireStatus = RecFireCode.FireStatus;
         }
-        if(naviLowerHead) {
+        // lower_head 只在未锁目标时生效，避免锁定状态下只改 pitch 造成“单轴锁”
+        if(naviLowerHead && !FindTarget) {
             gimbalControlData.GimbalAngles.Pitch = -15.0f; //-22.5 - 26.0
         }
         

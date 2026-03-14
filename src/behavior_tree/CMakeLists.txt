@@ -20,6 +20,8 @@ set(BTCPP_V4_ROOT "${BTCPP_WS_ROOT_DIR}/third_party/behaviortree_cpp_v4/install"
 set(BTCPP_V4_CMAKE_DIR_SHARE "${BTCPP_V4_ROOT}/share/behaviortree_cpp/cmake")
 set(BTCPP_V4_CMAKE_DIR_LIB "${BTCPP_V4_ROOT}/lib/cmake/behaviortree_cpp")
 set(BTCPP_V4_CMAKE_PATHS "")
+set(BTCPP_IS_PINNED FALSE)
+set(BTCPP_SYSTEM_PREFIX_PATHS "")
 
 if(EXISTS "${BTCPP_V4_CMAKE_DIR_SHARE}/behaviortree_cppConfig.cmake")
   list(APPEND BTCPP_V4_CMAKE_PATHS "${BTCPP_V4_CMAKE_DIR_SHARE}")
@@ -29,25 +31,63 @@ if(EXISTS "${BTCPP_V4_CMAKE_DIR_LIB}/behaviortree_cppConfig.cmake")
 endif()
 
 if(BTCPP_V4_CMAKE_PATHS STREQUAL "")
-  message(FATAL_ERROR
-    "Pinned BT v4 config not found under:\n"
-    "  - ${BTCPP_V4_CMAKE_DIR_SHARE}\n"
-    "  - ${BTCPP_V4_CMAKE_DIR_LIB}\n"
-    "Please install/copy BehaviorTree.CPP v4 into ${BTCPP_V4_ROOT} first.")
-endif()
+  if(DEFINED ENV{AMENT_PREFIX_PATH} AND NOT "$ENV{AMENT_PREFIX_PATH}" STREQUAL "")
+    string(REPLACE ":" ";" BTCPP_AMENT_PREFIX_PATHS "$ENV{AMENT_PREFIX_PATH}")
+    list(APPEND BTCPP_SYSTEM_PREFIX_PATHS ${BTCPP_AMENT_PREFIX_PATHS})
+  endif()
+  if(DEFINED ENV{CMAKE_PREFIX_PATH} AND NOT "$ENV{CMAKE_PREFIX_PATH}" STREQUAL "")
+    string(REPLACE ":" ";" BTCPP_CMAKE_PREFIX_PATHS "$ENV{CMAKE_PREFIX_PATH}")
+    list(APPEND BTCPP_SYSTEM_PREFIX_PATHS ${BTCPP_CMAKE_PREFIX_PATHS})
+  endif()
+  if(DEFINED ENV{ROS_DISTRO} AND EXISTS "/opt/ros/$ENV{ROS_DISTRO}")
+    list(APPEND BTCPP_SYSTEM_PREFIX_PATHS "/opt/ros/$ENV{ROS_DISTRO}")
+  endif()
+  list(REMOVE_DUPLICATES BTCPP_SYSTEM_PREFIX_PATHS)
 
-find_package(behaviortree_cpp CONFIG REQUIRED
-  PATHS ${BTCPP_V4_CMAKE_PATHS}
-  NO_DEFAULT_PATH
-)
+  if(BTCPP_SYSTEM_PREFIX_PATHS)
+    find_package(behaviortree_cpp CONFIG QUIET
+      PATHS ${BTCPP_SYSTEM_PREFIX_PATHS}
+    )
+  else()
+    find_package(behaviortree_cpp CONFIG QUIET)
+  endif()
+
+  if(NOT behaviortree_cpp_FOUND)
+    set(BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY "(default CMake search paths only)")
+    if(BTCPP_SYSTEM_PREFIX_PATHS)
+      string(REPLACE ";" "\n  - " BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY "${BTCPP_SYSTEM_PREFIX_PATHS}")
+      set(BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY "  - ${BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY}")
+    endif()
+    message(FATAL_ERROR
+      "BehaviorTree.CPP v4+ not found.\n"
+      "Checked pinned workspace paths:\n"
+      "  - ${BTCPP_V4_CMAKE_DIR_SHARE}\n"
+      "  - ${BTCPP_V4_CMAKE_DIR_LIB}\n"
+      "Checked system/package-manager prefixes:\n"
+      "${BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY}\n"
+      "Install/copy BehaviorTree.CPP v4 into ${BTCPP_V4_ROOT}, or install the system package.")
+  endif()
+
+  message(STATUS "BehaviorTree.CPP source: system package fallback")
+  if(DEFINED behaviortree_cpp_DIR)
+    message(STATUS "BehaviorTree.CPP config dir: ${behaviortree_cpp_DIR}")
+  endif()
+else()
+  find_package(behaviortree_cpp CONFIG REQUIRED
+    PATHS ${BTCPP_V4_CMAKE_PATHS}
+    NO_DEFAULT_PATH
+  )
+  set(BTCPP_IS_PINNED TRUE)
+  message(STATUS "BehaviorTree.CPP source: pinned workspace copy")
+  message(STATUS "Pinned BehaviorTree.CPP root: ${BTCPP_V4_ROOT}")
+endif()
 
 if(NOT DEFINED behaviortree_cpp_VERSION OR behaviortree_cpp_VERSION VERSION_LESS 4.0.0)
   message(FATAL_ERROR
     "behavior_tree requires BehaviorTree.CPP v4+, but found version '${behaviortree_cpp_VERSION}'.")
 endif()
 
-message(STATUS "Pinned BehaviorTree.CPP version: ${behaviortree_cpp_VERSION}")
-message(STATUS "Pinned BehaviorTree.CPP root: ${BTCPP_V4_ROOT}")
+message(STATUS "BehaviorTree.CPP version: ${behaviortree_cpp_VERSION}")
 if(TARGET behaviortree_cpp::behaviortree_cpp)
   set(BTCPP_LINK_TARGET behaviortree_cpp::behaviortree_cpp)
 elseif(TARGET BT::behaviortree_cpp)
@@ -87,10 +127,12 @@ add_executable(${PROJECT_NAME}_node
   ${SRC_FILES}
 )
 
-set_target_properties(${PROJECT_NAME}_node PROPERTIES
-  BUILD_RPATH "${BTCPP_V4_ROOT}/lib"
-  INSTALL_RPATH "${BTCPP_V4_ROOT}/lib"
-)
+if(BTCPP_IS_PINNED AND EXISTS "${BTCPP_V4_ROOT}/lib")
+  set_target_properties(${PROJECT_NAME}_node PROPERTIES
+    BUILD_RPATH "${BTCPP_V4_ROOT}/lib"
+    INSTALL_RPATH "${BTCPP_V4_ROOT}/lib"
+  )
+endif()
 
 # 設置頭文件路徑
 target_include_directories(${PROJECT_NAME}_node PUBLIC

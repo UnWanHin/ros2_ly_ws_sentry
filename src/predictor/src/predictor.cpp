@@ -185,7 +185,9 @@ namespace ly_auto_aim:: inline predictor {
             }
             else
             {
-                roslog::info("Invalid armor id {}, for angle : {}",i,armor_angle);
+                // This is not a malformed id; it means the armor face is outside
+                // the current camera visible-angle gate.
+                roslog::info("Armor id {} unseen at current view angle: {}", i, armor_angle);
                 prediction.armors[i].status = Armor::UNSEEN;
             }
         }

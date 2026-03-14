@@ -1,4 +1,5 @@
 #include "../include/Application.hpp"
+#include <cmath>
 
 using namespace LangYa;
 
@@ -41,8 +42,10 @@ namespace BehaviorTree{
     void Application::SubscribeMessageAll() {
         // ly_gimbal_angles
         GenSub<ly_gimbal_angles>([](Application& app, auto msg) {
-            app.gimbalAngles.Yaw = msg->yaw; //ROS2改成小寫
-            app.gimbalAngles.Pitch = msg->pitch;
+            app.gimbalAngles = GimbalAnglesType{
+                static_cast<AngleType>(msg->yaw),
+                static_cast<AngleType>(msg->pitch)
+            }; // ROS2改成小寫
             app.hasReceivedGimbalAngles_ = true;
             app.lastGimbalAnglesRxTime = std::chrono::steady_clock::now();
         });
@@ -208,38 +211,56 @@ namespace BehaviorTree{
         // ly_predictor_target
         GenSub<ly_predictor_target>([](Application& app, auto msg) {
             auto &obj = app;
-            obj.autoAimData.Angles.Yaw = msg->yaw;
-            obj.autoAimData.Angles.Pitch = msg->pitch;
             obj.autoAimData.BuffFollow = false;
-            obj.autoAimData.FireStatus = true;
-            obj.isFindTargetAtomic = true;
-            obj.lastTargetSeenTime = std::chrono::steady_clock::now();
-            obj.LoggerPtr->Info("进入回调，更新角度");
+            obj.autoAimData.FireStatus = msg->status;
+            if (msg->status && std::isfinite(msg->yaw) && std::isfinite(msg->pitch)) {
+                obj.autoAimData.Angles = GimbalAnglesType{
+                    static_cast<AngleType>(msg->yaw),
+                    static_cast<AngleType>(msg->pitch)
+                };
+                obj.isFindTargetAtomic = true;
+                obj.lastTargetSeenTime = std::chrono::steady_clock::now();
+                obj.LoggerPtr->Info("Predictor target valid, update auto-aim angles.");
+            } else {
+                // Keep last valid pair (yaw/pitch) when predictor marks this frame invalid.
+                // This avoids invalid frames causing twitchy one-axis jumps.
+                obj.LoggerPtr->Debug("Predictor target invalid, keep last valid auto-aim angles.");
+            }
         });
 
         // ly_buff_target
         GenSub<ly_buff_target>([](Application& app, auto msg) { 
             auto  &obj = app;
-            obj.buffAimData.Angles.Pitch = msg->pitch;
-            obj.buffAimData.Angles.Yaw = msg->yaw;
             obj.buffAimData.FireStatus = msg->status;
             obj.buffAimData.BuffFollow = true;
-            // if(obj.buffAimData.FireStatus) {
-            //     obj.isFindTargetAtomic = true;
-            // }
-            obj.isFindTargetAtomic = true;
-            obj.lastTargetSeenTime = std::chrono::steady_clock::now();
+            if (std::isfinite(msg->yaw) && std::isfinite(msg->pitch)) {
+                obj.buffAimData.Angles = GimbalAnglesType{
+                    static_cast<AngleType>(msg->yaw),
+                    static_cast<AngleType>(msg->pitch)
+                };
+                // buff 模式下 status 表示“是否可开火”，不是“是否有角度跟随”
+                obj.isFindTargetAtomic = true;
+                obj.lastTargetSeenTime = std::chrono::steady_clock::now();
+            } else {
+                obj.LoggerPtr->Debug("Buff target invalid (non-finite yaw/pitch), keep last valid angles.");
+            }
         });
 
         // ly_outpost_target
         GenSub<ly_outpost_target>([](Application& app, auto msg) {
             auto &obj = app;
-            obj.outpostAimData.Angles.Yaw = msg->yaw;
-            obj.outpostAimData.Angles.Pitch = msg->pitch;
             obj.outpostAimData.FireStatus = msg->status;
             obj.outpostAimData.BuffFollow = false;
-            obj.isFindTargetAtomic = true;
-            obj.lastTargetSeenTime = std::chrono::steady_clock::now();
+            if (msg->status && std::isfinite(msg->yaw) && std::isfinite(msg->pitch)) {
+                obj.outpostAimData.Angles = GimbalAnglesType{
+                    static_cast<AngleType>(msg->yaw),
+                    static_cast<AngleType>(msg->pitch)
+                };
+                obj.isFindTargetAtomic = true;
+                obj.lastTargetSeenTime = std::chrono::steady_clock::now();
+            } else {
+                obj.LoggerPtr->Debug("Outpost target invalid, keep last valid outpost angles.");
+            }
         });
 
         // ly_enemy_hp

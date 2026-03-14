@@ -376,8 +376,18 @@ ControlResult Controller::control(const GimbalAngleType& gimbal_angle, int targe
     result.yaw_actual_want = result.yaw_setpoint;
     result.valid = true;
     float yaw_diff = result.yaw_actual_want - gimbal_angle.yaw;
-    if(!it->stable) result.valid = false;
-    if(yaw_diff > 80.0f || yaw_diff < -80.0f) result.valid = false;
+    const bool unstable_track = !it->stable;
+    const bool yaw_jump_reject = (yaw_diff > 80.0f || yaw_diff < -80.0f);
+    if (unstable_track || yaw_jump_reject) {
+        result.valid = false;
+        roslog::warn(
+            "Control invalid: car_id={}, armor_id={}, stable={}, yaw_diff_deg={}",
+            aim_armor_id.first, aim_armor_id.second, it->stable, yaw_diff);
+    } else {
+        roslog::info(
+            "Control valid: car_id={}, armor_id={}, yaw_diff_deg={}",
+            aim_armor_id.first, aim_armor_id.second, yaw_diff);
+    }
     if(result.pitch_setpoint < -2.0f ) result.pitch_actual_want -= 1.0f; /// 高打低偏置补丁
 
     roslog::warn("debug: finish control"); 

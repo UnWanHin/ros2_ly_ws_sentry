@@ -160,8 +160,10 @@ namespace {
                     debug_filter_msg.radius_2 = prediction.r2;
                 }
 
-                if(control_result.valid){
-                    node.Publisher<ly_predictor_target>()->publish(target_msg);
+                // Always publish predictor target for observability.
+                // Consumers should gate by target_msg.status.
+                node.Publisher<ly_predictor_target>()->publish(target_msg);
+                if (control_result.valid) {
                     node.Publisher<ly_predictor_debug>()->publish(debug_filter_msg);
                 }
             }

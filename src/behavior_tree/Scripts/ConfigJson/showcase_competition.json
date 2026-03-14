@@ -25,31 +25,31 @@
     },
     "ShowcasePatrol": {
         "Enable": true,
-        "Goals": [6, 11, 14, 15],
+        "Goals": [1, 2, 3, 4],
         "GoalHoldSec": 5,
-        "Random": true,
+        "Random": false,
         "DisableTeamOffset": true,
         "IgnoreRecovery": true
     },
     "Posture": {
         "Enable": true,
-        "SwitchCooldownSec": 1,
+        "SwitchCooldownSec": 0,
         "MaxSinglePostureSec": 180,
         "EarlyRotateSec": 165,
-        "MinHoldSec": 1,
+        "MinHoldSec": 0,
         "PendingAckTimeoutMs": 300,
         "RetryIntervalMs": 150,
         "MaxRetryCount": 4,
         "OptimisticAck": true,
-        "TargetKeepMs": 400,
+        "TargetKeepMs": 300,
         "DamageKeepSec": 4,
-        "DamageBurstWindowMs": 1200,
-        "DamageBurstThreshold": 25,
-        "DamageBurstDefenseHoldSec": 3,
+        "DamageBurstWindowMs": 1500,
+        "DamageBurstThreshold": 1,
+        "DamageBurstDefenseHoldSec": 5,
         "LowHealthThreshold": 120,
         "VeryLowHealthThreshold": 80,
         "LowAmmoThreshold": 30,
-        "ScoreHysteresis": 1
+        "ScoreHysteresis": 0
     },
     "ScanCounter": 1
 }

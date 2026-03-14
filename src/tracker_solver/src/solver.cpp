@@ -351,7 +351,7 @@ void Solver::solve_all(
             std::tie(xyz_imu, yaw) = camera2worldWithWholeCar(
                 trackResult.armor, gimbalAngle_deg, it->bounding_rect, trackResult.car_id == 1);
         }
-        roslog::warn("exit solver");
+        roslog::info("solver finished for car_id: {}", trackResult.car_id);
         trackResult.location.imu = gimbalAngle_deg;
         trackResult.location.xyz_imu = xyz_imu;
         trackResult.yaw = yaw;

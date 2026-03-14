@@ -42,6 +42,10 @@
   - 不走 `behavior_tree`
   - 不带辅瞄
   - 不带导航巡逻
+- `./scripts/start_ballistic_error_log.sh`
+  - 只做日志诊断（订阅 `/rosout`）
+  - 聚焦弹道/解算/锁敌失效关键报错
+  - 适合“8081有框但云台不锁”排障
 
 ## 1. `self_check_pc.sh`（离车自检）
 
@@ -270,6 +274,40 @@
 # 在线模式（不传 offline:=true）
 ./scripts/start_autoaim_debug.sh --online
 ```
+
+## 6. `start_ballistic_error_log.sh`（弹道报错诊断）
+
+用途：
+- 从 `/rosout` 实时筛选弹道与锁敌相关日志。
+- 默认抓失败类关键字：
+  - `calcPitchYawWithShootTable failed`
+  - `calcPitchYaw failed`
+  - `calculateBallisticSolution`
+  - `Control invalid`
+  - `No available armor`
+  - `Invalid car id` / `New car id invalid`
+  - `Car <id> is not stable`
+  - `Critical input stale`
+  - `Runtime safe-control published`
+
+常用命令：
+
+```bash
+# 默认：只看失败相关日志
+./scripts/start_ballistic_error_log.sh
+
+# 同时看成功信号（Control valid / 补偿已应用）
+./scripts/start_ballistic_error_log.sh --with-valid
+
+# 30 秒自动停止并落盘
+./scripts/start_ballistic_error_log.sh --timeout 30 --output /tmp/ballistic.log
+```
+
+建议联测方式：
+- 终端 A：启动比赛链路  
+  `./scripts/start_competition_autoaim_test.sh --nogate --mode regional --no-prompt --cleanup-existing`
+- 终端 B：运行本脚本观察拒锁原因  
+  `./scripts/start_ballistic_error_log.sh --with-valid`
 
 ## 5.1 `start_autoaim_test.sh`（一键辅瞄联调）
 

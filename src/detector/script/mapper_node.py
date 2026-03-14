@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import math
 from typing import List, Optional, Set
 
 import rclpy
@@ -78,10 +79,16 @@ class TargetToGimbalNode(Node):
             self.target_priority = target_priority
         else:
             self.target_priority = [target_id]
+        self.priority_rank = {
+            candidate: index for index, candidate in enumerate(self.target_priority)
+        }
         self.default_target_id = self.target_priority[0]
         self.selected_target_id = self.default_target_id
         self.current_detected_types: Set[int] = set()
         self.last_armors_time = self.get_clock().now()
+        self.switch_confirm_frames = 3
+        self.pending_target_id: Optional[int] = None
+        self.pending_target_frames = 0
 
         self.fire_status = 0
         self.last_fire_command = False
@@ -175,11 +182,74 @@ class TargetToGimbalNode(Node):
         self.team_pub.publish(team_msg)
         self.tx_team_count += 1
 
-    def select_target_by_priority(self, available_types: Set[int]) -> int:
+    def get_priority_rank(self, target_id: int) -> int:
+        return self.priority_rank.get(target_id, len(self.target_priority))
+
+    def pick_any_visible_target(self, msg: Armors) -> Optional[int]:
+        best_target_id: Optional[int] = None
+        best_key = None
+        for armor in msg.armors:
+            armor_type = int(armor.type)
+            if not (TARGET_ID_MIN <= armor_type <= TARGET_ID_MAX):
+                continue
+            center_offset = (
+                float(armor.distance_to_image_center)
+                if float(armor.distance_to_image_center) > 0.0
+                else math.inf
+            )
+            distance = float(armor.distance) if float(armor.distance) > 0.0 else math.inf
+            candidate_key = (center_offset, distance, armor_type)
+            if best_key is None or candidate_key < best_key:
+                best_key = candidate_key
+                best_target_id = armor_type
+        return best_target_id
+
+    def select_target_by_priority(self, msg: Armors, available_types: Set[int]) -> int:
+        if not available_types:
+            return self.selected_target_id
+
+        current_target_id = self.selected_target_id
+        preferred_target_id: Optional[int] = None
         for candidate in self.target_priority:
             if candidate in available_types:
-                return candidate
-        return self.default_target_id
+                preferred_target_id = candidate
+                break
+
+        if current_target_id in available_types:
+            if preferred_target_id is None:
+                return current_target_id
+            if self.get_priority_rank(current_target_id) <= self.get_priority_rank(preferred_target_id):
+                return current_target_id
+
+        if preferred_target_id is not None:
+            return preferred_target_id
+
+        any_visible_target_id = self.pick_any_visible_target(msg)
+        if any_visible_target_id is not None:
+            return any_visible_target_id
+
+        return current_target_id
+
+    def confirm_target_switch(self, desired_target_id: int, available_types: Set[int]) -> int:
+        current_target_id = self.selected_target_id
+        if desired_target_id == current_target_id:
+            self.pending_target_id = None
+            self.pending_target_frames = 0
+            return current_target_id
+
+        if current_target_id in available_types:
+            if self.pending_target_id == desired_target_id:
+                self.pending_target_frames += 1
+            else:
+                self.pending_target_id = desired_target_id
+                self.pending_target_frames = 1
+
+            if self.pending_target_frames < self.switch_confirm_frames:
+                return current_target_id
+
+        self.pending_target_id = None
+        self.pending_target_frames = 0
+        return desired_target_id
 
     def armors_callback(self, msg: Armors):
         self.rx_armors_count += 1
@@ -189,13 +259,17 @@ class TargetToGimbalNode(Node):
             if TARGET_ID_MIN <= armor_type <= TARGET_ID_MAX:
                 available_types.add(armor_type)
         self.current_detected_types = available_types
-        self.last_armors_time = self.get_clock().now()
+        if available_types:
+            self.last_armors_time = self.get_clock().now()
 
-        new_target_id = self.select_target_by_priority(available_types)
+        desired_target_id = self.select_target_by_priority(msg, available_types)
+        new_target_id = self.confirm_target_switch(desired_target_id, available_types)
         if new_target_id != self.selected_target_id:
+            previous_target_id = self.selected_target_id
             self.selected_target_id = new_target_id
             self.get_logger().info(
-                f"目标切换: target_id={new_target_id}, available={sorted(self.current_detected_types)}"
+                f"目标切换: {previous_target_id} -> {new_target_id}, "
+                f"available={sorted(self.current_detected_types)}"
             )
 
     def target_callback(self, msg: Target):
@@ -259,10 +333,9 @@ class TargetToGimbalNode(Node):
 
         now = self.get_clock().now()
         stale_ns = (now - self.last_armors_time).nanoseconds
-        selected_target_id = self.selected_target_id
         if stale_ns > int(self.target_timeout_s * 1e9):
-            selected_target_id = self.default_target_id
-        self.publish_bt_target(selected_target_id)
+            self.current_detected_types = set()
+        self.publish_bt_target(self.selected_target_id)
 
         if self.enable_fire and self.auto_fire:
             if self.last_fire_command:
@@ -288,13 +361,13 @@ def main(args=None):
         "--target-id",
         type=parse_target_id,
         default=6,
-        help="BT目标ID，作为优先级列表为空或超时时的回退目标 (默认: 6)",
+        help="BT目标ID，作为初始目标和优先级列表为空时的默认目标 (默认: 6)",
     )
     parser.add_argument(
         "--target-priority",
         type=str,
         default="",
-        help="目标优先级列表（逗号分隔），如: 6,3,4,5。按顺序选择当前可见目标类型。",
+        help="目标优先级列表（逗号分隔），如: 6,3,4,5。优先打列表内当前可见目标；若都不可见，则改打其他可见目标。",
     )
     parser.add_argument(
         "--publish-team",
@@ -324,7 +397,7 @@ def main(args=None):
         "--target-timeout",
         type=float,
         default=1.0,
-        help="目标选择超时时间（秒）。超时后回退到 --target-id（默认: 1.0）",
+        help="可见目标超时时间（秒）。超时后仅清空可见诊断，不强制回退固定目标（默认: 1.0）",
     )
     parser.add_argument(
         "--diag-period",
