@@ -151,10 +151,6 @@ namespace LangYa {
         ad.HitBuff = j.value("HitBuff", ad.HitBuff);
         ad.HitCar = j.value("HitCar", ad.HitCar);
         ad.FireRequireTargetStatus = j.value("FireRequireTargetStatus", ad.FireRequireTargetStatus);
-        ad.FireRequireAngleConverged = j.value("FireRequireAngleConverged", ad.FireRequireAngleConverged);
-        ad.FireMaxYawErrorDeg = j.value("FireMaxYawErrorDeg", ad.FireMaxYawErrorDeg);
-        ad.FireMaxPitchErrorDeg = j.value("FireMaxPitchErrorDeg", ad.FireMaxPitchErrorDeg);
-        ad.FireMinConvergedFrames = j.value("FireMinConvergedFrames", ad.FireMinConvergedFrames);
     }
 
     void from_json(const json& j, Rate& r) {
@@ -286,10 +282,6 @@ namespace BehaviorTree {
         LoggerPtr->Debug("HitBuff: {}", config.AimDebugSettings.HitBuff);
         LoggerPtr->Debug("HitCar: {}", config.AimDebugSettings.HitCar);
         LoggerPtr->Debug("FireRequireTargetStatus: {}", config.AimDebugSettings.FireRequireTargetStatus);
-        LoggerPtr->Debug("FireRequireAngleConverged: {}", config.AimDebugSettings.FireRequireAngleConverged);
-        LoggerPtr->Debug("FireMaxYawErrorDeg: {}", config.AimDebugSettings.FireMaxYawErrorDeg);
-        LoggerPtr->Debug("FireMaxPitchErrorDeg: {}", config.AimDebugSettings.FireMaxPitchErrorDeg);
-        LoggerPtr->Debug("FireMinConvergedFrames: {}", config.AimDebugSettings.FireMinConvergedFrames);
         LoggerPtr->Debug("------ Rate ------");
         LoggerPtr->Debug("FireRate: {}", config.RateSettings.FireRate);
         LoggerPtr->Debug("TickRate: {}", config.RateSettings.TreeTickRate);

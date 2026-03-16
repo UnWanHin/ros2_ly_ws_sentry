@@ -166,11 +166,13 @@ namespace
                                         {
                                           g.GimbalAngles.Yaw = static_cast<float>(m.yaw);
                                           g.GimbalAngles.Pitch = static_cast<float>(m.pitch);
-                                      });
+                                        });
 
             GenSub<ly_control_firecode>([](GimbalControlData& g, const std_msgs::msg::UInt8& m)
                                         {
                                             *reinterpret_cast<std::uint8_t*>(&g.FireCode) = m.data;
+                                            g.FireCode.FireStatus = 0;
+                                            //TODO test
                                         });
 
             GenSub<ly_control_vel>([](GimbalControlData& g, const gimbal_driver::msg::Vel& m)

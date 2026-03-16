@@ -214,14 +214,17 @@ namespace BehaviorTree{
             obj.autoAimData.BuffFollow = false;
             obj.autoAimData.FireStatus = msg->status;
             obj.autoAimData.Fresh = true;
+            const auto now = std::chrono::steady_clock::now();
             if (msg->status && std::isfinite(msg->yaw) && std::isfinite(msg->pitch)) {
                 obj.autoAimData.Angles = GimbalAnglesType{
                     static_cast<AngleType>(msg->yaw),
                     static_cast<AngleType>(msg->pitch)
                 };
                 obj.autoAimData.Valid = true;
+                obj.autoAimData.HasLatchedAngles = true;
+                obj.autoAimData.LastValidTime = now;
                 obj.isFindTargetAtomic = true;
-                obj.lastTargetSeenTime = std::chrono::steady_clock::now();
+                obj.lastTargetSeenTime = now;
                 obj.LoggerPtr->Info("Predictor target valid, update auto-aim angles.");
             } else {
                 obj.autoAimData.Valid = false;
@@ -235,15 +238,18 @@ namespace BehaviorTree{
             obj.buffAimData.FireStatus = msg->status;
             obj.buffAimData.BuffFollow = true;
             obj.buffAimData.Fresh = true;
+            const auto now = std::chrono::steady_clock::now();
             if (std::isfinite(msg->yaw) && std::isfinite(msg->pitch)) {
                 obj.buffAimData.Angles = GimbalAnglesType{
                     static_cast<AngleType>(msg->yaw),
                     static_cast<AngleType>(msg->pitch)
                 };
                 obj.buffAimData.Valid = true;
+                obj.buffAimData.HasLatchedAngles = true;
+                obj.buffAimData.LastValidTime = now;
                 // buff 模式下 status 表示“是否可开火”，不是“是否有角度跟随”
                 obj.isFindTargetAtomic = true;
-                obj.lastTargetSeenTime = std::chrono::steady_clock::now();
+                obj.lastTargetSeenTime = now;
             } else {
                 obj.buffAimData.Valid = false;
                 obj.LoggerPtr->Debug("Buff target invalid, clear buff frame.");
@@ -256,14 +262,17 @@ namespace BehaviorTree{
             obj.outpostAimData.FireStatus = msg->status;
             obj.outpostAimData.BuffFollow = false;
             obj.outpostAimData.Fresh = true;
+            const auto now = std::chrono::steady_clock::now();
             if (msg->status && std::isfinite(msg->yaw) && std::isfinite(msg->pitch)) {
                 obj.outpostAimData.Angles = GimbalAnglesType{
                     static_cast<AngleType>(msg->yaw),
                     static_cast<AngleType>(msg->pitch)
                 };
                 obj.outpostAimData.Valid = true;
+                obj.outpostAimData.HasLatchedAngles = true;
+                obj.outpostAimData.LastValidTime = now;
                 obj.isFindTargetAtomic = true;
-                obj.lastTargetSeenTime = std::chrono::steady_clock::now();
+                obj.lastTargetSeenTime = now;
             } else {
                 obj.outpostAimData.Valid = false;
                 obj.LoggerPtr->Debug("Outpost target invalid, clear outpost frame.");

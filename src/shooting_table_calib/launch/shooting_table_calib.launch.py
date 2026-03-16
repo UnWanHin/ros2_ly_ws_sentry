@@ -31,6 +31,9 @@ def generate_launch_description():
     debug_team_blue = LaunchConfiguration("debug_team_blue")
     web_show = LaunchConfiguration("web_show")
     draw_image = LaunchConfiguration("draw_image")
+    auto_lock_fire = LaunchConfiguration("auto_lock_fire")
+    auto_fire = LaunchConfiguration("auto_fire")
+    auto_target_type = LaunchConfiguration("auto_target_type")
 
     launch_args = [
         DeclareLaunchArgument(
@@ -49,11 +52,17 @@ def generate_launch_description():
         DeclareLaunchArgument("debug_team_blue", default_value="false"),
         DeclareLaunchArgument("web_show", default_value="true"),
         DeclareLaunchArgument("draw_image", default_value="true"),
+        DeclareLaunchArgument("auto_lock_fire", default_value="false"),
+        DeclareLaunchArgument("auto_fire", default_value="true"),
+        DeclareLaunchArgument("auto_target_type", default_value="4"),
     ]
 
     info_logs = [
         LogInfo(msg=["[shooting_table_calib] config: ", config_file]),
         LogInfo(msg=["[shooting_table_calib] output: ", output]),
+        LogInfo(msg=["[shooting_table_calib] auto_lock_fire: ", auto_lock_fire]),
+        LogInfo(msg=["[shooting_table_calib] auto_fire: ", auto_fire]),
+        LogInfo(msg=["[shooting_table_calib] auto_target_type: ", auto_target_type]),
     ]
 
     nodes = [
@@ -82,6 +91,9 @@ def generate_launch_description():
                     "detector_config/debug_team_blue": debug_team_blue,
                     "web_show": web_show,
                     "draw_image": draw_image,
+                    "shooting_table_calib.auto_lock_fire": auto_lock_fire,
+                    "shooting_table_calib.auto_fire": auto_fire,
+                    "shooting_table_calib.auto_target_type": auto_target_type,
                 }
             ],
             on_exit=Shutdown(reason="shooting_table_calib exited"),

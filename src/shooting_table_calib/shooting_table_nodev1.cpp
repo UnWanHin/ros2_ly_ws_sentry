@@ -50,6 +50,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <thread>
+#include <chrono>
 #include <atomic>
 #include <iostream>
 #include <fstream>
@@ -264,6 +265,9 @@ namespace {
         bool fire_require_dual_axis_lock = true;
         double fire_max_yaw_error_deg = 8.0;
         double fire_max_pitch_error_deg = 5.0;
+        bool auto_lock_fire = false;
+        bool auto_fire = true;
+        ArmorType selected_target_type = ArmorType::Infantry2;
         
         // 瞄准状态
         std::atomic<bool> is_aiming{false};
@@ -397,6 +401,50 @@ namespace {
             roslog::warn("Parameter '{}' missing, fallback default applied.", primary);
         }
 
+        static ArmorType parseArmorTypeOrDefault(int raw_type, ArmorType default_type)
+        {
+            switch (raw_type) {
+                case static_cast<int>(ArmorType::Hero):
+                    return ArmorType::Hero;
+                case static_cast<int>(ArmorType::Engineer):
+                    return ArmorType::Engineer;
+                case static_cast<int>(ArmorType::Infantry1):
+                    return ArmorType::Infantry1;
+                case static_cast<int>(ArmorType::Infantry2):
+                    return ArmorType::Infantry2;
+                case static_cast<int>(ArmorType::Infantry3):
+                    return ArmorType::Infantry3;
+                case static_cast<int>(ArmorType::Sentry):
+                    return ArmorType::Sentry;
+                case static_cast<int>(ArmorType::Outpost):
+                    return ArmorType::Outpost;
+                default:
+                    return default_type;
+            }
+        }
+
+        static const char* armorTypeName(ArmorType type)
+        {
+            switch (type) {
+                case ArmorType::Hero:
+                    return "Hero";
+                case ArmorType::Engineer:
+                    return "Engineer";
+                case ArmorType::Infantry1:
+                    return "Infantry1";
+                case ArmorType::Infantry2:
+                    return "Infantry2";
+                case ArmorType::Infantry3:
+                    return "Infantry3";
+                case ArmorType::Sentry:
+                    return "Sentry";
+                case ArmorType::Outpost:
+                    return "Outpost";
+                default:
+                    return "Unknown";
+            }
+        }
+
         void loadShootTableParams()
         {
             // 从config文件加载射击表参数
@@ -425,6 +473,17 @@ namespace {
             getParamSafe("shooting_table_calib.fire_require_dual_axis_lock", fire_require_dual_axis_lock, true);
             getParamSafe("shooting_table_calib.fire_max_yaw_error_deg", fire_max_yaw_error_deg, 8.0);
             getParamSafe("shooting_table_calib.fire_max_pitch_error_deg", fire_max_pitch_error_deg, 5.0);
+            getParamSafe("shooting_table_calib.auto_lock_fire", auto_lock_fire, false);
+            getParamSafe("shooting_table_calib.auto_fire", auto_fire, true);
+            int auto_target_type = static_cast<int>(ArmorType::Infantry2);
+            getParamSafe("shooting_table_calib.auto_target_type", auto_target_type, auto_target_type);
+            selected_target_type = parseArmorTypeOrDefault(auto_target_type, ArmorType::Infantry2);
+            roslog::info(
+                "Auto mode - lock_fire: {}, auto_fire: {}, target_type: {}({})",
+                auto_lock_fire,
+                auto_fire,
+                armorTypeName(selected_target_type),
+                static_cast<int>(selected_target_type));
         }
         
         void initializeVideo()
@@ -743,7 +802,7 @@ namespace {
             }
 
             std::vector<ArmorObject> filtered_armors;
-            ArmorType target = ArmorType::Infantry2;
+            ArmorType target = selected_target_type;
             
             const bool has_filtered_target = filter.Filter(detected_armors, target, filtered_armors);
             if (!has_filtered_target) {
@@ -779,8 +838,14 @@ namespace {
             auto track_results = tracker->getTrackResult(rclcpp::Time(this->now()), gimbal_angle);
             solver->solve_all(track_results, gimbal_angle);
 
+            const auto* best_track =
+                track_results.first.empty() ? nullptr : selectBestTrackForAim(track_results.first);
+
+            if (auto_lock_fire) {
+                updateAutoLockFire(best_track);
+            }
+
             if (should_aim_once.load() && !track_results.first.empty()) {
-                const auto* best_track = selectBestTrackForAim(track_results.first);
                 if (!best_track) {
                     std::cout << "✗ No valid track for aim. Try again.\n";
                     should_aim_once.store(false);
@@ -890,6 +955,69 @@ namespace {
             }
 
             return best_track;
+        }
+
+        void updateAutoLockFire(const tracker::TrackResult* best_track)
+        {
+            if (!auto_lock_fire) {
+                return;
+            }
+
+            if (!best_track) {
+                if (is_aiming.load() || control_valid.load() || fire_control.last_fire_command) {
+                    std::cout << "✗ Auto target lost. Stop auto fire.\n";
+                }
+                is_shooting.store(false);
+                aim_only_mode.store(false);
+                control_valid.store(false);
+                is_aiming.store(false);
+                updateFireControl(false);
+                return;
+            }
+
+            XYZ target_xyz = best_track->location.xyz_imu;
+            if (!calculateBallisticSolution(target_xyz)) {
+                if (control_valid.load()) {
+                    std::cout << "✗ Auto ballistic calculation failed. Stop auto fire.\n";
+                }
+                is_shooting.store(false);
+                aim_only_mode.store(false);
+                control_valid.store(false);
+                is_aiming.store(false);
+                updateFireControl(false);
+                return;
+            }
+
+            current_target_world = cv::Point3d(target_xyz.x, target_xyz.y, target_xyz.z);
+            is_aiming.store(true);
+            control_valid.store(true);
+            aim_only_mode.store(true);
+            is_shooting.store(false);
+
+            double yaw_err = 0.0;
+            double pitch_err = 0.0;
+            const bool lock_ok = isDualAxisLockConverged(&yaw_err, &pitch_err);
+            if (auto_fire) {
+                updateFireControl(lock_ok);
+            } else {
+                updateFireControl(false);
+            }
+
+            static auto last_auto_log = std::chrono::steady_clock::time_point{};
+            const auto now = std::chrono::steady_clock::now();
+            if (now - last_auto_log > std::chrono::milliseconds(500)) {
+                std::cout << "AUTO lock "
+                          << armorTypeName(selected_target_type)
+                          << " car/armor=" << best_track->car_id << "/" << best_track->armor_id
+                          << " cmd(yaw=" << std::fixed << std::setprecision(2)
+                          << (target_yaw + yaw_adjustment)
+                          << ", pitch=" << (target_pitch + pitch_adjustment)
+                          << ") lock=" << (lock_ok ? "yes" : "no")
+                          << " yaw_err=" << yaw_err
+                          << " pitch_err=" << pitch_err
+                          << "\n";
+                last_auto_log = now;
+            }
         }
 
         void drawDebugInfo(cv::Mat& image, const std::vector<ArmorObject>& armors, 
@@ -1186,7 +1314,15 @@ namespace {
         }
 
         void printInstructions() {
-            std::cout << "=== Controls ===\n a:Aim g:AimOnly f:Fire x:Stop w/s/d/j:Adjust h:Save r:Reset l:Reload q:Quit\n";
+            std::cout << "=== Controls ===\n";
+            std::cout << "a:Aim g:AimOnly f:Fire x:Stop w/s/d/j:Adjust h:Save r:Reset l:Reload q:Quit\n";
+            if (auto_lock_fire) {
+                std::cout << "AUTO mode enabled: target=" << armorTypeName(selected_target_type)
+                          << ", auto_fire=" << (auto_fire ? "true" : "false")
+                          << ", fire_guard_dual_axis=" << (fire_require_dual_axis_lock ? "true" : "false")
+                          << "\n";
+                std::cout << "AUTO mode behavior: continuously lock like repeated 'a', keep publishing /ly/control/angles, and only toggle fire after dual-axis lock converges.\n";
+            }
         }
 
     public:

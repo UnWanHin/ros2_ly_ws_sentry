@@ -31,6 +31,23 @@
 #include <std_msgs/msg/u_int8.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
+// TODO check AI content
+// ROS2 核心头文件
+#include "rclcpp/rclcpp.hpp"
+
+// 标准消息与传感器消息
+#include "std_msgs/msg/header.hpp"
+#include "sensor_msgs/msg/image.hpp"
+#include "sensor_msgs/msg/compressed_image.hpp"
+
+// CvBridge (ROS2 版本)
+#include "cv_bridge/cv_bridge.h"
+
+// 你的自定义消息 (假设包名为 auto_aim_common)
+// 注意：ROS1 的 .msg 文件在 ROS2 中生成的头文件带 .hpp 后缀，且在 msg 命名空间下
+#include "auto_aim_common/msg/armors.hpp"
+#include "auto_aim_common/msg/angle_image.hpp"
+
 #include <boost/lockfree/stack.hpp>
 #include <boost/atomic.hpp>
 
@@ -317,37 +334,55 @@ struct AngleFrame{
 ImageQueue callbackQueue;
 void ImageLoop() {
     cv::Mat image;
+    cv::Mat sub_image;
+    cv::Mat concat_image;
     ImageQueue image_queue;
     boost::lockfree::stack<AngleFrame> angle_image_stack(MAX_STACK_SIZE);
 
+    // 假设 node 是外部传入或全局的 rclcpp::Node::SharedPtr
+    auto& node = global_node; 
+
     std::jthread imagepub_thread{[&] {
-        rclcpp::Rate rate(80);
+        rclcpp::WallRate rate(80); // ROS2 推荐使用 WallRate
         while (rclcpp::ok()) {
             if (!image_queue.empty()) {
                 cv::Mat publish_image = image_queue.wait_and_pop();
-                sensor_msgs::msg::CompressedImage::SharedPtr compressed_msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", publish_image)
-                    .toCompressedImageMsg(cv_bridge::JPG);
-                compressed_msg->header.stamp = global_node->now(); 
-                global_node->Publisher<ly_compressed_image>()->publish(*compressed_msg);
+                
+                // ROS2 中消息头处理
+                std_msgs::msg::Header header;
+                header.stamp = node->now();
+                header.frame_id = "camera";
+
+                auto compressed_msg = cv_bridge::CvImage(header, "bgr8", publish_image)
+                                        .toCompressedImageMsg(cv_bridge::JPG);
+
+                global_node.Publisher<ly_ra_angle_image>().publish(angle_image_msg);
                 rate.sleep();
             }
         }
     }};
 
     std::jthread ra_imagepub_thread{[&] {
-        rclcpp::Rate rate(100); 
+        rclcpp::WallRate rate(100); 
         while (rclcpp::ok()) {
             if (!angle_image_stack.empty()) {
                 AngleFrame angle_frame;
                 if (!angle_image_stack.pop(angle_frame)) continue;
-                sensor_msgs::msg::Image::SharedPtr image_msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", angle_frame.image).toImageMsg();
-                image_msg->header.stamp = global_node->now(); 
+
+                std_msgs::msg::Header header;
+                header.stamp = node->now();
+
+                auto image_msg = cv_bridge::CvImage(header, "bgr8", angle_frame.image).toImageMsg();
+                
                 auto_aim_common::msg::AngleImage angle_image_msg;
                 angle_image_msg.image = *image_msg;
-                angle_image_msg.yaw = angle_frame.angles.yaw;
+                angle_image_msg.yaw = angle_frame.angles.yaw;   // 注意 ROS2 字段通常为小写
                 angle_image_msg.pitch = angle_frame.angles.pitch;
-                global_node->Publisher<ly_ra_angle_image>()->publish(angle_image_msg);
-                rclcpp::spin_some(global_node->get_node_base_interface());; 
+
+                global_node.get_publisher<auto_aim_common::msg::AngleImage>(ly_ra_angle_image)->publish(angle_image_msg);
+                
+                // ROS2 的 spinOnce 等价物
+                rclcpp::spin_some(node); 
             }
             rate.sleep();
         }
@@ -355,43 +390,32 @@ void ImageLoop() {
 
     std::jthread detect_thread {
         [&] {
-            rclcpp::Rate rate(78);
+            rclcpp::WallRate rate(78);
             while (rclcpp::ok()) {
 
-                if(web_show && !image.empty()) {
+                if(web_show && !concat_image.empty()){
+                    VideoStreamer::setFrame(concat_image);
+                } else if(web_show && !image.empty()) {
                     VideoStreamer::setFrame(image);
                 }
                 rate.sleep();
 
                 TimedArmors armors;
                 std::vector<CarDetection> cars;
-                auto_aim_common::msg::Armors armor_list_msg;
+                auto_aim_common::msg::Armors armor_list_msg; // ROS2 增加 ::msg::
                 std::vector<ArmorObject> filtered_armors{};
                 ArmorObject target_armor;
+
                 if(!use_ros_bag){
-                    if (!Cam.GetImage(image)) {
-                        // 如果讀不到 (影片播完了)，嘗試重置
-                        if(use_video && !video_path.empty()){
-                             std::cout << "[DEBUG] Video ended. Replaying..." << std::endl;
-                             if (!Cam.Initialize(video_path)) {
-                                 std::cerr << "[ERROR] Failed to reopen video: " << video_path << std::endl;
-                                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
-                             }
-                        }
-                        continue; 
-                    }
-                    
-                    static int frame_cnt = 0;
-                    if (++frame_cnt % 30 == 0) {
-                        std::cout << "[DEBUG] Processing Frame: " << frame_cnt << std::endl;
-                    }
+                    if (!Cam.GetImage(image)) continue; 
                 }
-                rclcpp::spin_some(global_node->get_node_base_interface());;
+
+                rclcpp::spin_some(node);
+
                 if(use_ros_bag){
                     image = callbackQueue.wait_and_pop();
                 }
                 if (image.empty()) continue;
-                if(pub_image) image_queue.push(image);
 
                 if(ra_enable && !image.empty()){
                     GimbalAnglesType temp_angles{
@@ -404,10 +428,12 @@ void ImageLoop() {
                 armors.TimeAngles.yaw = gimbal_angles_yaw;
                 armors.TimeAngles.pitch = gimbal_angles_pitch;
 
-                armors.TimeStamp = global_node->now(); 
+                // ROS2 获取当前时间
+                armors.TimeStamp = node->now();
 
                 auto &detected_armors = armors.Armors;
                 detected_armors.clear();
+                
                 if (!carAndArmorDetector.Detect(image, detected_armors, cars)) continue;
 
                 armor_list_msg.armors.clear();
@@ -427,30 +453,33 @@ void ImageLoop() {
                     filter.is_team_red = true;
                 }
 
+                // ROS2 日志宏: RCLCPP_WARN(node->get_logger(), "...");
+                RCLCPP_WARN(node->get_logger(), "1111");
+
                 ArmorType target = atomic_target;
                 if (!filter.Filter(detected_armors, target, filtered_armors)) { continue; }
 
-                if (!poseSolver) {
-                    roslog::warn("PoseSolver not initialized, skip this frame.");
-                    continue;
-                }
-                if (!finder.ReFindAndSolveAll(*poseSolver, filtered_armors, target, target_armor, armor_list_msg)) {
+                if (!finder.ReFindAndSolveAll(solver, filtered_armors, target, target_armor, armor_list_msg)) {
+                    // 以前的 ROS_WARN 替换
                 }
                 if(!carFinder.FindCar(cars, armor_list_msg.cars)){
+                    RCLCPP_WARN(node->get_logger(), "car_finder> failed to find car");
                 }
 
                 if(draw_image) DrawAllArmor(image, filtered_armors);
                 if(draw_image) DrawAllCar(image, cars);
+                RCLCPP_WARN(node->get_logger(), "2222");   
 
                 if(aa_enable){
-                    global_node->Publisher<ly_detector_armors>()->publish(armor_list_msg);
+                    global_node.get_publisher<auto_aim_common::msg::Armors>(ly_detector_armors)->publish(armor_list_msg);
                 }else if(outpost_enable){
-                    global_node->Publisher<ly_outpost_armors>()->publish(armor_list_msg);
+                    global_node.get_publisher<auto_aim_common::msg::Armors>(ly_outpost_armors)->publish(armor_list_msg);
                 }
             }
         }
     };
 }
+
 
 #pragma region using image in rosbag
 void image_callback(const sensor_msgs::msg::CompressedImage::ConstSharedPtr msg) {

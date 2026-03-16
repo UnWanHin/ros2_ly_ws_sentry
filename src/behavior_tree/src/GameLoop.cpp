@@ -152,59 +152,17 @@ namespace BehaviorTree {
         } else if (aimMode == AimMode::Outpost) {
             activeAimData = &outpostAimData;
         }
-        if (fireConvergedMode_ != aimMode) {
-            fireConvergedMode_ = aimMode;
-            fireConvergedFrames_ = 0;
-        }
         GimbalAnglesType nextAngles = gimbalAngles;
-        const bool FindTarget = activeAimData->Fresh &&
-                                activeAimData->Valid &&
-                                (aimMode != AimMode::Buff || activeAimData->BuffFollow);
-        if (FindTarget) {
-            const auto& locked_angles = activeAimData->Angles;
-            const bool target_status_allow_fire = activeAimData->FireStatus;
-            bool allow_fire = target_status_allow_fire;
+        const bool has_fresh_target = activeAimData->Fresh &&
+                                      activeAimData->Valid &&
+                                      (aimMode != AimMode::Buff || activeAimData->BuffFollow);
+        const bool hold_last_lock = (aimMode != AimMode::Buff) &&
+                                    activeAimData->HasLatchedAngles &&
+                                    (now - activeAimData->LastValidTime <= kLostTargetHold);
+        if (has_fresh_target) {
+            bool allow_fire = activeAimData->FireStatus;
             if (!config.AimDebugSettings.FireRequireTargetStatus) {
                 allow_fire = true;
-            }
-            if (config.AimDebugSettings.FireRequireAngleConverged) {
-                const int required_converged_frames =
-                    std::max(1, config.AimDebugSettings.FireMinConvergedFrames);
-                const float yaw_error = std::remainder(locked_angles.Yaw - gimbalAngles.Yaw, 360.0f);
-                const float pitch_error = locked_angles.Pitch - gimbalAngles.Pitch;
-                const bool lock_converged = (std::abs(yaw_error) <= config.AimDebugSettings.FireMaxYawErrorDeg) &&
-                                            (std::abs(pitch_error) <= config.AimDebugSettings.FireMaxPitchErrorDeg);
-                if (lock_converged) {
-                    fireConvergedFrames_ = std::min(fireConvergedFrames_ + 1, required_converged_frames);
-                } else {
-                    fireConvergedFrames_ = 0;
-                }
-                const bool lock_converged_long_enough =
-                    fireConvergedFrames_ >= required_converged_frames;
-                if (!lock_converged) {
-                    allow_fire = false;
-                    static auto last_guard_log = std::chrono::steady_clock::time_point{};
-                    if (now - last_guard_log > std::chrono::milliseconds(500)) {
-                        LoggerPtr->Debug(
-                            "Fire blocked by angle guard: yaw_err={} pitch_err={} (max {} / {})",
-                            yaw_error, pitch_error,
-                            config.AimDebugSettings.FireMaxYawErrorDeg,
-                            config.AimDebugSettings.FireMaxPitchErrorDeg);
-                        last_guard_log = now;
-                    }
-                } else if (!lock_converged_long_enough) {
-                    allow_fire = false;
-                    static auto last_frame_guard_log = std::chrono::steady_clock::time_point{};
-                    if (now - last_frame_guard_log > std::chrono::milliseconds(500)) {
-                        LoggerPtr->Debug(
-                            "Fire blocked by convergence frames: {}/{}",
-                            fireConvergedFrames_,
-                            required_converged_frames);
-                        last_frame_guard_log = now;
-                    }
-                }
-            } else {
-                fireConvergedFrames_ = 0;
             }
             LoggerPtr->Debug("Find Target, AimMode={}, AllowFire={}", static_cast<int>(aimMode), allow_fire);
             if (!config.AimDebugSettings.StopFire){
@@ -232,8 +190,20 @@ namespace BehaviorTree {
                 LoggerPtr->Debug("AutoAim Angles -> Pitch: {}, Yaw: {}", autoAimData.Angles.Pitch, autoAimData.Angles.Yaw);
             }
         }
+        else if (hold_last_lock) { // 短时丢帧时沿用上一有效锁角，保持老代码的“黏锁”语义
+            gimbalControlData.FireCode.AimMode = 1;
+            gimbalControlData.FireCode.FireStatus = RecFireCode.FireStatus;
+            nextAngles = activeAimData->Angles;
+            static auto last_hold_log = std::chrono::steady_clock::time_point{};
+            if (now - last_hold_log > std::chrono::milliseconds(500)) {
+                LoggerPtr->Debug(
+                    "Hold last lock angles -> Pitch: {}, Yaw: {}",
+                    nextAngles.Pitch,
+                    nextAngles.Yaw);
+                last_hold_log = now;
+            }
+        }
         else { // 未识别到目标
-            fireConvergedFrames_ = 0;
             gimbalControlData.FireCode.AimMode = 0;
             if(aimMode != AimMode::Buff) {
                 /// 云台控制数据均匀变化
@@ -283,7 +253,7 @@ namespace BehaviorTree {
             gimbalControlData.FireCode.FireStatus = RecFireCode.FireStatus;
         }
         // lower_head 只在未锁目标时生效，并且整对角一起切换，避免混用旧 yaw/new pitch。
-        if(naviLowerHead && !FindTarget) {
+        if(naviLowerHead && !has_fresh_target && !hold_last_lock) {
             nextAngles = GimbalAnglesType{gimbalAngles.Yaw, -15.0f}; //-22.5 - 26.0
         }
         gimbalControlData.GimbalAngles = nextAngles;

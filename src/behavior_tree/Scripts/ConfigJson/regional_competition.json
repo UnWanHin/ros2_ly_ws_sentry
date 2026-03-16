@@ -7,11 +7,7 @@
         "HitBuff": false,
         "HitOutpost": false,
         "HitCar": false,
-        "FireRequireTargetStatus": true,
-        "FireRequireAngleConverged": true,
-        "FireMaxYawErrorDeg": 8.0,
-        "FireMaxPitchErrorDeg": 5.0,
-        "FireMinConvergedFrames": 3
+        "FireRequireTargetStatus": true
     },
     "Rate": {
         "FireRate": 20,

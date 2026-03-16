@@ -159,8 +159,6 @@ private:
     std::uint8_t postureCommand{0}; // 姿态控制指令: 0=不下发, 1=进攻, 2=防御, 3=移动
     std::atomic<bool> isFindTargetAtomic{false}; // 在回调函数中，每接收一次消息就会被置为true，然后在发送完控制数据之后置为false
     std::chrono::steady_clock::time_point lastTargetSeenTime{}; // 最近一次收到目标回调
-    int fireConvergedFrames_{0}; // 连续收敛帧计数，用于“先锁稳再开火”
-    AimMode fireConvergedMode_{AimMode::None};
     std::chrono::steady_clock::time_point lastDamageTime{};     // 最近一次检测到掉血
     struct DamageSample {
         std::chrono::steady_clock::time_point Time{};

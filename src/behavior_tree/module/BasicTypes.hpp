@@ -346,6 +346,8 @@ namespace LangYa
         bool BuffFollow{false};  // 用于打符的跟随
         bool Valid{false};       // 当前模式可直接使用的完整 yaw/pitch 对
         bool Fresh{false};       // 本循环内是否收到新的一帧
+        bool HasLatchedAngles{false}; // 是否有上一帧可继续保持的有效锁角
+        std::chrono::steady_clock::time_point LastValidTime{}; // 上一次收到有效锁角的时间
         GimbalAnglesType Angles; // 云台的控制角度
     };
     enum class AimMode : std::uint8_t { // 瞄准模式
@@ -369,10 +371,6 @@ namespace LangYa
         bool HitBuff{false};
         bool HitCar{false};
         bool FireRequireTargetStatus{true};
-        bool FireRequireAngleConverged{false};
-        float FireMaxYawErrorDeg{8.0f};
-        float FireMaxPitchErrorDeg{5.0f};
-        int FireMinConvergedFrames{1};
     };
 
     // 频率相关
