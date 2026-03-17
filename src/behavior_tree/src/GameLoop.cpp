@@ -207,6 +207,7 @@ namespace BehaviorTree {
             gimbalControlData.FireCode.AimMode = 0;
             if(aimMode != AimMode::Buff) {
                 /// 云台控制数据均匀变化
+                //#if false
                 if (!config.AimDebugSettings.StopScan && now - lastFoundEnemyTime > kLostTargetHold) {
                     static auto last_searching_log = std::chrono::steady_clock::time_point{};
                     if (now - last_searching_log > std::chrono::seconds(2)) {
@@ -226,6 +227,7 @@ namespace BehaviorTree {
                     nextAngles = gimbalAngles;
                     LoggerPtr->Debug("Hold Current Gimbal -> Pitch: {}, Yaw: {}", gimbalAngles.Pitch, gimbalAngles.Yaw);
                 }
+                //#endif //TODO 关闭巡航
             }else { // 打符模式
                 if (now_time < 5) {
                     LoggerPtr->Info("Set Angles, Buff Mode, 10 min!");

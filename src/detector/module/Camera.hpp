@@ -363,24 +363,24 @@ namespace LangYa {
                 return false;
             }
 
-	    if (sn.empty()) {
+            if (sn.empty()) {
 
-            // open by index
-            static constexpr auto device_index = 1;
-            if (GXOpenDeviceByIndex(device_index, &handle) != GX_STATUS_SUCCESS)
-            {
-                roslog::error("Camera::AcquireDevice: cannot open device({}): {}", device_index, GetLibError());
-                return false;
+                // open by index
+                static constexpr auto device_index = 1;
+                if (GXOpenDeviceByIndex(device_index, &handle) != GX_STATUS_SUCCESS)
+                {
+                    roslog::error("Camera::AcquireDevice: cannot open device({}): {}", device_index, GetLibError());
+                    return false;
+                }
             }
-	    }
-	    else {
-		   std::string sn_copy = sn;
-		   GX_OPEN_PARAM op{(char*)sn_copy.c_str(), GX_OPEN_SN, GX_ACCESS_EXCLUSIVE};
-		   if (GXOpenDevice(&op, &handle) != GX_STATUS_SUCCESS) {
-	    	       roslog::error("Camera::AcquireDevice: cannot open device({}): {}", sn_copy, GetLibError());
-                	return false;
-		   }	
-	    }
+            else {
+            std::string sn_copy = sn;
+            GX_OPEN_PARAM op{(char*)sn_copy.c_str(), GX_OPEN_SN, GX_ACCESS_EXCLUSIVE};
+            if (GXOpenDevice(&op, &handle) != GX_STATUS_SUCCESS) {
+                    roslog::error("Camera::AcquireDevice: cannot open device({}): {}", sn_copy, GetLibError());
+                        return false;
+            }	
+            }
 	    
             if (!Parameters.Apply(handle))
             {
@@ -427,6 +427,9 @@ namespace LangYa {
             if (borrow_result != GX_STATUS_SUCCESS)
             {
                 roslog::error("Camera::GetImage: cannot borrow buffer: {}", GetLibError());
+                const auto return_result = GXQAllBufs(deviceHandle);
+                if (return_result != GX_STATUS_SUCCESS)
+                    roslog::error("Camera::GetImage: cannot return buffer after borrow failed: {}", GetLibError());
                 return false;
             }
 

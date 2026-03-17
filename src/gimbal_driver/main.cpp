@@ -160,19 +160,74 @@ namespace
             Node.GenSubscriber<TTopic>(CallbackGenerator.Generate<TTopic>(modifier));
         }
 
+        //TODO disable cooldown timer
+        using clock_t = std::chrono::steady_clock;
+           
+        struct Timer {
+            clock_t::duration interval;
+            clock_t::time_point head;
+
+            bool check(const clock_t::time_point now) {
+                const auto delta_t = now - head;
+                if (delta_t > interval) {
+                    head = now;
+                    return true;
+                }
+                return false;
+            }
+        };
+
+        class StateTimer {
+            Timer shoot_timer{};
+            Timer cooldown_timer{};
+            bool is_shoot{false};
+
+            Timer& get_timer() {
+                return is_shoot ? shoot_timer : cooldown_timer;
+            }
+
+        public:
+            bool can_shoot() const noexcept {
+                return is_shoot;
+            }
+
+            StateTimer(const clock_t::duration shoot, const clock_t::duration cooldown) {
+                const auto now = clock_t::now();
+                shoot_timer.head = now;
+                shoot_timer.interval = shoot;
+                cooldown_timer.head = now;
+                cooldown_timer.interval = cooldown;
+            }
+
+            bool check() {
+                const auto now = clock_t::now();
+                if (get_timer().check(now)) {
+                    is_shoot = !is_shoot;
+                    get_timer().head = now;
+                }
+                
+                return can_shoot();
+            }
+
+        };
+
+        StateTimer state_timer{std::chrono::milliseconds(100), std::chrono::milliseconds(2000)};
+        //TODO 
+
         void GenSubs()
         {
             GenSub<ly_control_angles>([](GimbalControlData& g, const gimbal_driver::msg::GimbalAngles& m)
                                         {
-                                          g.GimbalAngles.Yaw = static_cast<float>(m.yaw);
-                                          g.GimbalAngles.Pitch = static_cast<float>(m.pitch);
+                                            g.GimbalAngles.Yaw = static_cast<float>(m.yaw);
+                                            g.GimbalAngles.Pitch = static_cast<float>(m.pitch);  
                                         });
 
-            GenSub<ly_control_firecode>([](GimbalControlData& g, const std_msgs::msg::UInt8& m)
+            GenSub<ly_control_firecode>([this](GimbalControlData& g, const std_msgs::msg::UInt8& m)
                                         {
                                             *reinterpret_cast<std::uint8_t*>(&g.FireCode) = m.data;
-                                            g.FireCode.FireStatus = 0;
-                                            //TODO test
+                                            if (false && !state_timer.check()) {  
+                                                g.FireCode.FireStatus = 0;
+                                            }
                                         });
 
             GenSub<ly_control_vel>([](GimbalControlData& g, const gimbal_driver::msg::Vel& m)
@@ -346,6 +401,8 @@ namespace
                 using topic = ly_bullet_speed;
                 topic::Msg msg;
                 msg.data = static_cast<float>(data.BulletSpeed) / 100.0f;
+                //TODO 下位机子弹速度检测
+                msg.data = 23.0f;
                 Node.Publisher<topic>()->publish(msg);
             }
         }

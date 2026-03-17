@@ -133,6 +133,7 @@ public:
             if (bytes < sizeof(TRead)) throw std::runtime_error("Invalid message size");
             if (!pps.examine(message_buffer)) continue;
             callback(*reinterpret_cast<const TRead *>(message_buffer.data()));
+            std::this_thread::sleep_for(std::chrono::milliseconds(0)); //TODO 
         }
     }
     catch (const std::exception &ex) {

@@ -45,6 +45,7 @@ inline Eigen::Matrix2d build_Q_AngleVel(double q_ang_accel_base, double dt) {
 void MotionModel::initMotionModel()
 {
     MatrixXX P = MatrixXX::Zero();
+	// step1 卡尔曼里面的状态有什么
     P << 0.2,   0.08,  0,     0,     0,    0,     0,     0,     0,    0,   0.004, 0,
          0.08,  0.4,   0,     0,     0,    0,     0,     0,     0,    0,   0.02,  0,
          0,     0,     0.2,   0.08,  0,    0,     0,     0,     0,    0,   0,     0.004,
@@ -58,6 +59,7 @@ void MotionModel::initMotionModel()
          0.004, 0.02,  0,     0,     0,    0,     0,     0,     0,    0,   0.6,   0,
          0,     0,     0.004, 0.02,  0,    0,     0,     0,     0,    0,   0,     0.6;
 
+    // step2 观测的值有哪些
     base_measurement_noise_ = MatrixYY::Zero();
     base_measurement_noise_ << 0.005, 0,     0,     0,     0,     0,     0,
                                0,     0.005, 0,     0,     0,     0,     0,
@@ -66,7 +68,7 @@ void MotionModel::initMotionModel()
                                0,     0,     0,     0,     0.04,  0.015, 0,
                                0,     0,     0,     0,     0.015, 0.04,  0,
                                0,     0,     0,     0,     0,     0,     0.002;
-    base_measurement_noise_ *= 0.25;
+    base_measurement_noise_ *= 0.25; // step 3 这个噪声怎么取值
 
     ekf.init(P, buildProcessNoise(kDefaultFilterDt), base_measurement_noise_);
 }

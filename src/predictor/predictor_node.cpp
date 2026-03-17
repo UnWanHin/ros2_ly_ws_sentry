@@ -137,6 +137,7 @@ namespace {
                     controller->control(gimbal_angle, target, bullet_speed);  
 
                 auto_aim_common::msg::Target target_msg;
+                //TODO check
                 target_msg.status = control_result.valid;  
                 target_msg.yaw = control_result.yaw_actual_want;
                 target_msg.pitch = control_result.pitch_actual_want;

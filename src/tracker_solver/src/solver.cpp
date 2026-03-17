@@ -198,9 +198,9 @@ std::pair<XYZ, double> Solver::camera2world(
     cv::eigen2cv(cameraIntrinsicMatrix, cameraMatrix);
     cv::eigen2cv(distorationCoefficients, distCoeffs);
     auto gimbal_roll = 0.0, gimbal_pitch = gimbalAngle_deg.pitch * M_PI / 180,
-         gimbal_yaw = gimbalAngle_deg.yaw * M_PI / 180;
+         gimbal_yaw = gimbalAngle_deg.yaw * M_PI / 180; //TODO
     Eigen::Matrix3d R = (Eigen::AngleAxisd(gimbal_yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix() *
-                         Eigen::AngleAxisd(-gimbal_pitch, Eigen::Vector3d::UnitY()).toRotationMatrix() *
+                         Eigen::AngleAxisd(gimbal_pitch, Eigen::Vector3d::UnitY()).toRotationMatrix() *
                          Eigen::AngleAxisd(gimbal_roll, Eigen::Vector3d::UnitX()).toRotationMatrix());
 
     if (trackResult.size() != 4) return std::make_pair(XYZ(), 0.0);
