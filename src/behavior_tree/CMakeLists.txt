@@ -17,6 +17,7 @@ get_filename_component(BTCPP_WS_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
 get_filename_component(BTCPP_WS_ROOT_DIR "${BTCPP_WS_SRC_DIR}" DIRECTORY)
 set(BTCPP_V4_ROOT "${BTCPP_WS_ROOT_DIR}/third_party/behaviortree_cpp_v4/install"
   CACHE PATH "Install prefix of pinned BehaviorTree.CPP v4 (defaults to <ws>/third_party/behaviortree_cpp_v4/install)")
+set(BTCPP_MIN_VERSION "4.0.0")
 set(BTCPP_V4_CMAKE_DIR_SHARE "${BTCPP_V4_ROOT}/share/behaviortree_cpp/cmake")
 set(BTCPP_V4_CMAKE_DIR_LIB "${BTCPP_V4_ROOT}/lib/cmake/behaviortree_cpp")
 set(BTCPP_V4_CMAKE_PATHS "")
@@ -30,61 +31,78 @@ if(EXISTS "${BTCPP_V4_CMAKE_DIR_LIB}/behaviortree_cppConfig.cmake")
   list(APPEND BTCPP_V4_CMAKE_PATHS "${BTCPP_V4_CMAKE_DIR_LIB}")
 endif()
 
-if(BTCPP_V4_CMAKE_PATHS STREQUAL "")
-  if(DEFINED ENV{AMENT_PREFIX_PATH} AND NOT "$ENV{AMENT_PREFIX_PATH}" STREQUAL "")
-    string(REPLACE ":" ";" BTCPP_AMENT_PREFIX_PATHS "$ENV{AMENT_PREFIX_PATH}")
-    list(APPEND BTCPP_SYSTEM_PREFIX_PATHS ${BTCPP_AMENT_PREFIX_PATHS})
-  endif()
-  if(DEFINED ENV{CMAKE_PREFIX_PATH} AND NOT "$ENV{CMAKE_PREFIX_PATH}" STREQUAL "")
-    string(REPLACE ":" ";" BTCPP_CMAKE_PREFIX_PATHS "$ENV{CMAKE_PREFIX_PATH}")
-    list(APPEND BTCPP_SYSTEM_PREFIX_PATHS ${BTCPP_CMAKE_PREFIX_PATHS})
-  endif()
-  if(DEFINED ENV{ROS_DISTRO} AND EXISTS "/opt/ros/$ENV{ROS_DISTRO}")
-    list(APPEND BTCPP_SYSTEM_PREFIX_PATHS "/opt/ros/$ENV{ROS_DISTRO}")
-  endif()
-  list(REMOVE_DUPLICATES BTCPP_SYSTEM_PREFIX_PATHS)
+if(DEFINED ENV{AMENT_PREFIX_PATH} AND NOT "$ENV{AMENT_PREFIX_PATH}" STREQUAL "")
+  string(REPLACE ":" ";" BTCPP_AMENT_PREFIX_PATHS "$ENV{AMENT_PREFIX_PATH}")
+  list(APPEND BTCPP_SYSTEM_PREFIX_PATHS ${BTCPP_AMENT_PREFIX_PATHS})
+endif()
+if(DEFINED ENV{CMAKE_PREFIX_PATH} AND NOT "$ENV{CMAKE_PREFIX_PATH}" STREQUAL "")
+  string(REPLACE ":" ";" BTCPP_CMAKE_PREFIX_PATHS "$ENV{CMAKE_PREFIX_PATH}")
+  list(APPEND BTCPP_SYSTEM_PREFIX_PATHS ${BTCPP_CMAKE_PREFIX_PATHS})
+endif()
+if(DEFINED ENV{ROS_DISTRO} AND EXISTS "/opt/ros/$ENV{ROS_DISTRO}")
+  list(APPEND BTCPP_SYSTEM_PREFIX_PATHS "/opt/ros/$ENV{ROS_DISTRO}")
+endif()
+list(APPEND BTCPP_SYSTEM_PREFIX_PATHS "/usr/local" "/usr")
+list(REMOVE_DUPLICATES BTCPP_SYSTEM_PREFIX_PATHS)
+list(REMOVE_ITEM BTCPP_SYSTEM_PREFIX_PATHS
+  "${BTCPP_V4_ROOT}"
+  "${BTCPP_V4_CMAKE_DIR_SHARE}"
+  "${BTCPP_V4_CMAKE_DIR_LIB}")
 
-  if(BTCPP_SYSTEM_PREFIX_PATHS)
-    find_package(behaviortree_cpp CONFIG QUIET
-      PATHS ${BTCPP_SYSTEM_PREFIX_PATHS}
-    )
-  else()
-    find_package(behaviortree_cpp CONFIG QUIET)
+# 旧 build 目录可能缓存了 fallback 的 third_party 路径；在“系统优先”模式下先清掉它，
+# 避免 find_package 继续复用旧结果而跳过真正的系统搜索。
+if(DEFINED behaviortree_cpp_DIR AND NOT behaviortree_cpp_DIR MATCHES "-NOTFOUND$")
+  file(TO_CMAKE_PATH "${behaviortree_cpp_DIR}" BTCPP_CACHED_DIR_NORMALIZED)
+  file(TO_CMAKE_PATH "${BTCPP_V4_ROOT}" BTCPP_V4_ROOT_NORMALIZED)
+  string(FIND "${BTCPP_CACHED_DIR_NORMALIZED}" "${BTCPP_V4_ROOT_NORMALIZED}" BTCPP_CACHED_IS_PINNED_POS)
+  if(BTCPP_CACHED_IS_PINNED_POS EQUAL 0)
+    message(STATUS "BehaviorTree.CPP: clear cached pinned package dir to retry system search")
+    unset(behaviortree_cpp_DIR CACHE)
+    unset(behaviortree_cpp_FOUND)
   endif()
+endif()
 
-  if(NOT behaviortree_cpp_FOUND)
-    set(BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY "(default CMake search paths only)")
-    if(BTCPP_SYSTEM_PREFIX_PATHS)
-      string(REPLACE ";" "\n  - " BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY "${BTCPP_SYSTEM_PREFIX_PATHS}")
-      set(BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY "  - ${BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY}")
-    endif()
-    message(FATAL_ERROR
-      "BehaviorTree.CPP v4+ not found.\n"
-      "Checked pinned workspace paths:\n"
-      "  - ${BTCPP_V4_CMAKE_DIR_SHARE}\n"
-      "  - ${BTCPP_V4_CMAKE_DIR_LIB}\n"
-      "Checked system/package-manager prefixes:\n"
-      "${BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY}\n"
-      "Install/copy BehaviorTree.CPP v4 into ${BTCPP_V4_ROOT}, or install the system package.")
-  endif()
+if(BTCPP_SYSTEM_PREFIX_PATHS)
+  find_package(behaviortree_cpp ${BTCPP_MIN_VERSION} CONFIG QUIET
+    PATHS ${BTCPP_SYSTEM_PREFIX_PATHS}
+    NO_DEFAULT_PATH
+  )
+endif()
 
-  message(STATUS "BehaviorTree.CPP source: system package fallback")
+if(behaviortree_cpp_FOUND)
+  message(STATUS "BehaviorTree.CPP source: system package v${BTCPP_MIN_VERSION}+ (preferred)")
   if(DEFINED behaviortree_cpp_DIR)
     message(STATUS "BehaviorTree.CPP config dir: ${behaviortree_cpp_DIR}")
   endif()
-else()
-  find_package(behaviortree_cpp CONFIG REQUIRED
+elseif(BTCPP_V4_CMAKE_PATHS)
+  unset(behaviortree_cpp_DIR CACHE)
+  find_package(behaviortree_cpp ${BTCPP_MIN_VERSION} CONFIG REQUIRED
     PATHS ${BTCPP_V4_CMAKE_PATHS}
     NO_DEFAULT_PATH
   )
   set(BTCPP_IS_PINNED TRUE)
-  message(STATUS "BehaviorTree.CPP source: pinned workspace copy")
+  message(STATUS "BehaviorTree.CPP source: pinned workspace v${BTCPP_MIN_VERSION}+ fallback")
   message(STATUS "Pinned BehaviorTree.CPP root: ${BTCPP_V4_ROOT}")
+else()
+  set(BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY "(no system prefixes available)")
+  if(BTCPP_SYSTEM_PREFIX_PATHS)
+    string(REPLACE ";" "\n  - " BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY "${BTCPP_SYSTEM_PREFIX_PATHS}")
+    set(BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY "  - ${BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY}")
+  endif()
+  message(FATAL_ERROR
+    "BehaviorTree.CPP v${BTCPP_MIN_VERSION}+ not found.\n"
+    "Checked system/package-manager prefixes first:\n"
+    "${BTCPP_SYSTEM_PREFIX_PATHS_DISPLAY}\n"
+    "Checked pinned workspace paths as fallback:\n"
+    "  - ${BTCPP_V4_CMAKE_DIR_SHARE}\n"
+    "  - ${BTCPP_V4_CMAKE_DIR_LIB}\n"
+    "System v3 installs are intentionally ignored.\n"
+    "Install the system package, or install/copy BehaviorTree.CPP v4 into ${BTCPP_V4_ROOT}.")
 endif()
 
-if(NOT DEFINED behaviortree_cpp_VERSION OR behaviortree_cpp_VERSION VERSION_LESS 4.0.0)
+if(NOT DEFINED behaviortree_cpp_VERSION OR behaviortree_cpp_VERSION VERSION_LESS ${BTCPP_MIN_VERSION})
   message(FATAL_ERROR
-    "behavior_tree requires BehaviorTree.CPP v4+, but found version '${behaviortree_cpp_VERSION}'.")
+    "behavior_tree requires BehaviorTree.CPP v${BTCPP_MIN_VERSION}+, but found version '${behaviortree_cpp_VERSION}'.")
 endif()
 
 message(STATUS "BehaviorTree.CPP version: ${behaviortree_cpp_VERSION}")

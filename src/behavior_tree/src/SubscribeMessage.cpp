@@ -215,7 +215,9 @@ namespace BehaviorTree{
             obj.autoAimData.FireStatus = msg->status;
             obj.autoAimData.Fresh = true;
             const auto now = std::chrono::steady_clock::now();
-            if (msg->status && std::isfinite(msg->yaw) && std::isfinite(msg->pitch)) {
+            // 跟随和开火解耦：
+            // 只要预测角有效就允许 BT 跟随；是否开火仍然看 status。
+            if (std::isfinite(msg->yaw) && std::isfinite(msg->pitch)) {
                 obj.autoAimData.Angles = GimbalAnglesType{
                     static_cast<AngleType>(msg->yaw),
                     static_cast<AngleType>(msg->pitch)
@@ -225,7 +227,9 @@ namespace BehaviorTree{
                 obj.autoAimData.LastValidTime = now;
                 obj.isFindTargetAtomic = true;
                 obj.lastTargetSeenTime = now;
-                obj.LoggerPtr->Info("Predictor target valid, update auto-aim angles.");
+                obj.LoggerPtr->Debug(
+                    "Predictor target accepted for aim, fire_status={}",
+                    msg->status);
             } else {
                 obj.autoAimData.Valid = false;
                 obj.LoggerPtr->Debug("Predictor target invalid, clear auto-aim frame.");
@@ -263,7 +267,7 @@ namespace BehaviorTree{
             obj.outpostAimData.BuffFollow = false;
             obj.outpostAimData.Fresh = true;
             const auto now = std::chrono::steady_clock::now();
-            if (msg->status && std::isfinite(msg->yaw) && std::isfinite(msg->pitch)) {
+            if (std::isfinite(msg->yaw) && std::isfinite(msg->pitch)) {
                 obj.outpostAimData.Angles = GimbalAnglesType{
                     static_cast<AngleType>(msg->yaw),
                     static_cast<AngleType>(msg->pitch)

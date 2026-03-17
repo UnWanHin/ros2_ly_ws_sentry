@@ -10,6 +10,7 @@ docs/
 ├── architecture/                # 系统行为、消息链路
 ├── guides/                      # 配置、测试、上车前清单
 ├── modules/                     # 各 ROS 包说明
+├── record/                      # 已落地的重要改动记录与调参记录
 ├── sentry/                      # 哨兵决策/姿态专项
 ├── reports/                     # 阶段性检查报告
 ├── references/                  # 参考材料（如 logger 文档）
@@ -56,6 +57,9 @@ docs/
 [reports/self_check_status_2026-03-05.md](reports/self_check_status_2026-03-05.md)
 [reports/repository_completeness_audit_2026-03-05.md](reports/repository_completeness_audit_2026-03-05.md)
 [reports/full_link_audit_2026-03-05.md](reports/full_link_audit_2026-03-05.md)
+8. 重要行为变更与调参记录
+[record/autoaim_follow_fire_change_2026-03-18.md](record/autoaim_follow_fire_change_2026-03-18.md)  
+[record/README.md](record/README.md)
 
 ## 分类说明
 
@@ -69,6 +73,8 @@ docs/
   - 面向实机调试和赛前执行。
 - `reports/`
   - 历史检查结果，可能与当前代码存在时间差。
+- `record/`
+  - 已落地的重要变更、现场调参与风险结论，优先写事实与当前建议。
 - `plans/`
   - 方案设计记录，不代表最终已合入实现。
 

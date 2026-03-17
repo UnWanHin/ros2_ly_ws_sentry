@@ -17,7 +17,8 @@ namespace BehaviorTree {
 
     namespace {
     constexpr std::uint8_t kMaxBaseGoalId = LangYa::OccupyArea.ID;
-    constexpr auto kLostTargetHold = std::chrono::milliseconds(2000);
+    // 丢 1~2 帧时保留锁角，避免抖动；时间过长会让云台“粘住旧目标”。
+    constexpr auto kLostTargetHold = std::chrono::milliseconds(120);
 
     bool IsValidBaseGoalId(const std::uint8_t goal_id) {
         return goal_id <= kMaxBaseGoalId;

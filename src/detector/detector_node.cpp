@@ -444,9 +444,6 @@ void ImageLoop() {
                     filter.is_team_red = true;
                 }
 
-                // ROS2 日志宏: RCLCPP_WARN(global_node->get_logger(), "...");
-                RCLCPP_WARN(global_node->get_logger(), "1111");
-
                 ly_auto_aim::ArmorType target = atomic_target;
                 if (!filter.Filter(armors.Armors, target, filtered_armors)) { continue; }
 
@@ -454,12 +451,11 @@ void ImageLoop() {
                     // 以前的 ROS_WARN 替换
                 }
                 if(!carFinder.FindCar(cars, armor_list_msg.cars)){
-                    RCLCPP_WARN(global_node->get_logger(), "car_finder> failed to find car");
+                    RCLCPP_DEBUG(global_node->get_logger(), "car_finder> failed to find car");
                 }
 
                 if(draw_image) DrawAllArmor(image, filtered_armors);
                 if(draw_image) DrawAllCar(image, cars);
-                RCLCPP_WARN(global_node->get_logger(), "2222");   
 
                 if(aa_enable){
                     global_node->Publisher<ly_detector_armors>()->publish(armor_list_msg);
@@ -476,7 +472,6 @@ void ImageLoop() {
 
 #pragma region using image in rosbag
 void image_callback(const sensor_msgs::msg::CompressedImage::ConstSharedPtr msg) {
-    roslog::warn("image_callback> image size: {}", msg->data.size());
     cv_bridge::CvImagePtr cv_ptr;
     try {
         cv_ptr = cv_bridge::toCvCopy(*msg, sensor_msgs::image_encodings::BGR8);

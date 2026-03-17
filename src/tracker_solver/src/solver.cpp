@@ -21,6 +21,10 @@ namespace roslog_adapter {
         return rclcpp::get_logger("tracker_solver");
     }
     template <typename... Args>
+    void debug(const char* format_str, const Args&... args) {
+        RCLCPP_DEBUG(get_logger(), "%s", fmt::vformat(format_str, fmt::make_format_args(args...)).c_str());
+    }
+    template <typename... Args>
     void warn(const char* format_str, const Args&... args) {
         RCLCPP_WARN(get_logger(), "%s", fmt::vformat(format_str, fmt::make_format_args(args...)).c_str());
     }
@@ -246,18 +250,18 @@ std::pair<XYZ, double> Solver::camera2world(
             tvec = tvecs[i];
         }
 
-        roslog::info("Solution {}: armor_yaw = {}, diff = {}, dist = {}", i, current_yaw, diff, dist);
+        roslog::debug("Solution {}: armor_yaw = {}, diff = {}, dist = {}", i, current_yaw, diff, dist);
     }
 
     prev_armor_yaw = armor_yaw;
 
-    roslog::info("Selected armor_yaw: {}", armor_yaw);
+    roslog::debug("Selected armor_yaw: {}", armor_yaw);
 
     XYZ camera(tvec.at<double>(2), -tvec.at<double>(0), -tvec.at<double>(1)); 
-    roslog::info("before transform: x:{},y:{},z:{}", camera.x, camera.y, camera.z);
+    roslog::debug("before transform: x:{},y:{},z:{}", camera.x, camera.y, camera.z);
     XYZ result = camera2world(camera, gimbalAngle_deg);
     
-    roslog::info("x:{},y:{},z:{},dist:{}",result.x,result.y,result.z, sqrt(result.x*result.x + result.y*result.y + result.z*result.z));
+    roslog::debug("x:{},y:{},z:{},dist:{}",result.x,result.y,result.z, sqrt(result.x*result.x + result.y*result.y + result.z*result.z));
     return std::make_pair(result, armor_yaw + gimbal_yaw);
 }
 
@@ -322,7 +326,7 @@ std::pair<XYZ, double> Solver::camera2worldWithWholeCar(
             tvec = tvecs[i];
         }
 
-        roslog::info("Solution {}: armor_yaw = {}, diff = {}, dist = {}", i, current_yaw, diff, dist);
+        roslog::debug("Solution {}: armor_yaw = {}, diff = {}, dist = {}", i, current_yaw, diff, dist);
     }
 
     if((estimate_armor_yaw>0) && (armor_yaw<0)) {
@@ -333,7 +337,7 @@ std::pair<XYZ, double> Solver::camera2worldWithWholeCar(
         armor_yaw = -armor_yaw;
     }
 
-    roslog::info("Selected armor_yaw: {}", armor_yaw);
+    roslog::debug("Selected armor_yaw: {}", armor_yaw);
 
     if (tvec.empty()) {
         roslog::warn("Empty tvec after solution selection, fallback to armor-only PnP.");
@@ -341,10 +345,10 @@ std::pair<XYZ, double> Solver::camera2worldWithWholeCar(
     }
 
     XYZ camera(tvec.at<double>(2), -tvec.at<double>(0), -tvec.at<double>(1)); 
-    roslog::info("before transform: x:{},y:{},z:{}", camera.x, camera.y, camera.z);
+    roslog::debug("before transform: x:{},y:{},z:{}", camera.x, camera.y, camera.z);
     XYZ result = camera2world(camera, gimbalAngle_deg);
     
-    roslog::info("x:{},y:{},z:{}, dist: {}", result.x, result.y, result.z, sqrt(result.x * result.x + result.y * result.y + result.z * result.z));
+    roslog::debug("x:{},y:{},z:{}, dist: {}", result.x, result.y, result.z, sqrt(result.x * result.x + result.y * result.y + result.z * result.z));
     return std::make_pair(result, armor_yaw + gimbal_yaw);
 }
 
@@ -357,15 +361,15 @@ void Solver::solve_all(
         XYZ xyz_imu; 
         double yaw = 0.0;
         if (it == trackResults.second.end()) {
-            roslog::warn("No car track result found for car_id: {}", trackResult.car_id);
+            roslog::debug("No car track result found for car_id: {}", trackResult.car_id);
             std::tie(xyz_imu, yaw) = camera2world(trackResult.armor, gimbalAngle_deg, trackResult.car_id == 1);
         }
         else {
-            roslog::warn("Car track result found for car_id: {}", trackResult.car_id);
+            roslog::debug("Car track result found for car_id: {}", trackResult.car_id);
             std::tie(xyz_imu, yaw) = camera2worldWithWholeCar(
                 trackResult.armor, gimbalAngle_deg, it->bounding_rect, trackResult.car_id == 1);
         }
-        roslog::info("solver finished for car_id: {}", trackResult.car_id);
+        roslog::debug("solver finished for car_id: {}", trackResult.car_id);
         trackResult.location.imu = gimbalAngle_deg;
         trackResult.location.xyz_imu = xyz_imu;
         trackResult.yaw = yaw;

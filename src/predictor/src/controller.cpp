@@ -17,6 +17,10 @@ namespace roslog_fmt {
         return rclcpp::get_logger("controller");
     }
     template <typename... Args>
+    void debug(const char* format_str, const Args&... args) {
+        RCLCPP_DEBUG(get_logger(), "%s", fmt::vformat(format_str, fmt::make_format_args(args...)).c_str());
+    }
+    template <typename... Args>
     void warn(const char* format_str, const Args&... args) {
         RCLCPP_WARN(get_logger(), "%s", fmt::vformat(format_str, fmt::make_format_args(args...)).c_str());
     }
@@ -229,14 +233,14 @@ ControlResult Controller::control(const GimbalAngleType& gimbal_angle, int targe
     Predictions predictions_for_time = predictFunc(now + flyTime + shootDelay);
     if (predictions_for_time.empty())
     {
-        roslog::warn("No prediction");
+        roslog::debug("No prediction");
         return result;
     }
     bool is_valid_car_id = std::any_of(predictions_for_time.begin(), predictions_for_time.end(),
         [&](const auto& prediction) { return prediction.id == aim_armor_id.first; });
     if (!is_valid_car_id)
     {
-        roslog::warn("Invalid car id");
+        roslog::debug("Invalid car id");
 
         bool found = false;
         double min_distance = std::numeric_limits<double>::max();
@@ -266,10 +270,9 @@ ControlResult Controller::control(const GimbalAngleType& gimbal_angle, int targe
         [&](const auto& prediction) { return prediction.id == aim_armor_id.first; });
     if (it == predictions_for_time.end())
     {
-        roslog::warn("New car id invalid(shouldn't happen)");
+        roslog::debug("New car id invalid(shouldn't happen)");
         return result;
     }
-    roslog::warn("aim car: {}", aim_armor_id.first);
     //calc new flytime
     double distance = sqrt(it->center.x * it->center.x + it->center.y * it->center.y);
     if (distance > 0.0)
@@ -279,30 +282,25 @@ ControlResult Controller::control(const GimbalAngleType& gimbal_angle, int targe
             this->bullet_speed = stable_bullet_speed;
         }
         this->bullet_speed = stable_bullet_speed;
-        roslog::info("info: my_bullet_speed to cal time: {}", this->bullet_speed);
         double calculated_time_sec = distance / this->bullet_speed;
-        roslog::info("info: calculated_time_sec = {}", calculated_time_sec);
         
         // [ROS 2] Duration 修復
         flyTime = rclcpp::Duration::from_seconds(calculated_time_sec);
-        // [ROS 2] toSec() -> seconds()
-        roslog::info("info: Successfully created flyTime with {} seconds.", flyTime.seconds());
         
         predictions_for_time = predictFunc(now + flyTime + shootDelay);
-        roslog::info("info: end second predict.");
     }
     it = std::find_if(predictions_for_time.begin(), predictions_for_time.end(),
         [&](const auto& prediction) { return prediction.id == aim_armor_id.first; });
     if (it == predictions_for_time.end())
     {
-        roslog::warn("New car id invalid after flytime update");
+        roslog::debug("New car id invalid after flytime update");
         return result;
     }
     bool is_valid_armor_id = std::any_of(it->armors.begin(), it->armors.end(),
         [&](const auto& armor) { return (armor.id == aim_armor_id.second) && (armor.status == Armor::AVAILABLE); });
     if (!is_valid_armor_id)
     {
-        roslog::warn("Invalid armor id");
+        roslog::debug("Invalid armor id");
         //重新选择一个距离最近的
         double min_distance = std::numeric_limits<double>::max();
         bool found = false;
@@ -321,8 +319,7 @@ ControlResult Controller::control(const GimbalAngleType& gimbal_angle, int targe
         }
         if (!found)
         {
-            roslog::warn("No available armor");
-            roslog::warn("Now choose to aim at the car");
+            roslog::debug("No available armor, fallback to car center");
             double pitch = 0.0;
             double yaw = 0.0;
             double time = 0.0;
@@ -345,7 +342,6 @@ ControlResult Controller::control(const GimbalAngleType& gimbal_angle, int targe
             result.shoot_flag = false;
             // [ROS 2] Duration 修復
             flyTime = rclcpp::Duration::from_seconds(time);
-            roslog::info("aim_pitch:{},aim_yaw:{}", result.pitch_setpoint, result.yaw_setpoint);
             return result;
         }
     }
@@ -353,10 +349,9 @@ ControlResult Controller::control(const GimbalAngleType& gimbal_angle, int targe
         [&](const auto& armor) { return armor.id == aim_armor_id.second; });
     if (armor_it == it->armors.end())
     {
-        roslog::warn("Invalid armor id (shoudln't happen)");
+        roslog::debug("Invalid armor id (shoudln't happen)");
         return result;
     }
-    roslog::warn("aim armor id: {}", aim_armor_id.second);
     //should calc new time
     //but now we just use the old time
     double pitch = 0.0;
@@ -379,17 +374,15 @@ ControlResult Controller::control(const GimbalAngleType& gimbal_angle, int targe
     const bool yaw_jump_reject = (yaw_diff > 80.0f || yaw_diff < -80.0f);
     if (unstable_track || yaw_jump_reject) {
         result.valid = false;
-        roslog::warn(
+        roslog::debug(
             "Control invalid: car_id={}, armor_id={}, stable={}, yaw_diff_deg={}",
             aim_armor_id.first, aim_armor_id.second, it->stable, yaw_diff);
     } else {
-        roslog::info(
+        roslog::debug(
             "Control valid: car_id={}, armor_id={}, yaw_diff_deg={}",
             aim_armor_id.first, aim_armor_id.second, yaw_diff);
     }
     if(result.pitch_setpoint < -2.0f ) result.pitch_actual_want -= 1.0f; /// 高打低偏置补丁
-
-    roslog::warn("debug: finish control"); 
 
     return result;
 }
@@ -417,7 +410,6 @@ bool Controller::judgeAimNew(bool request)
 
 bool Controller::calcPitchYaw(double& pitch, double& yaw, double& time, double target_x, double target_y, double target_z)
 {
-    roslog::info("targetx,y,z:{},{},{}",target_x,target_y,target_z);
     double distance = sqrt(target_x * target_x + target_y * target_y);
     double theta = pitch;
     double delta_z = 0.0;

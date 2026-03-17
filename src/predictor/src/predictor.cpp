@@ -18,6 +18,10 @@ namespace roslog_fmt {
         return rclcpp::get_logger("predictor");
     }
     template <typename... Args>
+    void debug(const char* format_str, const Args&... args) {
+        RCLCPP_DEBUG(get_logger(), "%s", fmt::vformat(format_str, fmt::make_format_args(args...)).c_str());
+    }
+    template <typename... Args>
     void warn(const char* format_str, const Args&... args) {
         RCLCPP_WARN(get_logger(), "%s", fmt::vformat(format_str, fmt::make_format_args(args...)).c_str());
     }
@@ -51,16 +55,14 @@ namespace ly_auto_aim:: inline predictor {
         std::lock_guard<std::mutex> lock(car_mutex);
         for(auto& [carid, car] : cars)
         {
-            if(car->Stable())
-            {
-                predictions.push_back(model2world(car->getPredictResult(timestamp),std::function<VectorY(const VectorX&, int)>([&](const VectorX& state, int armorid) {
-                    return car->measureFromState(state, armorid);
-                })));
-                predictions.back().id = carid;
-                predictions.back().stable = car->armorStable();
+            predictions.push_back(model2world(car->getPredictResult(timestamp),std::function<VectorY(const VectorX&, int)>([&](const VectorX& state, int armorid) {
+                return car->measureFromState(state, armorid);
+            })));
+            predictions.back().id = carid;
+            predictions.back().stable = car->armorStable();
+            if (!car->Stable()) {
+                roslog::debug("Car {} is not yet stable for fire, keep prediction for aim", carid);
             }
-            else
-                roslog::warn("Car {} is not stable", carid);
         }
         return predictions;
     }
@@ -91,7 +93,6 @@ namespace ly_auto_aim:: inline predictor {
             for(auto& measure_tuple: measures[trackResult.car_id])
             {
                 edge.imu = std::get<2>(measure_tuple).imu;
-                roslog::info("debug1 imu: pitch: {}, yaw: {}, distance: {}", edge.imu.pitch, edge.imu.yaw, edge.imu.distance);
                 temp = std::get<2>(measure_tuple).cxy;
                 temp.cx = leftx;
                 edge.cxy = temp;
@@ -101,8 +102,6 @@ namespace ly_auto_aim:: inline predictor {
                 std::get<0>(measure_tuple)[5] = static_cast<PYD>(edge.pyd_imu).yaw;
                 double yaw_diff = std::remainder(std::get<0>(measure_tuple)[5] - std::get<0>(measure_tuple)[4], 2 * M_PI)/2.0;
                 std::get<0>(measure_tuple)[6] = yaw_diff + std::get<0>(measure_tuple)[4];
-                roslog::info("left-right: {}, {}", std::get<0>(measure_tuple)[5], std::get<0>(measure_tuple)[4]);
-                roslog::info("left-right = {}", std::get<0>(measure_tuple)[5] - std::get<0>(measure_tuple)[4]);
                 std::get<3>(measure_tuple) = true;
             }
         }
@@ -149,8 +148,6 @@ namespace ly_auto_aim:: inline predictor {
 
     Prediction Predictor::model2world(const VectorX& state, std::function<VectorY(const VectorX&, int)> measureFunc)
     {
-        roslog::info("ENTER model2world");
-        roslog::info("ENTER state: {}, {}, {}, {}, {}, {}, {}, {}, {}, {}", state[0], state[1], state[2], state[3], state[4], state[5], state[6], state[7], state[8], state[9]);
         Prediction prediction;
         XYZ xyz;
         xyz.x = -state[2];
@@ -187,7 +184,7 @@ namespace ly_auto_aim:: inline predictor {
             {
                 // This is not a malformed id; it means the armor face is outside
                 // the current camera visible-angle gate.
-                roslog::info("Armor id {} unseen at current view angle: {}", i, armor_angle);
+                roslog::debug("Armor id {} unseen at current view angle: {}", i, armor_angle);
                 prediction.armors[i].status = Armor::UNSEEN;
             }
         }
@@ -196,7 +193,6 @@ namespace ly_auto_aim:: inline predictor {
 
     VectorY Predictor::world2model(const VectorY& measure)
     {
-        roslog::info("ENTER world2model");
         VectorY measure_model;
         double armor_x = -measure[1];
         double armor_y = -measure[0];
@@ -209,7 +205,6 @@ namespace ly_auto_aim:: inline predictor {
         measure_model[4] = -0.5 * M_PI - measure[4];
         measure_model[5] = -0.5 * M_PI - measure[5];
         measure_model[6] = -0.5 * M_PI - measure[6];
-        roslog::info("ENTER parameter: {}, {}, {}, {}, {}, {}", measure_model[0], measure_model[1], measure_model[2], measure_model[3], measure_model[4], measure_model[5]);
         return measure_model;
     }
 
