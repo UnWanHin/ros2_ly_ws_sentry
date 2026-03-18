@@ -422,10 +422,6 @@ void ImageLoop() {
                 // ROS2 获取当前时间
                 armors.TimeStamp = global_node->now();
 
-                armors.Armors.clear();
-                
-                if (!carAndArmorDetector.Detect(image, armors.Armors, cars)) continue;
-
                 armor_list_msg.armors.clear();
                 armor_list_msg.cars.clear();
                 armor_list_msg.header.frame_id = "camera";
@@ -433,6 +429,22 @@ void ImageLoop() {
                 armor_list_msg.yaw = armors.TimeAngles.yaw;
                 armor_list_msg.pitch = armors.TimeAngles.pitch;
                 armor_list_msg.is_available_armor_for_predictor = false;
+                armor_list_msg.target_armor_index_for_predictor = -1;
+
+                auto publish_result = [&]() {
+                    if(aa_enable){
+                        global_node->Publisher<ly_detector_armors>()->publish(armor_list_msg);
+                    }else if(outpost_enable){
+                        global_node->Publisher<ly_outpost_armors>()->publish(armor_list_msg);
+                    }
+                };
+
+                armors.Armors.clear();
+                
+                if (!carAndArmorDetector.Detect(image, armors.Armors, cars)) {
+                    publish_result();
+                    continue;
+                }
 
                 filtered_armors.clear();
                 filter.is_team_red = myTeamRed;
@@ -443,24 +455,24 @@ void ImageLoop() {
                     filter.is_team_red = true;
                 }
 
+                if(!carFinder.FindCar(cars, armor_list_msg.cars)){
+                    RCLCPP_DEBUG(global_node->get_logger(), "car_finder> failed to find car");
+                }
+
                 ly_auto_aim::ArmorType target = atomic_target;
-                if (!filter.Filter(armors.Armors, target, filtered_armors)) { continue; }
+                if (!filter.Filter(armors.Armors, target, filtered_armors)) {
+                    publish_result();
+                    continue;
+                }
 
                 if (!finder.ReFindAndSolveAll(*poseSolver, filtered_armors, target, target_armor, armor_list_msg)) {
                     // 以前的 ROS_WARN 替换
-                }
-                if(!carFinder.FindCar(cars, armor_list_msg.cars)){
-                    RCLCPP_DEBUG(global_node->get_logger(), "car_finder> failed to find car");
                 }
 
                 if(draw_image) DrawAllArmor(image, filtered_armors);
                 if(draw_image) DrawAllCar(image, cars);
 
-                if(aa_enable){
-                    global_node->Publisher<ly_detector_armors>()->publish(armor_list_msg);
-                }else if(outpost_enable){
-                    global_node->Publisher<ly_outpost_armors>()->publish(armor_list_msg);
-                }
+                publish_result();
             }
         }
     };

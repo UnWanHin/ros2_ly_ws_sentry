@@ -548,6 +548,89 @@
   - 旧 matcher 的 corner case
   - `status=false` 背后的稳定性门控
 
+### 9. 第四轮架构增强（连续数据流 + predictor timer）
+
+本轮不是再去拉长 BT hold，而是保留 `behavior_tree` 收口结构，只增强前半段数据流连续性：
+
+#### A. `detector`：空观测也继续发布
+
+调整点：
+
+- 即使当前帧 `Detect` 失败，也继续发布一帧 `Armors`
+- 即使当前帧 `Filter` 失败，也继续发布一帧 `Armors`
+- 这帧中：
+  - `header / yaw / pitch` 仍然有效
+  - `armors` 可以为空
+  - `cars` 尽量保留当前可得的车框
+
+目的：
+
+- 让下游收到的是“空观测”
+- 而不是“节点没消息”
+
+#### B. `tracker_solver`：空观测也继续发布
+
+调整点：
+
+- 取消 `msg->armors.empty()` 时直接 `return`
+- 即使这帧没有装甲板，也照样发布 `Trackers`
+- 仅在 `track_results.first` 非空时才调用 `solver->solve_all()`
+
+目的：
+
+- 让 `predictor` 能持续接收到时序 heartbeat
+- 而不是上游一空就直接断流
+
+#### C. `predictor`：从“回调即发布”改为“回调 update + timer publish”
+
+调整点：
+
+- `tracker` 回调只做：
+  - 更新内部模型
+  - 记录最近一次云台角与 header
+  - 记录最近一次有效观测时间
+- 新增固定 `10ms` 的 wall timer
+  - 定频发布 `/ly/predictor/target`
+  - 定频发布时再调用 `controller->control()`
+
+#### D. `predictor`：新增短时 coast 语义
+
+当前策略：
+
+- 若仍有预测结果：继续给角
+- 若观测短时过期但仍处于 coast timeout 内：允许继续输出角
+- 若预测也不存在且已超时：
+  - 发布 `status=false`
+  - 发布 `yaw=NaN`
+  - 发布 `pitch=NaN`
+
+这样做的目的：
+
+- `BT` 在失锁时不再误把“当前云台角”当成有效目标角
+- 又不会靠拉长 `kLostTargetHold` 去硬撑
+
+### 10. 第四轮离车验证结果
+
+离车验证中，`/ly/predictor/target` 已经表现为固定频率输出层：
+
+- `/ly/predictor/target` 约 `90.9 Hz`
+
+同时抓到一条失锁样本：
+
+- `status=false`
+- `yaw=NaN`
+- `pitch=NaN`
+
+这说明：
+
+- predictor timer 已经生效
+- 失锁状态会明确下发为无效角，而不是继续伪造“当前云台角就是目标角”
+
+说明：
+
+- 这轮离车验证已经足够证明“数据流和输出频率”明显变强
+- 但是否“更锁”仍需要上车或至少完整 BT 链下继续验证体感
+
 ## 结论
 
 这次调整保留了原有链路设计：

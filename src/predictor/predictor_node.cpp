@@ -32,6 +32,7 @@
 #include "solver/solver.hpp"
 
 #include <atomic>
+#include <limits>
 
 using namespace LangYa;
 using namespace ly_auto_aim;
@@ -61,10 +62,8 @@ namespace {
                 
                 location::Location::registerSolver(solver);
                 
-                // 【核心修復 A】Controller 回調時，清洗時間戳
                 controller->registPredictFunc([this](Time::TimeStamp timestamp) {
-                    double t_sec = rclcpp::Time(timestamp).seconds();
-                    return predictor->predict(Time::TimeStamp(t_sec));
+                    return predictor->predict(timestamp);
                 });
 
                 node.GenSubscriber<ly_tracker_results>([this](const auto_aim_common::msg::Trackers::ConstSharedPtr msg) { 
@@ -76,6 +75,10 @@ namespace {
                 node.GenSubscriber<ly_bullet_speed>([this](const std_msgs::msg::Float32::ConstSharedPtr msg) { 
                     get_bullet_speed_callback(msg); 
                 });
+
+                publish_timer_ = node.create_wall_timer(
+                    std::chrono::milliseconds(10),
+                    [this]() { publish_timer_callback(); });
                 
                 RCLCPP_INFO(node.get_logger(), "Predictor Modules Initialized Successfully!");
             }
@@ -124,47 +127,76 @@ namespace {
 
                 TrackResultPairs track_results;
                 convertMsgToTrackResults(msg, track_results, gimbal_angle);
-                // 【核心修復 B】接收消息時，清洗時間戳
                 double msg_time_sec = rclcpp::Time(msg->header.stamp).seconds();
                 Time::TimeStamp timestamp(msg_time_sec);
 
-                // 先用当前帧观测更新状态，再做 control，避免控制永远落后一帧。
-                predictor->update(track_results, timestamp); 
+                std::lock_guard<std::mutex> lock(data_mutex);
+                predictor->update(track_results, timestamp);
+                last_gimbal_angle_ = gimbal_angle;
+                last_tracker_header_ = msg->header;
+                last_update_time_ = node.now();
+                has_tracker_input_ = true;
+                if (!track_results.first.empty()) {
+                    last_observation_time_ = last_update_time_;
+                }
+            }
 
-                int target = static_cast<int>(automic_target.load());
-                float bullet_speed = static_cast<float>(atomic_bullet_speed.load());
-                ly_auto_aim::controller::ControlResult control_result =
-                    controller->control(gimbal_angle, target, bullet_speed);  
-
-                auto_aim_common::msg::Target target_msg;
-                //TODO check
-                target_msg.status = control_result.valid;  
-                target_msg.yaw = control_result.yaw_actual_want;
-                target_msg.pitch = control_result.pitch_actual_want;
-                target_msg.header = msg->header;
-                
-                auto_aim_common::msg::DebugFilter debug_filter_msg;
-                
-                // 這裡也統一使用 timestamp
-                auto predictions = predictor->predict(timestamp);
-                
-                for(auto& prediction : predictions){
-                    XYZ car_XYZ = prediction.center;
-                    debug_filter_msg.position.x = car_XYZ.x;
-                    debug_filter_msg.position.y = car_XYZ.y;
-                    debug_filter_msg.position.z = car_XYZ.z;
-                    debug_filter_msg.yaw = prediction.theta;
-                    debug_filter_msg.v_yaw = prediction.omega;
-                    debug_filter_msg.velocity.x = prediction.vx;
-                    debug_filter_msg.velocity.y = prediction.vy;
-                    debug_filter_msg.radius_1 = prediction.r1;
-                    debug_filter_msg.radius_2 = prediction.r2;
+            void publish_timer_callback() {
+                if (!has_tracker_input_ || !location::Location::isSolverRegistered()) {
+                    return;
                 }
 
-                // Always publish predictor target for observability.
-                // Consumers should gate by target_msg.status.
+                auto_aim_common::msg::Target target_msg;
+                auto_aim_common::msg::DebugFilter debug_filter_msg;
+                bool publish_debug = false;
+
+                {
+                    std::lock_guard<std::mutex> lock(data_mutex);
+
+                    const auto now = node.now();
+                    const auto target = static_cast<int>(automic_target.load());
+                    const auto bullet_speed = static_cast<float>(atomic_bullet_speed.load());
+                    const Time::TimeStamp timestamp = now;
+                    const auto predictions = predictor->predict(timestamp);
+                    const bool has_predictions = !predictions.empty();
+                    const bool observation_fresh =
+                        last_observation_time_.nanoseconds() != 0 &&
+                        (now - last_observation_time_) <= coast_timeout_;
+
+                    target_msg.header = last_tracker_header_;
+                    target_msg.header.stamp = now;
+                    target_msg.buff_follow = false;
+
+                    if (!has_predictions && !observation_fresh) {
+                        const auto nan = std::numeric_limits<float>::quiet_NaN();
+                        target_msg.status = false;
+                        target_msg.yaw = nan;
+                        target_msg.pitch = nan;
+                    } else {
+                        const auto control_result =
+                            controller->control(last_gimbal_angle_, target, bullet_speed);
+                        target_msg.status = control_result.valid && observation_fresh;
+                        target_msg.yaw = control_result.yaw_actual_want;
+                        target_msg.pitch = control_result.pitch_actual_want;
+
+                        for (const auto& prediction : predictions) {
+                            XYZ car_XYZ = prediction.center;
+                            debug_filter_msg.position.x = car_XYZ.x;
+                            debug_filter_msg.position.y = car_XYZ.y;
+                            debug_filter_msg.position.z = car_XYZ.z;
+                            debug_filter_msg.yaw = prediction.theta;
+                            debug_filter_msg.v_yaw = prediction.omega;
+                            debug_filter_msg.velocity.x = prediction.vx;
+                            debug_filter_msg.velocity.y = prediction.vy;
+                            debug_filter_msg.radius_1 = prediction.r1;
+                            debug_filter_msg.radius_2 = prediction.r2;
+                        }
+                        publish_debug = target_msg.status && has_predictions;
+                    }
+                }
+
                 node.Publisher<ly_predictor_target>()->publish(target_msg);
-                if (control_result.valid) {
+                if (publish_debug) {
                     node.Publisher<ly_predictor_debug>()->publish(debug_filter_msg);
                 }
             }
@@ -176,6 +208,13 @@ namespace {
             std::unique_ptr<ly_auto_aim::predictor::Predictor> predictor;
             std::shared_ptr<ly_auto_aim::controller::Controller> controller;
             std::mutex data_mutex;
+            rclcpp::TimerBase::SharedPtr publish_timer_{};
+            GimbalAngleType last_gimbal_angle_{0.0, 0.0};
+            std_msgs::msg::Header last_tracker_header_{};
+            rclcpp::Time last_update_time_{};
+            rclcpp::Time last_observation_time_{};
+            std::atomic_bool has_tracker_input_{false};
+            const rclcpp::Duration coast_timeout_{rclcpp::Duration::from_seconds(0.25)};
     };
 }
 

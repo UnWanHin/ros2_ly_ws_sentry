@@ -148,11 +148,6 @@ namespace{
             trackers_msg.header.frame_id = msg->header.frame_id;
             trackers_msg.pitch = msg->pitch; 
             trackers_msg.yaw = msg->yaw;
-            
-            if (msg->armors.empty()) {
-                // roslog::warn("detection_callback> empty armors");
-                return;
-            }
 
             std::vector<Detection> detections;
             convertToDetections(msg, detections);
@@ -176,7 +171,9 @@ namespace{
             auto track_results = tracker->getTrackResult(timestamp, gimbal_angle);
             
             // 這裡如果 solver 參數沒讀對，之前會崩潰
-            solver->solve_all(track_results, gimbal_angle);
+            if (!track_results.first.empty()) {
+                solver->solve_all(track_results, gimbal_angle);
+            }
             
             publish_all(track_results, trackers_msg);
             
