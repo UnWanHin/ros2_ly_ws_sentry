@@ -67,7 +67,8 @@ public:
         if(newTrack)
             newTrack = false;
         else
-            dt = (time - last_time).seconds() / timeRatio;
+            // timeRatio is defined against a 20 ms reference interval.
+            dt = (time - last_time).seconds() * 1000.0 / timeRatio;
         last_time = time;
         std::map<int, Point> output;
         std::vector<int> return_result(currentPoints.size(), -1);
@@ -75,9 +76,9 @@ public:
 
         // 计算自适应距离门限
         float adaptiveThreshold = sameLabelError * 0.6f + diffLabelError * 0.4f;
-        roslog::info("Adaptive Threshold: {}",adaptiveThreshold);
-        roslog::info("Same Label Error: {}",sameLabelError);
-        roslog::info("Diff Label Error: {}",diffLabelError);
+        // roslog::info("Adaptive Threshold: {}",adaptiveThreshold);
+        // roslog::info("Same Label Error: {}",sameLabelError);
+        // roslog::info("Diff Label Error: {}",diffLabelError);
 
         // 利用卡尔曼滤波预测所有轨迹的下一位置
         for (auto &trk : tracks) {
@@ -173,8 +174,8 @@ public:
             it->_matched = false;
             
             if (it->missedFrames > maxMissedFrames) {
-                roslog::info("Track {} is lost",it->id);
-                roslog::info("Lived Frames: {}",it->livedFrames);
+                // roslog::info("Track {} is lost",it->id);
+                // roslog::info("Lived Frames: {}",it->livedFrames);
                 averageLiveFrames = alpha * it->livedFrames + (1 - alpha) * averageLiveFrames;
                 it = tracks.erase(it);
             } else {

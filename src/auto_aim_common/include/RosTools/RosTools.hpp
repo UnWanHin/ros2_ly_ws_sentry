@@ -51,7 +51,12 @@ class ROSNode : public rclcpp::Node {
 
 public:
 
-    ROSNode() : rclcpp::Node(TName) {
+    ROSNode()
+        : rclcpp::Node(
+              TName,
+              rclcpp::NodeOptions()
+                  .allow_undeclared_parameters(true)
+                  .automatically_declare_parameters_from_overrides(true)) {
         // 保留了 roslog，沒有改動
         roslog::info("ROSNode [{}] created", TName);
     }

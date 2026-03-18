@@ -372,9 +372,9 @@ void ImageLoop() {
                 angle_image_msg.pitch = angle_frame.angles.pitch;
 
                 global_node->Publisher<ly_ra_angle_image>()->publish(angle_image_msg);
-                
+
                 // ROS2 的 spinOnce 等价物
-                rclcpp::spin_some(global_node); 
+                rclcpp::spin_some(global_node);
             }
             rate.sleep();
         }
@@ -384,7 +384,6 @@ void ImageLoop() {
         [&] {
             rclcpp::Rate rate(78);
             while (rclcpp::ok()) {
-
                 if(web_show && !concat_image.empty()){
                     VideoStreamer::setFrame(concat_image);
                 } else if(web_show && !image.empty()) {
@@ -399,7 +398,7 @@ void ImageLoop() {
                 ly_auto_aim::ArmorObject target_armor;
 
                 if(!use_ros_bag){
-                    if (!Cam.GetImage(image)) continue; 
+                    if (!Cam.GetImage(image)) continue;
                 }
 
                 rclcpp::spin_some(global_node);

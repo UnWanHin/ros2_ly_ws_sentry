@@ -49,7 +49,8 @@ public:
             oldtheta = calcTheta(get<0>(currentPoints[0]), get<1>(currentPoints[0]), 0);
         }
         else
-            dt = (time - last_time).seconds();
+            // MatcherWholeCar historically uses ms-based dt and omega limits.
+            dt = (time - last_time).seconds() * 1000.0;
         // roslog::info("delta_time:{} ms",dt);
         last_time = time;
         double pred_theta = oldtheta + omega * dt;

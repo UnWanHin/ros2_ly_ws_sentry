@@ -203,7 +203,26 @@ TrackResults Tracker::getArmorTrackResult(const Time::TimeStamp& time, const Gim
         }
         auto result = matchers[car_id].track(param, time, timeRatio);
         if(result.size() != param.size()) {
-            roslog::error("TrackerMatcher roslog::error: result size not equal to center size");
+            roslog::warn(
+                "TrackerMatcher fallback for car_id {}: result size {} != center size {}",
+                car_id,
+                result.size(),
+                param.size());
+            for (const auto& [center, armor_ptr] : param) {
+                (void)center;
+                TrackResult track_result;
+                track_result.armor = *armor_ptr;
+                track_result.armor_id = 0;
+                {
+                    cv::Point2f point1 = cv::Point2f(armor_ptr->at(0).x, armor_ptr->at(0).y);
+                    cv::Point2f point2 = cv::Point2f(armor_ptr->at(1).x, armor_ptr->at(1).y);
+                    cv::Point2f point3 = cv::Point2f(armor_ptr->at(2).x, armor_ptr->at(2).y);
+                    cv::Point2f point4 = cv::Point2f(armor_ptr->at(3).x, armor_ptr->at(3).y);
+                    track_result.rect = cv::boundingRect(std::vector<cv::Point2f>{point1, point2, point3, point4});
+                }
+                track_result.car_id = car_id;
+                results.push_back(track_result);
+            }
             continue;
         }
         for(auto& [id, armor_ptr] : result) {
@@ -431,7 +450,11 @@ void Tracker::getArmorTrackResultWithWholeCar(const Time::TimeStamp& time, const
         }
         auto result = matcher_whole_cars[car_id].track(param, time);
         if(result.size() != param.size()) {
-            roslog::error("TrackerMatcher error: result size not equal to center size");
+            roslog::warn(
+                "Whole-car matcher fallback for car_id {}: result size {} != center size {}, keep armor matcher ids",
+                car_id,
+                result.size(),
+                param.size());
             continue;
         }
         for(auto& [id, trackresult_ptr] : result) {
@@ -443,11 +466,12 @@ void Tracker::getArmorTrackResultWithWholeCar(const Time::TimeStamp& time, const
 
 TrackResultPairs Tracker::getTrackResult(const Time::TimeStamp& time, const GimbalAngleType& gimbalAngle) 
 {
-    // auto armor_results = getArmorTrackResult(time, gimbalAngle);
-    // auto car_results = getCarTrackResult(time, gimbalAngle, armor_results);
-    auto armor_results = initArmorTrackResult(gimbalAngle);
+    auto armor_results = getArmorTrackResult(time, gimbalAngle);
+    if (armor_results.empty()) {
+        // Fallback to the current-frame init path if the matcher does not yield any armor result.
+        armor_results = initArmorTrackResult(gimbalAngle);
+    }
     auto car_results = getCarTrackResult(time, gimbalAngle, armor_results);
-    // CarTrackResults car_results{};
     getArmorTrackResultWithWholeCar(time, gimbalAngle, car_results, armor_results);
     armors.clear();  // 清空当前帧的装甲板
     armors_gray.clear();

@@ -29,7 +29,7 @@
         "HealthRecoveryThreshold": 100,
         "UseAmmoRecovery": true,
         "AmmoRecoveryThreshold": 30,
-        "MainGoal": 18,
+        "MainGoal": 3,
         "PatrolGoals": [],
         "GoalHoldSec": 15
     },

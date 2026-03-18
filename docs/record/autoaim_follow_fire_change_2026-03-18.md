@@ -380,6 +380,174 @@
 - “慢”已经通过注释高频日志显著改善
 - “火控没恢复”则更像是 `predictor/controller` 仍然认为当前轨迹不够稳定
 
+### 4. 第二轮修正与复测
+
+在第一轮“去高频日志”之后，继续检查到两类问题：
+
+#### A. `detector` 参数 missing 日志是误导性的
+
+现象：
+
+- 离车 launch 时 `detector` 会连续打印：
+  - `Parameter 'detector_config.*' missing, fallback default applied.`
+
+但实际现象又说明：
+
+- 视频路径、模型路径、离线模式都仍然能工作
+
+根因：
+
+- `auto_aim_common/include/RosTools/RosTools.hpp` 中的 `ROSNode` 没有开启：
+  - `allow_undeclared_parameters(true)`
+  - `automatically_declare_parameters_from_overrides(true)`
+
+结果：
+
+- launch 传进来的参数 override 存在
+- 但 `has_parameter()` 在显式声明前返回 `false`
+- 导致 `LoadParamCompat()` 误报 missing
+
+修正后结果：
+
+- 这批参数 missing 日志已消失
+- 后续离车调试时不会再被误导到“YAML 根本没吃进去”
+
+#### B. `tracker` 时序与 whole-car 动态模型存在单位问题
+
+检查发现：
+
+- `tracker_matcher.hpp` 里注释写的是 `20 ms` 基准
+- 但代码用的是 `(time - last_time).seconds() / timeRatio`
+- `tracker_matcher_with_whole_car.hpp` 里日志写的是 `ms`
+- 但代码同样使用 `seconds()`
+- 与此同时 `maxOmega = 10 * 2 * PI / 1000.0`
+- 明显是按“毫秒时间基”设计的限幅
+
+修正方式：
+
+- `tracker_matcher.hpp` 改成以毫秒计算 `dt`
+- `tracker_matcher_with_whole_car.hpp` 也改成以毫秒计算 `dt`
+- `maxOmega` 保持原本的毫秒量纲设计
+
+#### C. `tracker` 主路径恢复为原时序 matcher，失败时安全回退
+
+现象：
+
+- 当前 `Tracker::getTrackResult()` 其实绕开了原来的 `getArmorTrackResult(time, gimbalAngle)`
+- 直接走 `initArmorTrackResult(gimbalAngle)`
+
+影响：
+
+- 更像“当前帧初始化 + whole-car 再补装甲板 ID”
+- 而不是完整利用时序 matcher 做装甲板跟踪
+
+修正方式：
+
+- 先恢复 `getArmorTrackResult(time, gimbalAngle)` 作为主路径
+- 如果 `TrackerMatcher` 输出尺寸异常，则安全回退到当前帧初始化结果
+
+这样做的目的：
+
+- 优先恢复原有时序 matcher 的连续性
+- 同时避免因历史 matcher corner case 直接丢结果
+
+### 5. 第二轮离车复测结果
+
+复测命令与第一次相同：
+
+- `ros2 launch detector auto_aim.launch.py offline:=true use_gimbal:=false output:=log`
+
+结果：
+
+- `/ly/detector/armors` 提升到约 `34 Hz`
+- `/ly/tracker/results` 提升到约 `34 Hz`
+- `/ly/predictor/target` 提升到约 `34 Hz`
+
+这说明：
+
+- 第一轮主要是日志瓶颈
+- 第二轮则进一步修掉了 tracker 的时间尺度问题和参数层误导问题
+
+### 6. 当前残余风险
+
+虽然第二轮修正后频率继续提升，但仍捕获到一次：
+
+- `TrackerMatcher fallback for car_id ... result size != center size`
+
+说明：
+
+- 原 `TrackerMatcher` 仍然存在偶发重复/缺失 ID 的历史 corner case
+- 当前代码已改为“警告 + 安全回退”，不会直接丢掉整帧结果
+- 但这仍是后续值得继续清理的 tracking 语义问题
+
+### 7. 第三轮修正与复测
+
+继续排查后，确认还存在两类会影响跟随表现、但不属于 fire gate 的问题：
+
+#### A. `tracker` 时间单位写法与注释不一致
+
+检查发现：
+
+- `tracker_matcher.hpp` 的 `timeRatio` 注释明确写的是 `20 ms`
+- whole-car matcher 日志也写的是 `delta_time: ... ms`
+- 但代码实际一直在用 `seconds()`
+
+修正方式：
+
+- `tracker_matcher.hpp` 改成：
+  - `dt = (time - last_time).seconds() * 1000.0 / timeRatio`
+- `tracker_matcher_with_whole_car.hpp` 改成：
+  - `dt = (time - last_time).seconds() * 1000.0`
+
+同时保留原本 `maxOmega = 10 * 2 * PI / 1000.0` 的毫秒量纲设计。
+
+#### B. `tracker` 主路径恢复后存在历史 corner case
+
+恢复 `getArmorTrackResult(time, gimbalAngle)` 为主路径后，发现原 matcher 偶发会出现：
+
+- `result size != center size`
+
+说明：
+
+- 旧 matcher 不是完全无问题
+- 不能直接无保护地恢复
+
+当前处理：
+
+- 原 matcher 作为主路径
+- 一旦当前 car_id 的 matcher 结果尺寸异常，立即警告并回退到当前帧初始化结果
+
+这样做的取舍：
+
+- 尽量保留时序 matcher 的连续性
+- 又不会因为历史 corner case 直接丢装甲板结果
+
+### 8. 第三轮离车复测结果
+
+复测命令保持不变：
+
+- `ros2 launch detector auto_aim.launch.py offline:=true use_gimbal:=false output:=log`
+
+结果：
+
+- `/ly/detector/armors` 提升到约 `34 Hz`
+- `/ly/tracker/results` 提升到约 `34 Hz`
+- `/ly/predictor/target` 提升到约 `34 Hz`
+
+同时确认：
+
+- `detector` 启动时不再出现一串误导性的参数 missing 日志
+- 但运行期仍捕获过一次：
+  - `TrackerMatcher fallback for car_id ... result size != center size`
+
+结论：
+
+- 当前“纯慢”问题已经不再是主矛盾
+- `detector -> tracker_solver -> predictor` 的离车链路频率已恢复到正常区间
+- 剩余更值得关注的是：
+  - 旧 matcher 的 corner case
+  - `status=false` 背后的稳定性门控
+
 ## 结论
 
 这次调整保留了原有链路设计：
