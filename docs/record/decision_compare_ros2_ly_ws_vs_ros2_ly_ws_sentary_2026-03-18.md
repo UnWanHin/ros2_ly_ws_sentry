@@ -218,7 +218,7 @@
 | `Posture.DamageBurstWindowMs` | `0` 或 `1500` | 短时重受击统计窗口 | 展示模式里会触发更敏感的防御切换 |
 | `Posture.DamageBurstThreshold` | `0` 或 `1` | 重受击阈值 | 达到后直接偏防御 |
 | `Posture.DamageBurstDefenseHoldSec` | `0` 或 `5` | 短时重受击后防守保持 | 防止姿态来回抖动 |
-| `Posture.LowHealthThreshold` | `120` | 低血阈值 | 更偏防御 |
+| `Posture.LowHealthThreshold` | `150` | 低血阈值 | 更偏防御 |
 | `Posture.VeryLowHealthThreshold` | `80` | 极低血阈值 | 进一步提高防守权重 |
 | `Posture.LowAmmoThreshold` | `30` | 低弹阈值 | 降低攻击倾向 |
 | `Posture.ScoreHysteresis` | `2` | 分差迟滞 | 新姿态分数领先不够时不切换 |

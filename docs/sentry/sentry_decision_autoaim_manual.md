@@ -213,7 +213,7 @@ BT 節點實際調用的就是這些函數。
 當前聯盟賽推薦值：
 - `CompetitionProfile = "league"`
 - `NaviSetting.UseXY = false`
-- `LeagueStrategy.MainGoal = 18`（`OccupyArea`）
+- `LeagueStrategy.MainGoal = 3`（`OccupyArea`）
 - `LeagueStrategy.PatrolGoals = []`
 
 當前展示模式補充：

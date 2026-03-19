@@ -15,7 +15,7 @@
             "SpeedLevel": 1,
             "DisableTeamOffset": true,
             "IgnoreRecovery": true,
-            "Goals": [1, 2, 3, 4]
+            "Goals": [1, 2]
         }
     }
 }

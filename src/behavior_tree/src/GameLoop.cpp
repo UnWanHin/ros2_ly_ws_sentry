@@ -907,7 +907,7 @@ namespace BehaviorTree {
         }
         // 回家
         // 条件为：血量低于150 或者 弹药为0且距离上一次回家已经过去90秒
-        if(myselfHealth < 100 || (ammoLeft <= 30 && recoveryClock.trigger())) {
+        if(myselfHealth < 150 || (ammoLeft <= 30 && recoveryClock.trigger())) {
             SetPositionByBaseGoal(LangYa::Recovery.ID, MyTeam, apply_team_offset);
             recoveryClock.tick();
             naviCommandIntervalClock.reset(Seconds{1});

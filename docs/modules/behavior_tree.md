@@ -307,9 +307,9 @@ void TreeTick() {
 
 - 策略名：`LeagueSimple`
 - 導航輸出：優先用 `/ly/navi/goal`
-- 默認目標 ID：`OccupyArea = 18`
+- 默認目標 ID：`OccupyArea = 3`
 - 決策規則只有兩段：
-  - 血量低 / 彈藥低：切 `Recovery`
+  - 血量低 / 彈藥低：切 `Recovery`  
   - 否則：切 `OccupyArea`
 
 補充：

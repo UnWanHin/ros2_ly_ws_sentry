@@ -15,11 +15,14 @@ namespace BehaviorTree {
         /// 设置云台角度
         gimbalControlData.GimbalAngles.Yaw = gimbalAngles.Yaw;
         gimbalControlData.GimbalAngles.Pitch = AngleType{0};
+        gimbalControlData.FireCode.FireStatus = 0;
+        gimbalControlData.FireCode.Rotate = 0;
+        gimbalControlData.FireCode.AimMode = 0;
+        naviVelocity = VelocityType{0, 0};
+        postureCommand = 0;
 
         LoggerPtr->Info("Waiting For Game Start!");
 
-        // [ROS 2] 用 rclcpp::Time 替代 ros::Time
-        rclcpp::Time last_navi_command_time = node_->now();
         const auto wait_begin = std::chrono::steady_clock::now();
         auto last_wait_log = wait_begin;
         bool bypass_logged = false;
@@ -28,7 +31,6 @@ namespace BehaviorTree {
         while (rclcpp::ok()) {
             rclcpp::spin_some(node_);
             std::this_thread::sleep_for(std::chrono::milliseconds{10});
-            rclcpp::Time now = node_->now();
             const auto now_steady = std::chrono::steady_clock::now();
 
             SET_POSITION(Home, team);
@@ -39,17 +41,10 @@ namespace BehaviorTree {
                 else PubNaviGoal();
             }
 
-            if (naviVelocity.X || naviVelocity.Y) {
-                PubNaviControlData();
-                last_navi_command_time = now;
-            } else {
-                // [ROS 2] rclcpp::Duration 接受 std::chrono::duration
-                if ((now - last_navi_command_time).seconds() > 3.0) {
-                    naviVelocity.X = 0;
-                    naviVelocity.Y = 0;
-                    PubNaviControlData();
-                }
-            }
+            // 开赛门控期间持续压零速度，避免下位机沿用上一拍底盘控制量。
+            naviVelocity.X = 0;
+            naviVelocity.Y = 0;
+            PubNaviControlData();
             PubGimbalControlData();
 
             if (debugBypassGameStart_) {
@@ -88,6 +83,8 @@ namespace BehaviorTree {
 
     void Application::WaitBeforeGame() {
         LoggerPtr->Info("Waiting Before Game");
+        PublishSafeControl("wait_before_game_reset");
+
         /// 取得第一个云台数据包（不能用 yaw/pitch 非 0 判定，0 也是合法角度）
         const auto wait_begin = std::chrono::steady_clock::now();
         auto last_wait_log = wait_begin;
@@ -115,7 +112,7 @@ namespace BehaviorTree {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
         LoggerPtr->Info("Stop waiting for first gimbal data.");
-
+        
         WaitForGameStart();
 
         LoggerPtr->Info("Stop Waiting Before Game");
