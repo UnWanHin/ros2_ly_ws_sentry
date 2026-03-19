@@ -110,28 +110,38 @@ namespace BehaviorTree {
         static constexpr auto buff_yaw = -50.0f + 360.0f;
 
         
-        // 小陀螺检查
-        const auto navi_speed_vector_length = std::sqrt(
-                    std::pow(static_cast<float>(naviVelocity.X), 2) +
-                    std::pow(static_cast<float>(naviVelocity.Y), 2)
-                    );
-        if(healthDecreaseDetector.trigger(myselfHealth)) { // 血量减少
+        // 小陀螺策略：
+        // 1) 常态保持高速(3)
+        // 2) 受击后 2 秒内进入变速节奏
+        // 3) 协议无方向位，使用两套节奏交替作为“拟变向”信号
+        const auto rotate_now = std::chrono::steady_clock::now();
+        static auto last_damage_rotate_time = std::chrono::steady_clock::time_point{};
+        static bool rotate_pattern_flip = false;
+        constexpr int kDamageRotateWindowMs = 2000;
+        constexpr int kRotatePhaseMs = 180;
+        constexpr std::uint8_t kRotatePatternA[6] = {3, 2, 3, 1, 3, 0};
+        constexpr std::uint8_t kRotatePatternB[6] = {3, 1, 3, 2, 3, 0};
+
+        if (healthDecreaseDetector.trigger(myselfHealth)) { // 血量减少
+            last_damage_rotate_time = rotate_now;
+            rotate_pattern_flip = !rotate_pattern_flip;
             rotateTimerClock.tick();
-            
-            if (navi_speed_vector_length > 50)
-                gimbalControlData.FireCode.Rotate = 0;
-            else if (navi_speed_vector_length > 35)
-                gimbalControlData.FireCode.Rotate = 1;
-            else if (navi_speed_vector_length > 15)
-                gimbalControlData.FireCode.Rotate = 2;
-            else
+        }
+
+        bool in_damage_rotate_window = false;
+        if (last_damage_rotate_time.time_since_epoch().count() != 0) {
+            const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                rotate_now - last_damage_rotate_time).count();
+            in_damage_rotate_window = elapsed_ms <= kDamageRotateWindowMs;
+            if (in_damage_rotate_window) {
+                const auto phase = static_cast<int>((elapsed_ms / kRotatePhaseMs) % 6);
+                const auto* pattern = rotate_pattern_flip ? kRotatePatternA : kRotatePatternB;
+                gimbalControlData.FireCode.Rotate = pattern[phase];
+            } else {
                 gimbalControlData.FireCode.Rotate = 3;
-        }else {
-            if(rotateTimerClock.trigger()){ // 超过两秒没有掉血
-                gimbalControlData.FireCode.Rotate = 1;
             }
-            if (navi_speed_vector_length > 50)
-                gimbalControlData.FireCode.Rotate = 0;
+        } else {
+            gimbalControlData.FireCode.Rotate = 3;
         }
         if (config.AimDebugSettings.StopRotate) gimbalControlData.FireCode.Rotate = 0;
 
@@ -139,7 +149,11 @@ namespace BehaviorTree {
         if (now_time >= 0) {
             const auto log_now = std::chrono::steady_clock::now();
             if (log_now - last_rotate_log > std::chrono::seconds(2)) {
-                LoggerPtr->Debug("Rotate Speed: {}", gimbalControlData.FireCode.Rotate);
+                LoggerPtr->Debug(
+                    "Rotate Speed: {} (damage_window={} pattern_flip={})",
+                    gimbalControlData.FireCode.Rotate,
+                    in_damage_rotate_window ? 1 : 0,
+                    rotate_pattern_flip ? 1 : 0);
                 last_rotate_log = log_now;
             }
         }
