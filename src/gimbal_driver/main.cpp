@@ -38,11 +38,6 @@ using namespace LangYa;
 
 namespace
 {
-    constexpr std::uint16_t ByteSwap16(const std::uint16_t value) noexcept
-    {
-        return static_cast<std::uint16_t>((value >> 8) | (value << 8));
-    }
-
     LY_DEF_ROS_TOPIC(ly_control_angles, "/ly/control/angles", gimbal_driver::msg::GimbalAngles);
     LY_DEF_ROS_TOPIC(ly_control_firecode, "/ly/control/firecode", std_msgs::msg::UInt8);
     LY_DEF_ROS_TOPIC(ly_control_vel, "/ly/control/vel", gimbal_driver::msg::Vel);
@@ -298,8 +293,7 @@ namespace
                 msg.gamecode = *reinterpret_cast<const std::uint16_t*>(&data.GameCode);
                 msg.ammoleft = data.AmmoLeft;
                 msg.timeleft = data.TimeLeft;
-                // Current lower-computer payload reports SelfHealth with swapped byte order.
-                msg.selfhealth = ByteSwap16(data.SelfHealth);
+                msg.selfhealth = data.SelfHealth;
                 msg.exteventdata = *static_cast<const std::uint32_t*>(&data.ExtEventData);
                 Node.Publisher<topic>()->publish(msg);
             }
@@ -487,6 +481,12 @@ namespace
                             last_game_dump_time = now;
                             const auto self_health_swapped = static_cast<std::uint16_t>(
                                 (game_data.SelfHealth >> 8) | (game_data.SelfHealth << 8));
+                            const auto self_health_publish = game_data.SelfHealth;
+                            roslog::info(
+                                "GameData selfhealth parse: raw_field=%u publish=%u swapped_candidate=%u",
+                                static_cast<unsigned int>(game_data.SelfHealth),
+                                static_cast<unsigned int>(self_health_publish),
+                                static_cast<unsigned int>(self_health_swapped));
                             roslog::info(
                                 "RX GameData raw[12]=%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X | "
                                 "parsed gamecode=0x%04X ammo=%u time=%u self=%u self_swapped=%u ext=0x%08X",
