@@ -278,6 +278,7 @@ namespace BehaviorTree {
         // 解析 JSON 文件
         json j;
         ifs >> j;
+        // 一次性反序列化到 Config，后续再做范围校验与默认回退。
         config = j.get<Config>();
         LoggerPtr->Debug("------ AimDebug ------");
         LoggerPtr->Debug("StopFire: {}", config.AimDebugSettings.StopFire);
@@ -347,6 +348,7 @@ namespace BehaviorTree {
         treeTickRateClock.reset(config.RateSettings.TreeTickRate);
         naviCommandRateClock.reset(config.RateSettings.NaviCommandRate);
 
+        // 关键参数防御式校验：避免配置错误把系统带入不可控状态。
         if (config.LeagueStrategySettings.GoalHoldSec <= 0) {
             LoggerPtr->Warning("Invalid LeagueStrategy.GoalHoldSec={}, fallback to 15.", config.LeagueStrategySettings.GoalHoldSec);
             config.LeagueStrategySettings.GoalHoldSec = 15;
@@ -473,6 +475,7 @@ namespace BehaviorTree {
                 "competition_profile override '{}' replaces config profile '{}'.",
                 competitionProfileOverride_, config.CompetitionProfile);
         }
+        // 最终生效 profile = launch override 优先，其次 JSON，最后 regional 默认值。
         const auto selected_profile = effective_profile.empty() ? std::string("regional") : effective_profile;
         config.CompetitionProfile = selected_profile;
         competitionProfile_ = ParseCompetitionProfile(config.CompetitionProfile);
@@ -488,6 +491,7 @@ namespace BehaviorTree {
         }
 
         // 与旧逻辑保持一致：SetPositionRepeat 的初始优先级
+        // 联赛模式会直接进入 LeagueSimple。
         if (competitionProfile_ == CompetitionProfile::League) {
             strategyMode_ = StrategyMode::LeagueSimple;
         } else if (config.GameStrategySettings.HitSentry) {

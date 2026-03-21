@@ -4,7 +4,8 @@
 namespace BehaviorTree {
 
     void Application::PublishMessageAll() {
-        
+        // 发布顺序固定：
+        // 先模式/云台/姿态/目标，再发导航速度和导航目标，减少下游状态抖动。
         PubAimModeEnableData();
         PubGimbalControlData();
         PubPostureControlData();
@@ -12,7 +13,8 @@ namespace BehaviorTree {
         PubNaviControlData();
         if(naviCommandRateClock.trigger()) {
             naviCommandRateClock.tick();
-            // PubNaviGoal();
+            // 导航目标按模式二选一：
+            // UseXY=true 走 /ly/navi/goal_pos；否则走 /ly/navi/goal。
             if(config.NaviSettings.UseXY) PubNaviGoalPos();
             else PubNaviGoal();
         }
@@ -100,6 +102,7 @@ namespace BehaviorTree {
         {
             std_msgs::msg::UInt8 msg;
             msg.data = naviCommandGoal;
+            // 语义：导航目标点 ID（不是坐标）
             pub_navi_goal_->publish(msg);
         }
         {

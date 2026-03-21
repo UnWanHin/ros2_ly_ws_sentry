@@ -143,6 +143,9 @@ std::string DefaultConfigPathForProfile(const std::string& pkg_path, const std::
         // 4. [ROS 2] 動態獲取 Config 和 XML 路徑
         try {
             std::string pkg_path = ament_index_cpp::get_package_share_directory("behavior_tree");
+            // 说明：
+            // competition_profile/bt_config_file/bt_tree_file 都支持 launch 参数覆盖，
+            // 便于在不改包内文件的情况下切换联赛/区域赛配置。
             competitionProfileOverride_ = ReadStringParameter(*node_, "competition_profile", "");
             const std::string tree_override = ReadStringParameter(*node_, "bt_tree_file", "");
             const std::string config_override = ReadStringParameter(*node_, "bt_config_file", "");
@@ -151,6 +154,9 @@ std::string DefaultConfigPathForProfile(const std::string& pkg_path, const std::
             leagueRefereeStaleTimeoutMs_ = std::max(0, ReadIntParameter(*node_, "league_referee_stale_timeout_ms", 0));
 
             const std::string default_tree_file = pkg_path + "/Scripts/main.xml";
+            // 按 profile 选择默认 JSON：
+            // league -> league_competition.json
+            // 其他 -> Scripts/config.json（后续再由 JSON 内字段修正 profile）。
             const std::string default_config_file = DefaultConfigPathForProfile(pkg_path, competitionProfileOverride_);
 
             behavior_tree_file_ = tree_override.empty()
@@ -182,6 +188,7 @@ std::string DefaultConfigPathForProfile(const std::string& pkg_path, const std::
 
         // [修復] 初始化所有發布者指針 — 必須在 PublishMessageAll() 之前完成
         // 每個指針對應 Topic.hpp 中的 topic 名稱和 Application.hpp 中聲明的類型
+        // 这里集中初始化，避免运行期因空指针导致发布失败。
         pub_aa_enable_       = node_->create_publisher<std_msgs::msg::Bool>(ly_aa_enable::Name, 10);
         pub_ra_enable_       = node_->create_publisher<std_msgs::msg::Bool>(ly_ra_enable::Name, 10);
         pub_outpost_enable_  = node_->create_publisher<std_msgs::msg::Bool>(ly_outpost_enable::Name, 10);

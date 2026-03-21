@@ -33,6 +33,8 @@ namespace BehaviorTree {
     void Application::UpdateBlackBoard() {
 
         std::uint16_t SelfHealth = myselfHealth;
+        // 三路目标源统一折叠成一个 IsFindTarget，供 BT 和姿态模块复用。
+        // 注意这里是“本拍是否有新鲜目标”，不是长期跟踪状态。
         const bool has_auto_target = autoAimData.Fresh && autoAimData.Valid;
         const bool has_buff_target = buffAimData.Fresh && buffAimData.Valid && buffAimData.BuffFollow;
         const bool has_outpost_target = outpostAimData.Fresh && outpostAimData.Valid;
@@ -111,9 +113,9 @@ namespace BehaviorTree {
 
         
         // 小陀螺策略：
-        // 1) 常态保持高速(3)
-        // 2) 受击后 2 秒内进入变速节奏
-        // 3) 协议无方向位，使用两套节奏交替作为“拟变向”信号
+        // 1) 平时低速巡航（当前实现：1）
+        // 2) 检测到掉血后，2 秒内走变速序列，提升存活率
+        // 3) 通讯协议没有方向位，用 A/B 两套节奏交替模拟“变向”
         const auto rotate_now = std::chrono::steady_clock::now();
         static auto last_damage_rotate_time = std::chrono::steady_clock::time_point{};
         static bool rotate_pattern_flip = false;
@@ -208,7 +210,7 @@ namespace BehaviorTree {
                     }
                     const auto current_time = std::chrono::steady_clock::now();
                     nextAngles = GimbalAnglesType{
-                        static_cast<AngleType>(gimbalAngles.Yaw + 3 * delta_yaw),
+                        static_cast<AngleType>(gimbalAngles.Yaw + 4 * delta_yaw),
                         AngleType{-0.0f + pitch_wave.Produce(current_time) * 3.0f}
                     };
 
@@ -616,6 +618,7 @@ namespace BehaviorTree {
         const auto& league = config.LeagueStrategySettings;
         const int hold_sec = std::max(1, league.GoalHoldSec);
 
+        // 联赛模式优先做回补判定；命中后直接返回，不再切换巡航点。
         if (CheckPositionRecovery()) {
             LoggerPtr->Info("League profile recovery: health={} ammo={}", myselfHealth, ammoLeft);
             leaguePatrolGoalIndex_ = 0;
@@ -625,6 +628,8 @@ namespace BehaviorTree {
 
         std::vector<std::uint8_t> plan;
         plan.reserve(1 + league.PatrolGoals.size());
+        // 计划路径由 MainGoal + PatrolGoals 去重组成。
+        // 这里保证非法点位不会进入运行态。
         auto append_goal = [&](const std::uint8_t goal_id) {
             if (!IsValidBaseGoalId(goal_id)) {
                 LoggerPtr->Warning("Skip invalid league goal id={}.", static_cast<int>(goal_id));
@@ -859,6 +864,10 @@ namespace BehaviorTree {
             : !disable_team_offset_for_debug;
         const auto recovery_goal_id = ResolveGoalId(LangYa::Recovery.ID, MyTeam, apply_team_offset);
         if (IsLeagueProfile()) {
+            // 联赛回补策略核心：
+            // - 以裁判输入（自身血量/弹药）作为唯一触发源
+            // - 带 stale 检查，避免旧数据误触发回补
+            // - 回补失败后带 cooldown，防止频繁抖动
             const auto& league = config.LeagueStrategySettings;
             const auto now = std::chrono::steady_clock::now();
             const std::uint16_t recovery_exit_min = league.HealthRecoveryExitMin;
@@ -922,6 +931,7 @@ namespace BehaviorTree {
             }
 
             if (effective_health_low && !leagueRecoveryActive_) {
+                // 进入“血量回补状态机”
                 leagueRecoveryActive_ = true;
                 leagueRecoveryStartTime_ = now;
                 leagueRecoveryReach350Time_ = std::chrono::steady_clock::time_point{};
@@ -977,6 +987,7 @@ namespace BehaviorTree {
                     return false;
                 }
 
+                // 回补进行中：持续锁定 Recovery 点位，缩短导航重发间隔。
                 SetPositionByBaseGoal(LangYa::Recovery.ID, MyTeam, apply_team_offset);
                 naviCommandIntervalClock.reset(Seconds{1});
                 return true;

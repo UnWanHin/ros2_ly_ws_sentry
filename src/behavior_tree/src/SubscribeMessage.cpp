@@ -40,6 +40,12 @@ namespace BehaviorTree{
         LoggerPtr->Debug("-----------End PrintMessageAll-----------");
     }
     void Application::SubscribeMessageAll() {
+        // 输入分组说明：
+        // 1) 云台与火控回读
+        // 2) 裁判/比赛态数据（血量、弹药、时间、开赛标志）
+        // 3) 感知与预测结果（装甲板、predictor/buff/outpost 目标）
+        // 4) 导航与定位（速度、位置、低头标志）
+
         // ly_gimbal_angles
         GenSub<ly_gimbal_angles>([](Application& app, auto msg) {
             app.gimbalAngles = GimbalAnglesType{
@@ -89,6 +95,7 @@ namespace BehaviorTree{
 
         // ly_game_all
         GenSub<ly_game_all>([](Application& app, auto msg) {
+            // 联赛回补逻辑依赖这组“最近接收时间”，用于 stale 防护。
             app.myselfHealth = msg->selfhealth;
             app.hasReceivedMyselfHealth_ = true;
             app.lastMyselfHealthRxTime = std::chrono::steady_clock::now();
@@ -223,6 +230,8 @@ namespace BehaviorTree{
             const auto now = std::chrono::steady_clock::now();
             obj.autoAimData.HasLatchedAngles = true;
             obj.autoAimData.LastValidTime = now;
+            // 任一目标源回调都会置位 isFindTargetAtomic；
+            // 发布端按该标记决定是否进入瞄准/开火分支。
             obj.isFindTargetAtomic = true;
             obj.lastTargetSeenTime = now;
             obj.LoggerPtr->Debug("Predictor callback latched old-style auto-aim angles.");
