@@ -90,16 +90,16 @@
       shoot_table_adjust:
         enable: true
         pitch:
-          intercept: -1.447
-          coef_z: -4.576
-          coef_d: 0.9244
+          intercept: -1.547
+          coef_z: -4.876
+          coef_d: 1.1344
           coef_z2: -16.5213
           coef_zd: -1.14337
           coef_d2: -0.1510
         yaw:
           intercept: 1.0714
           coef_z: -7.7968
-          coef_d: -1.15504
+          coef_d: -1.25504
           coef_z2: -15.632
           coef_zd: 0.1603
           coef_d2: 0.1827
