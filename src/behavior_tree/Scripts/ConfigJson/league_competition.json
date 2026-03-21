@@ -26,7 +26,7 @@
     },
     "LeagueStrategy": {
         "UseHealthRecovery": true,
-        "HealthRecoveryThreshold": 120,
+        "HealthRecoveryThreshold": 210,
         "UseAmmoRecovery": true,
         "AmmoRecoveryThreshold": 30,
         "HealthRecoveryExitMin": 350,

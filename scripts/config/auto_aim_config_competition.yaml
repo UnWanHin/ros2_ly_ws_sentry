@@ -90,19 +90,19 @@
       shoot_table_adjust:
         enable: true
         pitch:
-          intercept: -1.428
-          coef_z: -8.30
-          coef_d: 0.382
-          coef_z2: -0.055
-          coef_zd: 2.316
-          coef_d2: 0.072
+          intercept: -1.447
+          coef_z: -4.576
+          coef_d: 0.9244
+          coef_z2: -16.5213
+          coef_zd: -1.14337
+          coef_d2: -0.1510
         yaw:
-          intercept: -0.337
-          coef_z: -7.101
-          coef_d: -0.727
-          coef_z2: 8.601
-          coef_zd: 1.944
-          coef_d2: 0.141
+          intercept: 1.0714
+          coef_z: -7.7968
+          coef_d: -1.15504
+          coef_z2: -15.632
+          coef_zd: 0.1603
+          coef_d2: 0.1827
 
     # ----------------------------------------------------
     # MotionModel Q/R (process and measurement noise)
