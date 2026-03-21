@@ -1,3 +1,7 @@
+// AUTO-COMMENT: file overview
+// This file belongs to the ROS2 sentry workspace codebase.
+// Keep behavior and interface changes synchronized with related modules.
+
 #include "car_detector/yolo_detector.hpp"
 #include <opencv2/dnn.hpp>
 #include <opencv2/imgproc.hpp>

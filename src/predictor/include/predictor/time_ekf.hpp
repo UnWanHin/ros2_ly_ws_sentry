@@ -1,3 +1,7 @@
+// AUTO-COMMENT: file overview
+// This file belongs to the ROS2 sentry workspace codebase.
+// Keep behavior and interface changes synchronized with related modules.
+
 // 包装了ekf.hpp，用于更方便的时间序列预测
 #pragma once
 #include "ekf.hpp"

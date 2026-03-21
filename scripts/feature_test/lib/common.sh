@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# AUTO-COMMENT: file overview
+# This file belongs to the ROS2 sentry workspace codebase.
+# Keep behavior and interface changes synchronized with related modules.
+
+
 ft_info() {
   printf "[FEATURE-TEST][INFO] %s\n" "$*"
 }

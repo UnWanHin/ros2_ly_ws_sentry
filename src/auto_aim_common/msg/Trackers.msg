@@ -1,3 +1,7 @@
+# AUTO-COMMENT: file overview
+# This file belongs to the ROS2 sentry workspace codebase.
+# Keep behavior and interface changes synchronized with related modules.
+
 # 装甲板和车辆的匹配器
 
 std_msgs/Header header

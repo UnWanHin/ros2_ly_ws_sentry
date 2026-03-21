@@ -1,3 +1,7 @@
+# AUTO-COMMENT: file overview
+# This file belongs to the ROS2 sentry workspace codebase.
+# Keep behavior and interface changes synchronized with related modules.
+
 # 时间戳
 std_msgs/Header header
 # 跟踪器返回的目标消息

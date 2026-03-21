@@ -1,3 +1,7 @@
+// AUTO-COMMENT: file overview
+// This file belongs to the ROS2 sentry workspace codebase.
+// Keep behavior and interface changes synchronized with related modules.
+
 #include "auto_aim_common/ControllerType.hpp"
 #include "auto_aim_common/PredictionType.hpp"
 #include "auto_aim_common/SolverType.hpp"

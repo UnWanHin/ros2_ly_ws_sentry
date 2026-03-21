@@ -1,3 +1,7 @@
+// AUTO-COMMENT: file overview
+// This file belongs to the ROS2 sentry workspace codebase.
+// Keep behavior and interface changes synchronized with related modules.
+
 // 改用SOLVER::global_solver_node = my_node_ptr;
 /*
  * outpost_hitter_node（打前哨）

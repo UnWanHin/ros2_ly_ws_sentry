@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# AUTO-COMMENT: file overview
+# This file belongs to the ROS2 sentry workspace codebase.
+# Keep behavior and interface changes synchronized with related modules.
+
+
 ft_topic_publisher_count() {
   local topic="$1"
   local output

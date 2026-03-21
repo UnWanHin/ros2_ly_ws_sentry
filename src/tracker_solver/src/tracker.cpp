@@ -1,3 +1,7 @@
+// AUTO-COMMENT: file overview
+// This file belongs to the ROS2 sentry workspace codebase.
+// Keep behavior and interface changes synchronized with related modules.
+
 #include "car_tracker/tracker.hpp"
 #include "car_tracker/tracker_matcher.hpp"
 #include "car_tracker/tracker_matcher_with_whole_car.hpp"

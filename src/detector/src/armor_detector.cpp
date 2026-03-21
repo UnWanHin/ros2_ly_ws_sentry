@@ -1,3 +1,7 @@
+// AUTO-COMMENT: file overview
+// This file belongs to the ROS2 sentry workspace codebase.
+// Keep behavior and interface changes synchronized with related modules.
+
 #include "armor_detector/armor_detector.hpp"
 #include <algorithm>
 //#include <spdlog/spdlog.h>

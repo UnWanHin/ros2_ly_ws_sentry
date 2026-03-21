@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+# AUTO-COMMENT: file overview
+# This file belongs to the ROS2 sentry workspace codebase.
+# Keep behavior and interface changes synchronized with related modules.
+
+
 import os
 
 from ament_index_python.packages import get_package_share_directory

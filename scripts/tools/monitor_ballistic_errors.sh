@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# AUTO-COMMENT: file overview
+# This file belongs to the ROS2 sentry workspace codebase.
+# Keep behavior and interface changes synchronized with related modules.
+
 set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"

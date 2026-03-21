@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+# AUTO-COMMENT: file overview
+# This file belongs to the ROS2 sentry workspace codebase.
+# Keep behavior and interface changes synchronized with related modules.
+
 """
 自瞄链路启动入口（不含 behavior_tree）。
 

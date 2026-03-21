@@ -1,3 +1,7 @@
+// AUTO-COMMENT: file overview
+// This file belongs to the ROS2 sentry workspace codebase.
+// Keep behavior and interface changes synchronized with related modules.
+
 #include "../include/Application.hpp"
 
 #include <algorithm>
@@ -210,11 +214,7 @@ namespace BehaviorTree {
                     }
                     const auto current_time = std::chrono::steady_clock::now();
                     nextAngles = GimbalAnglesType{
-<<<<<<< HEAD
                         static_cast<AngleType>(gimbalAngles.Yaw + 4 * delta_yaw),
-=======
-                        static_cast<AngleType>(gimbalAngles.Yaw + 5 * delta_yaw),
->>>>>>> 4908e600c154f9f8d6ac8cec9c60f36bab76531e
                         AngleType{-0.0f + pitch_wave.Produce(current_time) * 3.0f}
                     };
 

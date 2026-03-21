@@ -1,3 +1,7 @@
+# AUTO-COMMENT: file overview
+# This file belongs to the ROS2 sentry workspace codebase.
+# Keep behavior and interface changes synchronized with related modules.
+
 bool tracking  # 是否开始跟踪 ， 替代找到目标IsfindTarget
 geometry_msgs/Point position  # xc yc zc
 float32 yaw
