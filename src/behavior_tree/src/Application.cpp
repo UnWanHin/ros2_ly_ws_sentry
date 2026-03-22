@@ -247,6 +247,12 @@ std::string DefaultConfigPathForProfile(const std::string& pkg_path, const std::
     void Application::Run() {
         // 1. 等待比賽開始 (這通常會阻塞，直到收到裁判系統消息)
         WaitBeforeGame();
+        leagueRouteCompatAfterGatePending_ = IsLeagueRouteCompatEnabled();
+        leagueRouteCompatActive_ = false;
+        leagueRouteCompatUntil_ = std::chrono::steady_clock::time_point{};
+        leagueRouteCompatHasPendingGoal_ = false;
+        leagueRouteCompatPendingBaseGoal_ = LangYa::Home.ID;
+        leagueRouteCompatPendingHoldSec_ = 1;
 
         // 2. 記錄比賽開始時間
         gameStartTime = std::chrono::steady_clock::now();

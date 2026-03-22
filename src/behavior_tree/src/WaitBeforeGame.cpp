@@ -3,6 +3,7 @@
 // Keep behavior and interface changes synchronized with related modules.
 
 #include "../include/Application.hpp"
+#include <algorithm>
 
 using namespace LangYa;
 
@@ -29,7 +30,20 @@ namespace BehaviorTree {
 
         const auto wait_begin = std::chrono::steady_clock::now();
         auto last_wait_log = wait_begin;
+        auto last_league_gate_log = wait_begin;
         bool bypass_logged = false;
+        const bool league_damage_open_gate_enabled =
+            IsLeagueProfile() && config.LeagueStrategySettings.EnableDamageOpenGate;
+        const std::uint16_t league_damage_open_gate_threshold =
+            std::max<std::uint16_t>(1, config.LeagueStrategySettings.DamageOpenGateThreshold);
+        bool league_health_baseline_initialized = false;
+        std::uint16_t league_health_peak = 0;
+
+        if (league_damage_open_gate_enabled) {
+            LoggerPtr->Info(
+                "League extra start gate enabled: open by health drop >= {}.",
+                static_cast<int>(league_damage_open_gate_threshold));
+        }
 
         // [ROS 2] 不再依賴文件系統判斷，直接等待 is_game_begin 標誌
         while (rclcpp::ok()) {
@@ -80,6 +94,54 @@ namespace BehaviorTree {
             if (is_game_begin) {
                 LoggerPtr->Info("!!!!Game !! start!!!!");
                 break;
+            }
+
+            if (league_damage_open_gate_enabled) {
+                const auto is_health_input_ready = [&]() -> bool {
+                    if (!hasReceivedMyselfHealth_) {
+                        return false;
+                    }
+                    if (lastMyselfHealthRxTime.time_since_epoch().count() == 0) {
+                        return false;
+                    }
+                    if (leagueRefereeStaleTimeoutMs_ <= 0) {
+                        return true;
+                    }
+                    const auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now_steady - lastMyselfHealthRxTime).count();
+                    return age_ms <= leagueRefereeStaleTimeoutMs_;
+                };
+
+                if (is_health_input_ready()) {
+                    if (!league_health_baseline_initialized) {
+                        league_health_peak = myselfHealth;
+                        league_health_baseline_initialized = true;
+                        LoggerPtr->Info(
+                            "League gate baseline health captured: {}.",
+                            static_cast<int>(league_health_peak));
+                    } else {
+                        if (myselfHealth > league_health_peak) {
+                            league_health_peak = myselfHealth;
+                        }
+                        const std::uint16_t health_drop = league_health_peak > myselfHealth
+                            ? static_cast<std::uint16_t>(league_health_peak - myselfHealth)
+                            : 0;
+                        if (health_drop >= league_damage_open_gate_threshold) {
+                            LoggerPtr->Warning(
+                                "League gate opened by health drop: peak={} current={} drop={} threshold={}.",
+                                static_cast<int>(league_health_peak),
+                                static_cast<int>(myselfHealth),
+                                static_cast<int>(health_drop),
+                                static_cast<int>(league_damage_open_gate_threshold));
+                            break;
+                        }
+                    }
+                } else if (now_steady - last_league_gate_log > std::chrono::seconds(2)) {
+                    LoggerPtr->Warning(
+                        "League gate waiting for fresh /ly/game/all.selfhealth (stale_timeout_ms={}).",
+                        leagueRefereeStaleTimeoutMs_);
+                    last_league_gate_log = now_steady;
+                }
             }
         }
         LoggerPtr->Info("Stop Waiting For Game");

@@ -185,6 +185,8 @@ namespace LangYa {
         ls.HealthRecoveryExitStableSec = j.value("HealthRecoveryExitStableSec", ls.HealthRecoveryExitStableSec);
         ls.HealthRecoveryMaxHoldSec = j.value("HealthRecoveryMaxHoldSec", ls.HealthRecoveryMaxHoldSec);
         ls.HealthRecoveryCooldownSec = j.value("HealthRecoveryCooldownSec", ls.HealthRecoveryCooldownSec);
+        ls.EnableDamageOpenGate = j.value("EnableDamageOpenGate", ls.EnableDamageOpenGate);
+        ls.DamageOpenGateThreshold = j.value("DamageOpenGateThreshold", ls.DamageOpenGateThreshold);
         ls.MainGoal = j.value("MainGoal", ls.MainGoal);
         ls.GoalHoldSec = j.value("GoalHoldSec", ls.GoalHoldSec);
         if (j.contains("PatrolGoals")) {
@@ -319,6 +321,8 @@ namespace BehaviorTree {
         LoggerPtr->Debug("HealthRecoveryExitStableSec: {}", config.LeagueStrategySettings.HealthRecoveryExitStableSec);
         LoggerPtr->Debug("HealthRecoveryMaxHoldSec: {}", config.LeagueStrategySettings.HealthRecoveryMaxHoldSec);
         LoggerPtr->Debug("HealthRecoveryCooldownSec: {}", config.LeagueStrategySettings.HealthRecoveryCooldownSec);
+        LoggerPtr->Debug("EnableDamageOpenGate: {}", config.LeagueStrategySettings.EnableDamageOpenGate);
+        LoggerPtr->Debug("DamageOpenGateThreshold: {}", config.LeagueStrategySettings.DamageOpenGateThreshold);
         LoggerPtr->Debug("MainGoal: {}", static_cast<int>(config.LeagueStrategySettings.MainGoal));
         LoggerPtr->Debug("GoalHoldSec: {}", config.LeagueStrategySettings.GoalHoldSec);
         LoggerPtr->Debug("------ ShowcasePatrol ------");
@@ -405,6 +409,17 @@ namespace BehaviorTree {
                 "Invalid LeagueStrategy.HealthRecoveryCooldownSec={}, fallback to 0.",
                 config.LeagueStrategySettings.HealthRecoveryCooldownSec);
             config.LeagueStrategySettings.HealthRecoveryCooldownSec = 0;
+        }
+        if (config.LeagueStrategySettings.DamageOpenGateThreshold == 0) {
+            LoggerPtr->Warning(
+                "Invalid LeagueStrategy.DamageOpenGateThreshold=0, fallback to 30.");
+            config.LeagueStrategySettings.DamageOpenGateThreshold = 30;
+        }
+        if (config.LeagueStrategySettings.DamageOpenGateThreshold > 400) {
+            LoggerPtr->Warning(
+                "Invalid LeagueStrategy.DamageOpenGateThreshold={}, clamp to 400.",
+                config.LeagueStrategySettings.DamageOpenGateThreshold);
+            config.LeagueStrategySettings.DamageOpenGateThreshold = 400;
         }
         if (!IsValidBaseGoal(config.LeagueStrategySettings.MainGoal)) {
             LoggerPtr->Warning(

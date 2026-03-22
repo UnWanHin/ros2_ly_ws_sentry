@@ -21,6 +21,8 @@ namespace BehaviorTree {
 
     namespace {
     constexpr std::uint8_t kMaxBaseGoalId = LangYa::OccupyArea.ID;
+    constexpr std::uint8_t kLeagueRouteCompatViaGoalBaseId = LangYa::LeftHighLand.ID;  // base goal id=4
+    constexpr int kLeagueRouteCompatViaHoldSec = 5;
     // 丢 1~2 帧时保留锁角，避免抖动；时间过长会让云台“粘住旧目标”。
     constexpr auto kLostTargetHold = std::chrono::milliseconds(200);
 
@@ -117,6 +119,7 @@ namespace BehaviorTree {
         static constexpr auto kPatrolScanYawStep = 4.0f * delta_yaw;
         static constexpr auto kPatrolScanYawBoostStep = 6.0f * delta_yaw;
         static constexpr int kDamageScanBoostWindowMs = 1300;
+        static constexpr int kDamageScanYawPhaseMs = 160;
 
         
         // 小陀螺策略：
@@ -213,17 +216,20 @@ namespace BehaviorTree {
                 if (!config.AimDebugSettings.StopScan && now - lastFoundEnemyTime > std::chrono::milliseconds(2000)) {
                     static auto last_searching_log = std::chrono::steady_clock::time_point{};
                     const bool boost_patrol_scan =
-                        config.LeagueStrategySettings.DamageScanBoostEnable &&
                         aimMode == AimMode::RotateScan &&
                         damage_rotate_elapsed_ms >= 0 &&
                         damage_rotate_elapsed_ms <= kDamageScanBoostWindowMs;
                     const auto yaw_scan_step = boost_patrol_scan
                         ? kPatrolScanYawBoostStep
                         : kPatrolScanYawStep;
+                    const int yaw_scan_direction = boost_patrol_scan
+                        ? (((damage_rotate_elapsed_ms / kDamageScanYawPhaseMs) % 2 == 0) ? 1 : -1)
+                        : 1;
                     if (now - last_searching_log > std::chrono::seconds(2)) {
                         LoggerPtr->Debug(
-                            "Searching Target... yaw_step={} (damage_boost={} elapsed_ms={})",
+                            "Searching Target... yaw_step={} dir={} (damage_boost={} elapsed_ms={})",
                             yaw_scan_step,
+                            yaw_scan_direction,
                             boost_patrol_scan ? 1 : 0,
                             damage_rotate_elapsed_ms);
                         last_searching_log = now;
@@ -231,7 +237,7 @@ namespace BehaviorTree {
                     }
                     const auto current_time = std::chrono::steady_clock::now();
                     nextAngles = GimbalAnglesType{
-                        static_cast<AngleType>(gimbalAngles.Yaw + yaw_scan_step),
+                        static_cast<AngleType>(gimbalAngles.Yaw + yaw_scan_direction * yaw_scan_step),
                         AngleType{-0.0f + pitch_wave.Produce(current_time) * 3.0f}
                     };
 
@@ -578,6 +584,84 @@ namespace BehaviorTree {
 
 namespace BehaviorTree {
 
+    bool Application::IsLeagueRouteCompatEnabled() const noexcept {
+        return IsLeagueProfile() && !config.NaviSettings.UseXY;
+    }
+
+    bool Application::IsLeagueGoalSwitchBetween2And3(
+        const std::uint8_t from_goal_id,
+        const std::uint8_t to_goal_id,
+        const UnitTeam goal_team,
+        const bool apply_team_offset) const noexcept {
+        const auto goal_2 = ResolveGoalId(LangYa::Recovery.ID, goal_team, apply_team_offset);
+        const auto goal_3 = ResolveGoalId(LangYa::BuffShoot.ID, goal_team, apply_team_offset);
+        return (from_goal_id == goal_2 && to_goal_id == goal_3) ||
+            (from_goal_id == goal_3 && to_goal_id == goal_2);
+    }
+
+    bool Application::TickLeagueRouteCompat(
+        const UnitTeam goal_team,
+        const bool apply_team_offset) {
+        if (!IsLeagueRouteCompatEnabled() || !leagueRouteCompatActive_) {
+            return false;
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (now < leagueRouteCompatUntil_) {
+            SetPositionByBaseGoal(kLeagueRouteCompatViaGoalBaseId, goal_team, apply_team_offset);
+            naviCommandIntervalClock.reset(Seconds{1});
+            speedLevel = 1;
+            return true;
+        }
+
+        leagueRouteCompatActive_ = false;
+        leagueRouteCompatUntil_ = std::chrono::steady_clock::time_point{};
+        if (!leagueRouteCompatHasPendingGoal_) {
+            return false;
+        }
+
+        const auto pending_base_goal = leagueRouteCompatPendingBaseGoal_;
+        const int pending_hold_sec = std::max(1, leagueRouteCompatPendingHoldSec_);
+        leagueRouteCompatHasPendingGoal_ = false;
+
+        SetPositionByBaseGoal(pending_base_goal, goal_team, apply_team_offset);
+        naviCommandIntervalClock.reset(Seconds{pending_hold_sec});
+        speedLevel = 1;
+        LoggerPtr->Info(
+            "League route compat finished: via goal done, continue goal={} hold={}s.",
+            static_cast<int>(naviCommandGoal),
+            pending_hold_sec);
+        return true;
+    }
+
+    void Application::StartLeagueRouteCompat(
+        const std::uint8_t pending_base_goal,
+        const int pending_hold_sec,
+        const UnitTeam goal_team,
+        const bool apply_team_offset,
+        const char* reason) {
+        if (!IsLeagueRouteCompatEnabled()) {
+            return;
+        }
+        const int safe_pending_hold_sec = std::max(1, pending_hold_sec);
+        leagueRouteCompatActive_ = true;
+        leagueRouteCompatUntil_ = std::chrono::steady_clock::now() + std::chrono::seconds(kLeagueRouteCompatViaHoldSec);
+        leagueRouteCompatHasPendingGoal_ = true;
+        leagueRouteCompatPendingBaseGoal_ = pending_base_goal;
+        leagueRouteCompatPendingHoldSec_ = safe_pending_hold_sec;
+
+        SetPositionByBaseGoal(kLeagueRouteCompatViaGoalBaseId, goal_team, apply_team_offset);
+        naviCommandIntervalClock.reset(Seconds{1});
+        speedLevel = 1;
+        LoggerPtr->Info(
+            "League route compat {}: via goal={} for {}s, then goal={} hold={}s.",
+            reason ? reason : "start",
+            static_cast<int>(naviCommandGoal),
+            kLeagueRouteCompatViaHoldSec,
+            static_cast<int>(ResolveGoalId(pending_base_goal, goal_team, apply_team_offset)),
+            safe_pending_hold_sec);
+    }
+
     std::uint8_t Application::ResolveGoalId(
         const std::uint8_t base_goal_id,
         const UnitTeam team,
@@ -638,6 +722,28 @@ namespace BehaviorTree {
     void Application::SetPositionLeagueSimple() {
         const auto& league = config.LeagueStrategySettings;
         const int hold_sec = std::max(1, league.GoalHoldSec);
+        constexpr bool apply_team_offset = true;
+        if (IsLeagueRouteCompatEnabled() && leagueRouteCompatAfterGatePending_) {
+            leagueRouteCompatAfterGatePending_ = false;
+            leagueRouteCompatActive_ = true;
+            leagueRouteCompatUntil_ =
+                std::chrono::steady_clock::now() + std::chrono::seconds(kLeagueRouteCompatViaHoldSec);
+            leagueRouteCompatHasPendingGoal_ = false;
+            leagueRouteCompatPendingBaseGoal_ = LangYa::Home.ID;
+            leagueRouteCompatPendingHoldSec_ = 1;
+            SetPositionByBaseGoal(kLeagueRouteCompatViaGoalBaseId, team, apply_team_offset);
+            naviCommandIntervalClock.reset(Seconds{1});
+            speedLevel = 1;
+            LoggerPtr->Info(
+                "League route compat after_gate: via goal={} for {}s.",
+                static_cast<int>(naviCommandGoal),
+                kLeagueRouteCompatViaHoldSec);
+            return;
+        }
+
+        if (TickLeagueRouteCompat(team, apply_team_offset)) {
+            return;
+        }
 
         // 联赛模式优先做回补判定；命中后直接返回，不再切换巡航点。
         if (CheckPositionRecovery()) {
@@ -670,7 +776,24 @@ namespace BehaviorTree {
 
         if (!leaguePatrolGoalInitialized_) {
             leaguePatrolGoalIndex_ = 0;
-            SetPositionByBaseGoal(plan[leaguePatrolGoalIndex_], team);
+            const auto init_goal_id = ResolveGoalId(plan[leaguePatrolGoalIndex_], team, apply_team_offset);
+            if (IsLeagueRouteCompatEnabled()) {
+                if (IsLeagueGoalSwitchBetween2And3(
+                        naviCommandGoal,
+                        init_goal_id,
+                        team,
+                        apply_team_offset)) {
+                    leaguePatrolGoalInitialized_ = true;
+                    StartLeagueRouteCompat(
+                        plan[leaguePatrolGoalIndex_],
+                        hold_sec,
+                        team,
+                        apply_team_offset,
+                        "init_2_3_switch");
+                    return;
+                }
+            }
+            SetPositionByBaseGoal(plan[leaguePatrolGoalIndex_], team, apply_team_offset);
             naviCommandIntervalClock.reset(Seconds{hold_sec});
             speedLevel = 1;
             leaguePatrolGoalInitialized_ = true;
@@ -684,7 +807,22 @@ namespace BehaviorTree {
             });
         if (current_it == plan.end()) {
             leaguePatrolGoalIndex_ = 0;
-            SetPositionByBaseGoal(plan[leaguePatrolGoalIndex_], team);
+            const auto reset_goal_id = ResolveGoalId(plan[leaguePatrolGoalIndex_], team, apply_team_offset);
+            if (IsLeagueRouteCompatEnabled() &&
+                IsLeagueGoalSwitchBetween2And3(
+                    naviCommandGoal,
+                    reset_goal_id,
+                    team,
+                    apply_team_offset)) {
+                StartLeagueRouteCompat(
+                    plan[leaguePatrolGoalIndex_],
+                    hold_sec,
+                    team,
+                    apply_team_offset,
+                    "reset_2_3_switch");
+                return;
+            }
+            SetPositionByBaseGoal(plan[leaguePatrolGoalIndex_], team, apply_team_offset);
             naviCommandIntervalClock.reset(Seconds{hold_sec});
             speedLevel = 1;
             LoggerPtr->Info("League profile reset goal={}", static_cast<int>(naviCommandGoal));
@@ -705,7 +843,23 @@ namespace BehaviorTree {
         if (plan.size() > 1U) {
             leaguePatrolGoalIndex_ = (leaguePatrolGoalIndex_ + 1U) % plan.size();
         }
-        SetPositionByBaseGoal(plan[leaguePatrolGoalIndex_], team);
+        const auto target_base_goal = plan[leaguePatrolGoalIndex_];
+        const auto target_goal_id = ResolveGoalId(target_base_goal, team, apply_team_offset);
+        if (IsLeagueRouteCompatEnabled() &&
+            IsLeagueGoalSwitchBetween2And3(
+                naviCommandGoal,
+                target_goal_id,
+                team,
+                apply_team_offset)) {
+            StartLeagueRouteCompat(
+                target_base_goal,
+                hold_sec,
+                team,
+                apply_team_offset,
+                "switch_2_3");
+            return;
+        }
+        SetPositionByBaseGoal(target_base_goal, team, apply_team_offset);
         naviCommandIntervalClock.reset(Seconds{hold_sec});
         speedLevel = 1;
         LoggerPtr->Info("League profile switch goal={}", static_cast<int>(naviCommandGoal));
@@ -891,6 +1045,9 @@ namespace BehaviorTree {
             // - 回补失败后带 cooldown，防止频繁抖动
             const auto& league = config.LeagueStrategySettings;
             const auto now = std::chrono::steady_clock::now();
+            if (TickLeagueRouteCompat(MyTeam, apply_team_offset)) {
+                return true;
+            }
             const std::uint16_t recovery_exit_min = league.HealthRecoveryExitMin;
             const std::uint16_t recovery_exit_preferred = league.HealthRecoveryExitPreferred;
             const auto recovery_plateau = std::chrono::seconds(league.HealthRecoveryPlateauSec);
@@ -999,6 +1156,20 @@ namespace BehaviorTree {
                 }
 
                 // 回补进行中：持续锁定 Recovery 点位，缩短导航重发间隔。
+                if (IsLeagueRouteCompatEnabled() &&
+                    IsLeagueGoalSwitchBetween2And3(
+                        naviCommandGoal,
+                        recovery_goal_id,
+                        MyTeam,
+                        apply_team_offset)) {
+                    StartLeagueRouteCompat(
+                        LangYa::Recovery.ID,
+                        1,
+                        MyTeam,
+                        apply_team_offset,
+                        "recovery_2_3_switch");
+                    return true;
+                }
                 SetPositionByBaseGoal(LangYa::Recovery.ID, MyTeam, apply_team_offset);
                 naviCommandIntervalClock.reset(Seconds{1});
                 return true;
@@ -1011,6 +1182,20 @@ namespace BehaviorTree {
             }
 
             if (effective_health_low) {
+                if (IsLeagueRouteCompatEnabled() &&
+                    IsLeagueGoalSwitchBetween2And3(
+                        naviCommandGoal,
+                        recovery_goal_id,
+                        MyTeam,
+                        apply_team_offset)) {
+                    StartLeagueRouteCompat(
+                        LangYa::Recovery.ID,
+                        1,
+                        MyTeam,
+                        apply_team_offset,
+                        "recovery_2_3_switch");
+                    return true;
+                }
                 SetPositionByBaseGoal(LangYa::Recovery.ID, MyTeam, apply_team_offset);
                 naviCommandIntervalClock.reset(Seconds{1});
                 return true;

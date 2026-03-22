@@ -36,6 +36,8 @@
         "HealthRecoveryExitStableSec": 1,
         "HealthRecoveryMaxHoldSec": 12,
         "HealthRecoveryCooldownSec": 20,
+        "EnableDamageOpenGate": true,
+        "DamageOpenGateThreshold": 30,
         "MainGoal": 3,
         "PatrolGoals": [],
         "GoalHoldSec": 15

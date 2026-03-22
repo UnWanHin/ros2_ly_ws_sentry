@@ -406,6 +406,8 @@ namespace LangYa
         int HealthRecoveryExitStableSec{1};
         int HealthRecoveryMaxHoldSec{12};
         int HealthRecoveryCooldownSec{20};
+        bool EnableDamageOpenGate{false};
+        std::uint16_t DamageOpenGateThreshold{30};
         std::uint8_t MainGoal{OccupyArea.ID};
         std::vector<std::uint8_t> PatrolGoals{};
         int GoalHoldSec{15};

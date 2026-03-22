@@ -200,6 +200,12 @@ private:
     bool showcasePatrolGoalInitialized_{false};
     std::size_t naviDebugGoalIndex_{0};
     bool naviDebugGoalInitialized_{false};
+    bool leagueRouteCompatAfterGatePending_{false};
+    bool leagueRouteCompatActive_{false};
+    std::chrono::steady_clock::time_point leagueRouteCompatUntil_{};
+    bool leagueRouteCompatHasPendingGoal_{false};
+    std::uint8_t leagueRouteCompatPendingBaseGoal_{LangYa::Home.ID};
+    int leagueRouteCompatPendingHoldSec_{1};
     std::chrono::steady_clock::time_point lastLeagueRecoveryGuardLogTime_{};
     std::chrono::steady_clock::time_point lastPositionDataGuardLogTime_{};
 
@@ -358,6 +364,19 @@ public:
     void SetPositionLeagueSimple();
     void SetPositionShowcasePatrol();
     void SetPositionNaviDebugPlan();
+    bool IsLeagueRouteCompatEnabled() const noexcept;
+    bool IsLeagueGoalSwitchBetween2And3(
+        std::uint8_t from_goal_id,
+        std::uint8_t to_goal_id,
+        UnitTeam goal_team,
+        bool apply_team_offset) const noexcept;
+    bool TickLeagueRouteCompat(UnitTeam goal_team, bool apply_team_offset);
+    void StartLeagueRouteCompat(
+        std::uint8_t pending_base_goal,
+        int pending_hold_sec,
+        UnitTeam goal_team,
+        bool apply_team_offset,
+        const char* reason);
     void SetPositionByBaseGoal(std::uint8_t base_goal_id, UnitTeam team, bool apply_team_offset = true);
     std::uint8_t ResolveGoalId(std::uint8_t base_goal_id, UnitTeam team, bool apply_team_offset = true) const noexcept;
     void SetAimTarget();
