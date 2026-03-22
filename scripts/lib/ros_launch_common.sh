@@ -71,3 +71,83 @@ cleanup_existing_stack() {
   pkill -f "${launch_regex}" || true
   sleep 1
 }
+
+collect_descendant_pids() {
+  local parent_pid="$1"
+  local -a children=()
+  local child
+
+  mapfile -t children < <(pgrep -P "${parent_pid}" || true)
+  for child in "${children[@]}"; do
+    [[ -n "${child}" ]] || continue
+    echo "${child}"
+    collect_descendant_pids "${child}"
+  done
+}
+
+cleanup_existing_launch_tree() {
+  local enabled="$1"
+  local launch_regex="$2"
+
+  if [[ "${enabled}" != "1" ]]; then
+    return 0
+  fi
+
+  local -a launch_pids=()
+  mapfile -t launch_pids < <(pgrep -f "${launch_regex}" || true)
+
+  if (( ${#launch_pids[@]} == 0 )); then
+    return 0
+  fi
+
+  echo "[WARN] Detected existing launch processes (strict tree cleanup):" >&2
+  local pid
+  local cmd
+  for pid in "${launch_pids[@]}"; do
+    cmd="$(ps -o args= -p "${pid}" 2>/dev/null || true)"
+    if [[ -n "${cmd}" ]]; then
+      echo "  ${pid} ${cmd}" >&2
+    else
+      echo "  ${pid}" >&2
+    fi
+  done
+
+  local -a candidate_pids=()
+  local child
+  for pid in "${launch_pids[@]}"; do
+    candidate_pids+=("${pid}")
+    while IFS= read -r child; do
+      [[ -n "${child}" ]] || continue
+      candidate_pids+=("${child}")
+    done < <(collect_descendant_pids "${pid}")
+  done
+
+  mapfile -t candidate_pids < <(printf '%s\n' "${candidate_pids[@]}" | awk 'NF && !seen[$0]++')
+
+  echo "[INFO] Cleaning only matched launch process trees before relaunch..." >&2
+  kill -INT "${launch_pids[@]}" 2>/dev/null || true
+  sleep 1
+
+  local -a alive_pids=()
+  for pid in "${candidate_pids[@]}"; do
+    if kill -0 "${pid}" 2>/dev/null; then
+      alive_pids+=("${pid}")
+    fi
+  done
+
+  if (( ${#alive_pids[@]} > 0 )); then
+    kill -TERM "${alive_pids[@]}" 2>/dev/null || true
+    sleep 1
+  fi
+
+  alive_pids=()
+  for pid in "${candidate_pids[@]}"; do
+    if kill -0 "${pid}" 2>/dev/null; then
+      alive_pids+=("${pid}")
+    fi
+  done
+
+  if (( ${#alive_pids[@]} > 0 )); then
+    kill -KILL "${alive_pids[@]}" 2>/dev/null || true
+  fi
+}

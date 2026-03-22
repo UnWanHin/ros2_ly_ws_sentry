@@ -119,56 +119,79 @@ namespace BehaviorTree {
         static constexpr int kDamageScanBoostWindowMs = 1300;
 
         
-        // 小陀螺策略：
-        // 1) 平时低速巡航（当前实现：1）
-        // 2) 检测到掉血后，2 秒内走变速序列，提升存活率
-        // 3) 通讯协议没有方向位，用 A/B 两套节奏交替模拟“变向”
+        // 小陀螺策略（老设计）：
+        // 1) 受击后按 1 -> 2 -> 3 递进换档；
+        // 2) 到 3 档后持续保持；
+        // 3) 仅在一段时间未受击后，回落到 1 档。
         const auto rotate_now = std::chrono::steady_clock::now();
         static auto last_damage_rotate_time = std::chrono::steady_clock::time_point{};
-        static bool rotate_pattern_flip = false;
-        constexpr int kDamageRotateWindowMs = 2000;
-        constexpr int kRotatePhaseMs = 180;
-        constexpr std::uint8_t kRotatePatternA[6] = {3, 2, 3, 1, 3, 0};
-        constexpr std::uint8_t kRotatePatternB[6] = {3, 1, 3, 2, 3, 0};
+        static auto rotate_ramp_start_time = std::chrono::steady_clock::time_point{};
+        static bool rotate_under_fire = false;
+
+        constexpr int kRotateNoHitTimeoutMs = 1800;
+        constexpr int kRotateGear1HoldMs = 220;
+        constexpr int kRotateGear2HoldMs = 220;
 
         if (healthDecreaseDetector.trigger(myselfHealth)) { // 血量减少
             last_damage_rotate_time = rotate_now;
-            rotate_pattern_flip = !rotate_pattern_flip;
+            if (!rotate_under_fire) {
+                rotate_under_fire = true;
+                rotate_ramp_start_time = rotate_now;
+            }
             rotateTimerClock.tick();
         }
 
         bool in_damage_rotate_window = false;
         int damage_rotate_elapsed_ms = -1;
+        std::uint8_t rotate_gear = 1;
+
         if (last_damage_rotate_time.time_since_epoch().count() != 0) {
             const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 rotate_now - last_damage_rotate_time).count();
             damage_rotate_elapsed_ms = static_cast<int>(elapsed_ms);
-            in_damage_rotate_window = elapsed_ms <= kDamageRotateWindowMs;
-            if (in_damage_rotate_window) {
-                const auto phase = static_cast<int>((elapsed_ms / kRotatePhaseMs) % 6);
-                const auto* pattern = rotate_pattern_flip ? kRotatePatternA : kRotatePatternB;
-                gimbalControlData.FireCode.Rotate = pattern[phase];
-            } else {
-                gimbalControlData.FireCode.Rotate = 1;
-            }
-        } else {
-            gimbalControlData.FireCode.Rotate = 1;
+            in_damage_rotate_window = elapsed_ms <= kDamageScanBoostWindowMs;
         }
-        if (config.AimDebugSettings.StopRotate) gimbalControlData.FireCode.Rotate = 0;
+
+        if (rotate_under_fire) {
+            const auto no_hit_ms = (last_damage_rotate_time.time_since_epoch().count() == 0)
+                ? kRotateNoHitTimeoutMs + 1
+                : static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    rotate_now - last_damage_rotate_time).count());
+
+            if (no_hit_ms > kRotateNoHitTimeoutMs) {
+                rotate_under_fire = false;
+                rotate_gear = 1;
+            } else {
+                const auto ramp_ms = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    rotate_now - rotate_ramp_start_time).count());
+                if (ramp_ms < kRotateGear1HoldMs) {
+                    rotate_gear = 1;
+                } else if (ramp_ms < (kRotateGear1HoldMs + kRotateGear2HoldMs)) {
+                    rotate_gear = 2;
+                } else {
+                    rotate_gear = 3;
+                }
+            }
+        }
+
+        gimbalControlData.FireCode.Rotate = rotate_gear;
+        if (config.AimDebugSettings.StopRotate) {
+            gimbalControlData.FireCode.Rotate = 0;
+        }
 
         static auto last_rotate_log = std::chrono::steady_clock::time_point{};
         if (now_time >= 0) {
             const auto log_now = std::chrono::steady_clock::now();
             if (log_now - last_rotate_log > std::chrono::seconds(2)) {
                 LoggerPtr->Debug(
-                    "Rotate Speed: {} (damage_window={} pattern_flip={})",
+                    "Rotate Gear: {} (under_fire={} damage_elapsed_ms={} no_hit_timeout_ms={})",
                     gimbalControlData.FireCode.Rotate,
-                    in_damage_rotate_window ? 1 : 0,
-                    rotate_pattern_flip ? 1 : 0);
+                    rotate_under_fire ? 1 : 0,
+                    damage_rotate_elapsed_ms,
+                    kRotateNoHitTimeoutMs);
                 last_rotate_log = log_now;
             }
         }
-
 
         /*----------云台----------*/
         auto now = std::chrono::steady_clock::now();
