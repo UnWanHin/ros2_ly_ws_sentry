@@ -174,6 +174,7 @@ namespace LangYa {
     }
 
     void from_json(const json& j, LeagueStrategySetting& ls) {
+        ls.EnableRouteCompat = j.value("EnableRouteCompat", ls.EnableRouteCompat);
         ls.UseHealthRecovery = j.value("UseHealthRecovery", ls.UseHealthRecovery);
         ls.HealthRecoveryThreshold = j.value("HealthRecoveryThreshold", ls.HealthRecoveryThreshold);
         ls.UseAmmoRecovery = j.value("UseAmmoRecovery", ls.UseAmmoRecovery);
@@ -310,6 +311,7 @@ namespace BehaviorTree {
         LoggerPtr->Debug("------ NaviSetting ------");
         LoggerPtr->Debug("UseXY: {}", config.NaviSettings.UseXY);
         LoggerPtr->Debug("------ LeagueStrategy ------");
+        LoggerPtr->Debug("EnableRouteCompat: {}", config.LeagueStrategySettings.EnableRouteCompat);
         LoggerPtr->Debug("UseHealthRecovery: {}", config.LeagueStrategySettings.UseHealthRecovery);
         LoggerPtr->Debug("HealthRecoveryThreshold: {}", config.LeagueStrategySettings.HealthRecoveryThreshold);
         LoggerPtr->Debug("UseAmmoRecovery: {}", config.LeagueStrategySettings.UseAmmoRecovery);

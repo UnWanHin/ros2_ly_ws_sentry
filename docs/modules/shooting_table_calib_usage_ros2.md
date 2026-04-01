@@ -2,7 +2,7 @@
 
 本文档对应当前工作区脚本与节点实现：
 - 启动脚本：`scripts/debug.sh shooting-table-calib`
-- 实际入口：`scripts/launch/start_shooting_table_calib.sh`
+- 实际入口：`scripts/launch/shooting_table_calib.sh`
 - 拟合工具：`scripts/tools/fit_shooting_table.py`
 - 节点源码：`src/shooting_table_calib/shooting_table_nodev1.cpp`
 

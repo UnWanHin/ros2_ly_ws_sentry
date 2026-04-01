@@ -395,6 +395,7 @@ namespace LangYa
     };
 
     struct LeagueStrategySetting {
+        bool EnableRouteCompat{true};
         bool UseHealthRecovery{true};
         std::uint16_t HealthRecoveryThreshold{100};
         bool UseAmmoRecovery{true};

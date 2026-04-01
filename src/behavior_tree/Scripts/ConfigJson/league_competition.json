@@ -25,6 +25,7 @@
         "UseXY": false
     },
     "LeagueStrategy": {
+        "EnableRouteCompat": false,
         "UseHealthRecovery": true,
         "HealthRecoveryThreshold": 210,
         "UseAmmoRecovery": true,

@@ -608,7 +608,9 @@ namespace BehaviorTree {
 namespace BehaviorTree {
 
     bool Application::IsLeagueRouteCompatEnabled() const noexcept {
-        return IsLeagueProfile() && !config.NaviSettings.UseXY;
+        return IsLeagueProfile() &&
+            !config.NaviSettings.UseXY &&
+            config.LeagueStrategySettings.EnableRouteCompat;
     }
 
     bool Application::IsLeagueGoalSwitchBetween2And3(
