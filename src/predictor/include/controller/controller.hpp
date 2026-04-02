@@ -71,10 +71,19 @@ namespace ly_auto_aim::inline controller
         // 射击表相关方法
         // [ROS 2] 參數改為 SharedPtr
         void loadShootTableParams(rclcpp::Node::SharedPtr node);
+        void loadAntiRotateParams(rclcpp::Node::SharedPtr node);
         double fitPitch(double z_height, double horizontal_distance) const;
         double fitYaw(double z_height, double horizontal_distance) const;
         bool calcPitchYawWithShootTable(double& pitch, double& yaw, double& time, 
                                        double target_x, double target_y, double target_z);
+
+        // 装甲 anti-rotate 逻辑参数（默认开启，按配置可关闭）
+        bool anti_rotate_enable = true;
+        double anti_rotate_omega_threshold = 0.6;
+        double anti_rotate_response_speed = 0.01;
+        double anti_rotate_base_jump_angle_rad = PI / 4.0;
+        double anti_rotate_min_jump_angle_rad = PI / 6.0;
+        double anti_rotate_min_radius = 0.2;
     };
 
     std::shared_ptr<Controller> createController();    

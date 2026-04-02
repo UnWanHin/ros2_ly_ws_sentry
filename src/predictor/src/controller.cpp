@@ -3,6 +3,7 @@
 // Keep behavior and interface changes synchronized with related modules.
 
 #include "controller/controller.hpp"
+#include <algorithm>
 #include <cmath>
 #include <Logger/Logger.hpp>
 #include <fmt/format.h>
@@ -77,6 +78,7 @@ Controller::Controller() {
     
     // 读取射击表相关参数
     loadShootTableParams(node);
+    loadAntiRotateParams(node);
 }
 
 // [ROS 2] 參數類型適配
@@ -126,6 +128,36 @@ void Controller::loadShootTableParams(rclcpp::Node::SharedPtr node)
     } else {
         roslog::info("Shoot table adjustment disabled");
     }
+}
+
+void Controller::loadAntiRotateParams(rclcpp::Node::SharedPtr node)
+{
+    const std::string ns = "controller_config.anti_rotate.";
+    auto load_bool = [&](const std::string& key, bool& value, const bool default_value) {
+        if (!node->has_parameter(key)) {
+            node->declare_parameter(key, default_value);
+        }
+        node->get_parameter(key, value);
+    };
+    auto load_double = [&](const std::string& key, double& value, const double default_value) {
+        if (!node->has_parameter(key)) {
+            node->declare_parameter(key, default_value);
+        }
+        node->get_parameter(key, value);
+    };
+
+    load_bool(ns + "enable", anti_rotate_enable, anti_rotate_enable);
+    load_double(ns + "omega_threshold", anti_rotate_omega_threshold, anti_rotate_omega_threshold);
+    load_double(ns + "response_speed", anti_rotate_response_speed, anti_rotate_response_speed);
+    load_double(ns + "base_jump_angle_rad", anti_rotate_base_jump_angle_rad, anti_rotate_base_jump_angle_rad);
+    load_double(ns + "min_jump_angle_rad", anti_rotate_min_jump_angle_rad, anti_rotate_min_jump_angle_rad);
+    load_double(ns + "min_radius", anti_rotate_min_radius, anti_rotate_min_radius);
+
+    anti_rotate_omega_threshold = std::max(0.0, anti_rotate_omega_threshold);
+    anti_rotate_response_speed = std::max(0.0, anti_rotate_response_speed);
+    anti_rotate_base_jump_angle_rad = std::clamp(anti_rotate_base_jump_angle_rad, 0.0, PI / 2.0);
+    anti_rotate_min_jump_angle_rad = std::clamp(anti_rotate_min_jump_angle_rad, 0.0, PI / 2.0);
+    anti_rotate_min_radius = std::max(0.05, anti_rotate_min_radius);
 }
 
 double Controller::fitPitch(double z_height, double horizontal_distance) const
@@ -306,6 +338,31 @@ ControlResult Controller::control(const GimbalAngleType& gimbal_angle, int targe
     }
     bool is_valid_armor_id = std::any_of(it->armors.begin(), it->armors.end(),
         [&](const auto& armor) { return (armor.id == aim_armor_id.second) && (armor.status == Armor::AVAILABLE); });
+    if (is_valid_armor_id && anti_rotate_enable && std::abs(it->omega) > anti_rotate_omega_threshold &&
+        aim_armor_id.second >= 0 && aim_armor_id.second < static_cast<int>(it->armors.size()))
+    {
+        const int current_armor = aim_armor_id.second;
+        const double radius = std::max(
+            anti_rotate_min_radius,
+            (current_armor % 2 == 0) ? it->r1 : it->r2);
+        const double abs_omega = std::max(std::abs(it->omega), 1e-3);
+        double jump_angle = anti_rotate_base_jump_angle_rad -
+                            (1.0 / (1.0 + 1.414 * distance * anti_rotate_response_speed / radius / abs_omega));
+        if (!std::isfinite(jump_angle)) {
+            jump_angle = anti_rotate_min_jump_angle_rad;
+        }
+        jump_angle = std::max(jump_angle, anti_rotate_min_jump_angle_rad);
+
+        if (it->omega > 0.0 && it->armors[current_armor].yaw > jump_angle) {
+            aim_armor_id.second = (current_armor + 3) % 4;
+        } else if (it->omega < 0.0 && it->armors[current_armor].yaw < -jump_angle) {
+            aim_armor_id.second = (current_armor + 1) % 4;
+        }
+        is_valid_armor_id = std::any_of(
+            it->armors.begin(),
+            it->armors.end(),
+            [&](const auto& armor) { return (armor.id == aim_armor_id.second) && (armor.status == Armor::AVAILABLE); });
+    }
     if (!is_valid_armor_id)
     {
         roslog::debug("Invalid armor id");

@@ -15,6 +15,8 @@
  */
 #include <auto_aim_common/msg/armor.hpp>
 #include <auto_aim_common/msg/armors.hpp>
+#include <auto_aim_common/msg/debug_filter.hpp>
+#include <auto_aim_common/msg/predictor_vis.hpp>
 #include <gimbal_driver/msg/gimbal_angles.hpp>
 #include <auto_aim_common/msg/angle_image.hpp>
 #include <Logger/Logger.hpp>
@@ -27,6 +29,9 @@
 #include <initializer_list>
 #include <memory>
 #include <vector>
+#include <mutex>
+#include <algorithm>
+#include <cmath>
 
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/msg/image.hpp>
@@ -54,6 +59,7 @@
 
 #include <boost/lockfree/stack.hpp>
 #include <boost/atomic.hpp>
+#include <Eigen/Geometry>
 
 #include "armor_detector/armor_filter.hpp"
 #include "armor_detector/armor_refinder.hpp"
@@ -78,6 +84,8 @@ LY_DEF_ROS_TOPIC(ly_gimbal_angles, "/ly/gimbal/angles", gimbal_driver::msg::Gimb
 LY_DEF_ROS_TOPIC(ly_compressed_image, "/ly/compressed/image", sensor_msgs::msg::CompressedImage);
 LY_DEF_ROS_TOPIC(ly_ra_angle_image, "/ly/ra/angle_image", auto_aim_common::msg::AngleImage);
 LY_DEF_ROS_TOPIC(ly_outpost_armors, "/ly/outpost/armors", auto_aim_common::msg::Armors);
+LY_DEF_ROS_TOPIC(ly_predictor_debug, "/ly/predictor/debug", auto_aim_common::msg::DebugFilter);
+LY_DEF_ROS_TOPIC(ly_predictor_vis, "/ly/predictor/vis", auto_aim_common::msg::PredictorVis);
 
 /// 配置变量
 bool pub_image = true;
@@ -90,6 +98,9 @@ bool use_video = false;
 bool use_ros_bag = false;
 std::string video_path;
 std::string camera_sn;
+bool overlay_predictor_center = false;
+bool overlay_predictor_full = false;
+int overlay_predictor_timeout_ms = 120;
 
 /// 宏常量与状态量
 std::atomic_bool myTeamRed{false};
@@ -108,6 +119,18 @@ ly_auto_aim::CameraIntrinsicsParameterPack cameraIntrinsics{};
 std::unique_ptr<ly_auto_aim::PoseSolver> poseSolver{};
 
 LangYa::Camera Cam;
+Eigen::Vector3d overlay_camera_offset = Eigen::Vector3d::Zero();
+Eigen::Matrix3d overlay_camera_rotation_matrix = Eigen::Matrix3d::Identity();
+
+std::mutex predictor_debug_mutex;
+auto_aim_common::msg::DebugFilter latest_predictor_debug;
+rclcpp::Time latest_predictor_debug_stamp;
+bool has_predictor_debug = false;
+
+std::mutex predictor_vis_mutex;
+auto_aim_common::msg::PredictorVis latest_predictor_vis;
+rclcpp::Time latest_predictor_vis_stamp;
+bool has_predictor_vis = false;
 
 struct GimbalAnglesType {
     float yaw{0.0f};
@@ -213,6 +236,42 @@ void LoadSolverIntrinsicsParam() {
     }
 }
 
+void LoadSolverExtrinsicsParam() {
+    std::vector<double> offset_vec;
+    LoadParamCompat<std::vector<double>>(
+        {"solver_config.camera_offset", "solver_config/camera_offset"},
+        offset_vec,
+        {0.0, 0.0, 0.0});
+    if (offset_vec.size() == 3) {
+        overlay_camera_offset = Eigen::Vector3d(offset_vec[0], offset_vec[1], offset_vec[2]) * 0.001;
+    } else {
+        overlay_camera_offset = Eigen::Vector3d::Zero();
+        roslog::warn("solver_config camera_offset size invalid (need 3, got {}). Use zeros.", offset_vec.size());
+    }
+
+    std::vector<double> rotation_vec;
+    LoadParamCompat<std::vector<double>>(
+        {"solver_config.camera_rotation", "solver_config/camera_rotation"},
+        rotation_vec,
+        {0.0, 0.0, 0.0});
+    if (rotation_vec.size() == 3) {
+        cv::Mat rotationVector(3, 1, CV_64F);
+        for (int i = 0; i < 3; ++i) {
+            rotationVector.at<double>(i) = rotation_vec[i] * M_PI / 180.0;
+        }
+        cv::Mat rotationMatrix;
+        cv::Rodrigues(rotationVector, rotationMatrix);
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                overlay_camera_rotation_matrix(i, j) = rotationMatrix.at<double>(i, j);
+            }
+        }
+    } else {
+        overlay_camera_rotation_matrix = Eigen::Matrix3d::Identity();
+        roslog::warn("solver_config camera_rotation size invalid (need 3, got {}). Use identity.", rotation_vec.size());
+    }
+}
+
 void InitialParam(){
     // 兼容点号/斜杠两种参数命名，保证一份 YAML 覆盖全链路。
     LoadParamCompat<bool>({"detector_config.show", "detector_config/show"}, pub_image, true);
@@ -225,6 +284,19 @@ void InitialParam(){
     LoadParamCompat<bool>({"detector_config.use_ros_bag", "detector_config/use_ros_bag"}, use_ros_bag, false);
     LoadParamCompat<std::string>({"detector_config.video_path", "detector_config/video_path"}, video_path, "");
     LoadParamCompat<std::string>({"camera_param.camera_sn", "camera_param/camera_sn"}, camera_sn, std::string(""));
+    LoadParamCompat<bool>(
+        {"detector_config.overlay_predictor_center", "detector_config/overlay_predictor_center"},
+        overlay_predictor_center,
+        false);
+    LoadParamCompat<bool>(
+        {"detector_config.overlay_predictor_full", "detector_config/overlay_predictor_full"},
+        overlay_predictor_full,
+        false);
+    LoadParamCompat<int>(
+        {"detector_config.overlay_predictor_timeout_ms", "detector_config/overlay_predictor_timeout_ms"},
+        overlay_predictor_timeout_ms,
+        120);
+    overlay_predictor_timeout_ms = std::max(0, overlay_predictor_timeout_ms);
 }
 
 void ConfigureCamera() {
@@ -289,6 +361,20 @@ void outpost_enable_callback(const std_msgs::msg::Bool::ConstSharedPtr &msg) {
     outpost_enable = msg->data;
 }
 
+void predictor_debug_callback(const auto_aim_common::msg::DebugFilter::ConstSharedPtr& msg) {
+    std::lock_guard<std::mutex> lock(predictor_debug_mutex);
+    latest_predictor_debug = *msg;
+    latest_predictor_debug_stamp = global_node->now();
+    has_predictor_debug = true;
+}
+
+void predictor_vis_callback(const auto_aim_common::msg::PredictorVis::ConstSharedPtr& msg) {
+    std::lock_guard<std::mutex> lock(predictor_vis_mutex);
+    latest_predictor_vis = *msg;
+    latest_predictor_vis_stamp = global_node->now();
+    has_predictor_vis = true;
+}
+
 void DrawArmor(cv::Mat &image, const ly_auto_aim::ArmorObject &armor) {
     for (std::size_t point_index = 0; point_index < 4; ++point_index) {
         cv::circle(image, armor.apex[point_index], 5, cv::Scalar(0, 0, 255), -1);
@@ -315,6 +401,152 @@ void DrawAllArmor(cv::Mat &image, const std::vector<ly_auto_aim::ArmorObject> &a
 void DrawAllCar(cv::Mat &image, const std::vector<ly_auto_aim::CarDetection> &cars) {
     for (std::size_t car_index = 0; car_index < cars.size(); ++car_index) {
         DrawCarBBox(image, cars[car_index]);
+    }
+}
+
+bool ProjectWorldPointToImage(
+    const Eigen::Vector3d& world,
+    const GimbalAnglesType& gimbal_angles,
+    const cv::Mat& image,
+    cv::Point& pixel) {
+    if (image.empty()) {
+        return false;
+    }
+    const double yaw_rad = static_cast<double>(gimbal_angles.yaw) * M_PI / 180.0;
+    const double pitch_rad = static_cast<double>(gimbal_angles.pitch) * M_PI / 180.0;
+    const Eigen::Matrix3d world_to_gimbal =
+        Eigen::AngleAxisd(-yaw_rad, Eigen::Vector3d::UnitZ()).toRotationMatrix() *
+        Eigen::AngleAxisd(pitch_rad, Eigen::Vector3d::UnitY()).toRotationMatrix();
+    const Eigen::Vector3d gimbal = world_to_gimbal * world;
+    const Eigen::Vector3d camera = overlay_camera_rotation_matrix.inverse() * (gimbal - overlay_camera_offset);
+    if (!camera.allFinite() || camera.x() < 1e-4) {
+        return false;
+    }
+
+    const double fx = cameraIntrinsics.FocalLength[0];
+    const double fy = cameraIntrinsics.FocalLength[1];
+    const double cx = cameraIntrinsics.PrincipalPoint[0];
+    const double cy = cameraIntrinsics.PrincipalPoint[1];
+    if (fx <= 1e-6 || fy <= 1e-6) {
+        return false;
+    }
+
+    const double px = cx - camera.y() / camera.x() * fx;
+    const double py = cy - camera.z() / camera.x() * fy;
+    if (!std::isfinite(px) || !std::isfinite(py)) {
+        return false;
+    }
+    const int x = static_cast<int>(std::lround(px));
+    const int y = static_cast<int>(std::lround(py));
+    if (x < 0 || y < 0 || x >= image.cols || y >= image.rows) {
+        return false;
+    }
+    pixel = cv::Point(x, y);
+    return true;
+}
+
+void DrawPredictorCenterOverlay(cv::Mat& image, const GimbalAnglesType& gimbal_angles, const rclcpp::Time& now) {
+    if (!overlay_predictor_center || image.empty()) {
+        return;
+    }
+
+    auto_aim_common::msg::DebugFilter debug_msg;
+    rclcpp::Time debug_stamp;
+    {
+        std::lock_guard<std::mutex> lock(predictor_debug_mutex);
+        if (!has_predictor_debug) {
+            return;
+        }
+        debug_msg = latest_predictor_debug;
+        debug_stamp = latest_predictor_debug_stamp;
+    }
+    if (!debug_msg.tracking) {
+        return;
+    }
+    if (overlay_predictor_timeout_ms > 0 &&
+        (now - debug_stamp) > rclcpp::Duration::from_seconds(overlay_predictor_timeout_ms / 1000.0)) {
+        return;
+    }
+
+    const Eigen::Vector3d world(debug_msg.position.x, debug_msg.position.y, debug_msg.position.z);
+    cv::Point pixel;
+    if (!ProjectWorldPointToImage(world, gimbal_angles, image, pixel)) {
+        return;
+    }
+
+    cv::circle(image, pixel, 7, cv::Scalar(180, 180, 180), -1);
+    cv::circle(image, pixel, 10, cv::Scalar(120, 255, 120), 2);
+}
+
+void DrawPredictorFullOverlay(cv::Mat& image, const GimbalAnglesType& gimbal_angles, const rclcpp::Time& now) {
+    if (!overlay_predictor_full || image.empty()) {
+        return;
+    }
+
+    auto_aim_common::msg::PredictorVis vis_msg;
+    rclcpp::Time vis_stamp;
+    {
+        std::lock_guard<std::mutex> lock(predictor_vis_mutex);
+        if (!has_predictor_vis) {
+            return;
+        }
+        vis_msg = latest_predictor_vis;
+        vis_stamp = latest_predictor_vis_stamp;
+    }
+    if (overlay_predictor_timeout_ms > 0 &&
+        (now - vis_stamp) > rclcpp::Duration::from_seconds(overlay_predictor_timeout_ms / 1000.0)) {
+        return;
+    }
+    if (!vis_msg.has_predictions) {
+        return;
+    }
+
+    constexpr int kArmorStatusNonexist = auto_aim_common::msg::PredictorArmorVis::STATUS_NONEXIST;
+    constexpr int kArmorStatusUnseen = auto_aim_common::msg::PredictorArmorVis::STATUS_UNSEEN;
+    constexpr int kArmorStatusAvailable = auto_aim_common::msg::PredictorArmorVis::STATUS_AVAILABLE;
+
+    for (const auto& car : vis_msg.cars) {
+        cv::Point center_pixel;
+        if (ProjectWorldPointToImage(
+                Eigen::Vector3d(car.center.x, car.center.y, car.center.z),
+                gimbal_angles,
+                image,
+                center_pixel)) {
+            cv::circle(image, center_pixel, 4, cv::Scalar(150, 150, 150), -1);
+        }
+
+        for (const auto& armor : car.armors) {
+            cv::Point armor_pixel;
+            if (!ProjectWorldPointToImage(
+                    Eigen::Vector3d(armor.center.x, armor.center.y, armor.center.z),
+                    gimbal_angles,
+                    image,
+                    armor_pixel)) {
+                continue;
+            }
+
+            cv::Scalar color(150, 150, 150);
+            if (armor.status == kArmorStatusAvailable) {
+                color = cv::Scalar(0, 255, 0);
+            } else if (armor.status == kArmorStatusUnseen) {
+                color = cv::Scalar(0, 0, 255);
+            } else if (armor.status == kArmorStatusNonexist) {
+                color = cv::Scalar(180, 180, 180);
+            }
+            cv::circle(image, armor_pixel, 6, color, -1);
+
+            if (car.car_id == vis_msg.aimed_car_id && armor.id == vis_msg.aimed_armor_id) {
+                cv::circle(image, armor_pixel, 10, cv::Scalar(0, 255, 255), 2);
+            }
+            cv::putText(
+                image,
+                std::to_string(armor.id),
+                armor_pixel + cv::Point(8, -8),
+                cv::FONT_HERSHEY_SIMPLEX,
+                0.45,
+                color,
+                1);
+        }
     }
 }
 
@@ -499,6 +731,8 @@ void ImageLoop() {
 
                 if(draw_image) DrawAllArmor(image, filtered_armors);
                 if(draw_image) DrawAllCar(image, cars);
+                DrawPredictorCenterOverlay(image, armors.TimeAngles, armors.TimeStamp);
+                DrawPredictorFullOverlay(image, armors.TimeAngles, armors.TimeStamp);
 
                 log_detection_summary(
                     armors.Armors.size(),
@@ -561,6 +795,7 @@ int main(int argc, char **argv) try {
 
     InitialParam();
     LoadSolverIntrinsicsParam();
+    LoadSolverExtrinsicsParam();
     poseSolver = std::make_unique<ly_auto_aim::PoseSolver>(cameraIntrinsics);
 
     /// 初始化节点和模块
@@ -650,6 +885,8 @@ int main(int argc, char **argv) try {
     // [修復] 補上缺失的訂閱者，否則 ra_enable/outpost_enable 永遠是 false
     global_node->GenSubscriber<ly_ra_enable>(ra_enable_callback);
     global_node->GenSubscriber<ly_outpost_enable>(outpost_enable_callback);
+    global_node->GenSubscriber<ly_predictor_debug>(predictor_debug_callback);
+    global_node->GenSubscriber<ly_predictor_vis>(predictor_vis_callback);
 
     // 進入圖像循環
     ImageLoop();

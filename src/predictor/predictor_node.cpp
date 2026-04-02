@@ -30,12 +30,14 @@
 #include <auto_aim_common/msg/trackers.hpp>
 #include <auto_aim_common/msg/target.hpp>
 #include <auto_aim_common/msg/debug_filter.hpp>
+#include <auto_aim_common/msg/predictor_vis.hpp>
 
 #include "predictor/predictor.hpp"
 #include "controller/controller.hpp"
 #include "solver/solver.hpp"
 
 #include <atomic>
+#include <cstdint>
 #include <cmath>
 #include <limits>
 
@@ -46,6 +48,7 @@ namespace {
     LY_DEF_ROS_TOPIC(ly_tracker_results, "/ly/tracker/results", auto_aim_common::msg::Trackers);
     LY_DEF_ROS_TOPIC(ly_predictor_target, "/ly/predictor/target", auto_aim_common::msg::Target);
     LY_DEF_ROS_TOPIC(ly_predictor_debug, "/ly/predictor/debug", auto_aim_common::msg::DebugFilter);
+    LY_DEF_ROS_TOPIC(ly_predictor_vis, "/ly/predictor/vis", auto_aim_common::msg::PredictorVis);
     LY_DEF_ROS_TOPIC(ly_bt_target, "/ly/bt/target", std_msgs::msg::UInt8);
     LY_DEF_ROS_TOPIC(ly_bullet_speed, "/ly/bullet/speed", std_msgs::msg::Float32);
     
@@ -169,8 +172,10 @@ namespace {
 
                 auto_aim_common::msg::Target target_msg;
                 auto_aim_common::msg::DebugFilter debug_filter_msg;
+                auto_aim_common::msg::PredictorVis predictor_vis_msg;
                 bool publish_target = false;
                 bool publish_debug = false;
+                bool publish_vis = false;
 
                 {
                     std::lock_guard<std::mutex> lock(data_mutex);
@@ -196,6 +201,37 @@ namespace {
                     target_msg.header = last_tracker_header_;
                     target_msg.header.stamp = now;
                     target_msg.buff_follow = false;
+                    predictor_vis_msg.header = target_msg.header;
+                    predictor_vis_msg.has_predictions = has_predictions;
+                    predictor_vis_msg.aimed_car_id = -1;
+                    predictor_vis_msg.aimed_armor_id = -1;
+                    predictor_vis_msg.cars.clear();
+
+                    if (has_predictions) {
+                        predictor_vis_msg.cars.reserve(predictions.size());
+                        for (const auto& prediction : predictions) {
+                            auto_aim_common::msg::PredictorCarVis car_vis_msg;
+                            car_vis_msg.car_id = prediction.id;
+                            car_vis_msg.stable = prediction.stable;
+                            car_vis_msg.center.x = prediction.center.x;
+                            car_vis_msg.center.y = prediction.center.y;
+                            car_vis_msg.center.z = prediction.center.z;
+                            car_vis_msg.armors.reserve(prediction.armors.size());
+                            for (const auto& armor : prediction.armors) {
+                                auto_aim_common::msg::PredictorArmorVis armor_vis_msg;
+                                armor_vis_msg.id = armor.id;
+                                armor_vis_msg.status = static_cast<std::int32_t>(armor.status);
+                                armor_vis_msg.center.x = armor.center.x;
+                                armor_vis_msg.center.y = armor.center.y;
+                                armor_vis_msg.center.z = armor.center.z;
+                                armor_vis_msg.yaw = static_cast<float>(armor.yaw);
+                                armor_vis_msg.theta = static_cast<float>(armor.theta);
+                                car_vis_msg.armors.push_back(std::move(armor_vis_msg));
+                            }
+                            predictor_vis_msg.cars.push_back(std::move(car_vis_msg));
+                        }
+                    }
+                    publish_vis = true;
 
                     if (!has_predictions && !observation_fresh) {
                         // Keep the predictor's robust stale/no-prediction handling,
@@ -213,6 +249,7 @@ namespace {
                         if (target_msg.status && finite_target) {
                             publish_target = true;
                             for (const auto& prediction : predictions) {
+                                debug_filter_msg.tracking = true;
                                 XYZ car_XYZ = prediction.center;
                                 debug_filter_msg.position.x = car_XYZ.x;
                                 debug_filter_msg.position.y = car_XYZ.y;
@@ -221,8 +258,10 @@ namespace {
                                 debug_filter_msg.v_yaw = prediction.omega;
                                 debug_filter_msg.velocity.x = prediction.vx;
                                 debug_filter_msg.velocity.y = prediction.vy;
+                                debug_filter_msg.velocity.z = 0.0;
                                 debug_filter_msg.radius_1 = prediction.r1;
                                 debug_filter_msg.radius_2 = prediction.r2;
+                                debug_filter_msg.z_2 = prediction.z2;
                             }
                             publish_debug = has_predictions;
                         }
@@ -257,6 +296,9 @@ namespace {
                 }
                 if (publish_debug) {
                     node.Publisher<ly_predictor_debug>()->publish(debug_filter_msg);
+                }
+                if (publish_vis) {
+                    node.Publisher<ly_predictor_vis>()->publish(predictor_vis_msg);
                 }
             }
 

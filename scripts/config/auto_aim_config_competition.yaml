@@ -7,6 +7,7 @@
 /**:
   ros__parameters:
     "camera_param.camera_sn": "KE0200060396"
+    "camera_param/camera_sn": "KE0200060396"
     "camera_param.ExposureTime": 5000.0
     "camera_param/ExposureTime": 5000.0
     "camera_param.Gain": 16.0
@@ -44,6 +45,12 @@
     "detector_config/save_video": false
     "detector_config.use_video": false
     "detector_config/use_video": false
+    "detector_config.overlay_predictor_center": false
+    "detector_config/overlay_predictor_center": false
+    "detector_config.overlay_predictor_full": false
+    "detector_config/overlay_predictor_full": false
+    "detector_config.overlay_predictor_timeout_ms": 120
+    "detector_config/overlay_predictor_timeout_ms": 120
 
     solver_config:
       camera_offset: [0.0, 0.0, 52.6]
@@ -87,6 +94,13 @@
     controller_config:
       bullet_speed: 23.0
       shoot_delay: 0.02
+      anti_rotate:
+        enable: true
+        omega_threshold: 0.6
+        response_speed: 0.01
+        base_jump_angle_rad: 0.78539816339
+        min_jump_angle_rad: 0.52359877559
+        min_radius: 0.2
       shoot_table_adjust:
         enable: true
         pitch:
@@ -115,6 +129,10 @@
     "motion_model.q_z1_drift_base": 0.01
     "motion_model.q_z2_drift_base": 0.01
     "motion_model.r_scale": 0.1
+    "motion_model.boundary_fit_alpha": 0.12
+    "motion_model.boundary_scale_min": 0.5
+    "motion_model.boundary_scale_max": 6.0
+    "predictor.visible_half_angle_rad": 1.0471975512
 
     io_config:
       use_virtual_device: false

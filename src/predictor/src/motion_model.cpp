@@ -106,26 +106,24 @@ void MotionModel::initMotionModel()
     // P(11, 11) = 10.0;
          
 
-    // step2 观测的值有哪些
-    //R:
     base_measurement_noise_ = MatrixYY::Zero();
-    // base_measurement_noise_ << 0.005, 0,     0,     0,     0,     0,     0,
-    //                            0,     0.005, 0,     0,     0,     0,     0,
-    //                            0,     0,     0.1,   0,     0,     0,     0,
-    //                            0,     0,     0,     0.04,  0,     0,     0,
-    //                            0,     0,     0,     0,     0.04,  0.015, 0,
-    //                            0,     0,     0,     0,     0.015, 0.04,  0,
-    //                            0,     0,     0,     0,     0,     0,     0.002;
-
-
-    base_measurement_noise_ << 0.01, 0,     0,     0,     0,     0,     0,
-                               0,     0.01, 0,     0,     0,     0,     0,
-                               0,     0,     0.1,   0,     0,     0,     0,
-                               0,     0,     0,     0.04,  0,     0,     0,
-                               0,     0,     0,     0,     0.04,  0.015, 0,
-                               0,     0,     0,     0,     0.015, 0.04,  0,
-                               0,     0,     0,     0,     0,     0,     0.01;
+    base_measurement_noise_ << 0.01,  0,     0,     0,      0,      0,      0,      0,      0,      0,
+                               0,     0.01,  0,     0,      0,      0,      0,      0,      0,      0,
+                               0,     0,     0.1,   0,      0,      0,      0,      0,      0,      0,
+                               0,     0,     0,     0.04,   0,      0,      0,      0,      0,      0,
+                               0,     0,     0,     0,      0.04,   0.015,  0.01,   0,      0,      0,
+                               0,     0,     0,     0,      0.015,  0.04,   0.01,   0,      0,      0,
+                               0,     0,     0,     0,      0.01,   0.01,   0.02,   0,      0,      0,
+                               0,     0,     0,     0,      0,      0,      0,      0.03,   0.01,   0.015,
+                               0,     0,     0,     0,      0,      0,      0,      0.01,   0.03,   0.015,
+                               0,     0,     0,     0,      0,      0,      0,      0.015,  0.015,  0.03;
     base_measurement_noise_ *= measurement_noise_scale_;
+    yaw_boundary_var_ema_ = std::max(
+        kNoiseMin,
+        (base_measurement_noise_(4, 4) + base_measurement_noise_(5, 5) + base_measurement_noise_(6, 6)) / 3.0);
+    pitch_boundary_var_ema_ = std::max(
+        kNoiseMin,
+        (base_measurement_noise_(7, 7) + base_measurement_noise_(8, 8) + base_measurement_noise_(9, 9)) / 3.0);
 
     ekf.init(P, buildProcessNoise(kDefaultFilterDt), base_measurement_noise_);
 }
@@ -140,6 +138,9 @@ void MotionModel::loadTuningParams()
     const double default_q_z1_drift = q_z1_drift_base_;
     const double default_q_z2_drift = q_z2_drift_base_;
     const double default_r_scale = measurement_noise_scale_;
+    const double default_boundary_alpha = boundary_fit_alpha_;
+    const double default_boundary_scale_min = boundary_scale_min_;
+    const double default_boundary_scale_max = boundary_scale_max_;
 
     q_ax_jerk_base_ = clampPositive(
         readDoubleParam("motion_model.q_ax_jerk_base", default_q_ax_jerk),
@@ -165,6 +166,19 @@ void MotionModel::loadTuningParams()
     measurement_noise_scale_ = clampPositive(
         readDoubleParam("motion_model.r_scale", default_r_scale),
         default_r_scale);
+    boundary_fit_alpha_ = std::clamp(
+        readDoubleParam("motion_model.boundary_fit_alpha", default_boundary_alpha),
+        0.01,
+        1.0);
+    boundary_scale_min_ = clampPositive(
+        readDoubleParam("motion_model.boundary_scale_min", default_boundary_scale_min),
+        default_boundary_scale_min);
+    boundary_scale_max_ = clampPositive(
+        readDoubleParam("motion_model.boundary_scale_max", default_boundary_scale_max),
+        default_boundary_scale_max);
+    if (boundary_scale_max_ < boundary_scale_min_) {
+        std::swap(boundary_scale_min_, boundary_scale_max_);
+    }
 }
 
 MatrixXX MotionModel::buildProcessNoise(double dt) const
@@ -197,6 +211,40 @@ void MotionModel::refreshNoiseCovariances(const double dt)
 {
     ekf.setQ(buildProcessNoise(dt));
     ekf.setR(base_measurement_noise_);
+}
+
+void MotionModel::fitBoundaryErrorAndUpdateR(const VectorY& residual)
+{
+    const double yaw_var_now = (residual[4] * residual[4] + residual[5] * residual[5] + residual[6] * residual[6]) / 3.0;
+    const double pitch_var_now =
+        (residual[7] * residual[7] + residual[8] * residual[8] + residual[9] * residual[9]) / 3.0;
+
+    yaw_boundary_var_ema_ =
+        (1.0 - boundary_fit_alpha_) * yaw_boundary_var_ema_ + boundary_fit_alpha_ * std::max(yaw_var_now, kNoiseMin);
+    pitch_boundary_var_ema_ = (1.0 - boundary_fit_alpha_) * pitch_boundary_var_ema_ +
+                              boundary_fit_alpha_ * std::max(pitch_var_now, kNoiseMin);
+
+    const double yaw_base_var =
+        std::max(kNoiseMin, (base_measurement_noise_(4, 4) + base_measurement_noise_(5, 5) + base_measurement_noise_(6, 6)) / 3.0);
+    const double pitch_base_var =
+        std::max(kNoiseMin, (base_measurement_noise_(7, 7) + base_measurement_noise_(8, 8) + base_measurement_noise_(9, 9)) / 3.0);
+
+    const double yaw_scale = std::clamp(yaw_boundary_var_ema_ / yaw_base_var, boundary_scale_min_, boundary_scale_max_);
+    const double pitch_scale =
+        std::clamp(pitch_boundary_var_ema_ / pitch_base_var, boundary_scale_min_, boundary_scale_max_);
+
+    MatrixYY adaptive_r = base_measurement_noise_;
+    for (int i = 4; i <= 6; ++i) {
+        for (int j = 4; j <= 6; ++j) {
+            adaptive_r(i, j) = base_measurement_noise_(i, j) * yaw_scale;
+        }
+    }
+    for (int i = 7; i <= 9; ++i) {
+        for (int j = 7; j <= 9; ++j) {
+            adaptive_r(i, j) = base_measurement_noise_(i, j) * pitch_scale;
+        }
+    }
+    ekf.setR(adaptive_r);
 }
 
 VectorX MotionModel::getPredictResult(const Time::TimeStamp& timestamp)
@@ -235,6 +283,9 @@ void MotionModel::Update(const VectorY& measure_vec, const Time::TimeStamp& time
     measure_adjust[4] = std::remainder(measure_vec[4] - measure_pred[4], 2 * M_PI) + measure_pred[4];
     measure_adjust[5] = std::remainder(measure_vec[5] - measure_pred[5], 2 * M_PI) + measure_pred[5];
     measure_adjust[6] = std::remainder(measure_vec[6] - measure_pred[6], 2 * M_PI) + measure_pred[6];
+    measure_adjust[7] = std::remainder(measure_vec[7] - measure_pred[7], 2 * M_PI) + measure_pred[7];
+    measure_adjust[8] = std::remainder(measure_vec[8] - measure_pred[8], 2 * M_PI) + measure_pred[8];
+    measure_adjust[9] = std::remainder(measure_vec[9] - measure_pred[9], 2 * M_PI) + measure_pred[9];
     if (!measure_adjust.allFinite()) {
         roslog::warn("Predictor adjusted measurement became non-finite, skip this update");
         return;
@@ -245,9 +296,11 @@ void MotionModel::Update(const VectorY& measure_vec, const Time::TimeStamp& time
     static auto residual_logger = rclcpp::get_logger("predictor.motion_model");
     RCLCPP_DEBUG(
         residual_logger,
-        "residual: [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f]",
+        "residual: [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f]",
         innovation[0], innovation[1], innovation[2], innovation[3],
-        innovation[4], innovation[5], innovation[6]);
+        innovation[4], innovation[5], innovation[6], innovation[7],
+        innovation[8], innovation[9]);
+    fitBoundaryErrorAndUpdateR(innovation);
 
     const VectorY innovation_abs = innovation.cwiseAbs();
     if (innovation_abs[0] > 0.5 || innovation_abs[1] > 0.5 || innovation_abs[2] > 0.5) {
