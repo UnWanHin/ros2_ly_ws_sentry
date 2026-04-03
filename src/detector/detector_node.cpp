@@ -497,6 +497,7 @@ void ImageLoop() {
                 if(!carFinder.FindCar(cars, armor_list_msg.cars)){
                     RCLCPP_DEBUG(global_node->get_logger(), "car_finder> failed to find car");
                 }
+                high_armor_list_msg.cars = armor_list_msg.cars;
 
                 ly_auto_aim::ArmorType target = atomic_target;
                 if (!filter.Filter(armors.Armors, target, filtered_armors)) {

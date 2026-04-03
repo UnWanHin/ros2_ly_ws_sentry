@@ -62,6 +62,7 @@ namespace ly_auto_aim::inline detector {
 
             const bool is_high_armor = std::abs(t[1]) > high_height_threshold_m;
             if (is_high_armor && high_armors_msg) {
+                temp_armor_msg.type = static_cast<int>(ArmorType::Outpost);
                 high_armors_msg->armors.emplace_back(temp_armor_msg);
                 continue;
             }
