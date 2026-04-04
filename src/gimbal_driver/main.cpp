@@ -405,8 +405,6 @@ namespace
                 using topic = ly_bullet_speed;
                 topic::Msg msg;
                 msg.data = static_cast<float>(data.BulletSpeed) / 100.0f;
-                //TODO 下位机子弹速度检测
-                msg.data = 23.0f;
                 Node.Publisher<topic>()->publish(msg);
             }
         }

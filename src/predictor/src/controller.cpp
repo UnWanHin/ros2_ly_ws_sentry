@@ -316,12 +316,16 @@ ControlResult Controller::control(const GimbalAngleType& gimbal_angle, int targe
     double distance = sqrt(it->center.x * it->center.x + it->center.y * it->center.y);
     if (distance > 0.0)
     {
-        constexpr float stable_bullet_speed = 23.0f;
-        if(bullet_speed - stable_bullet_speed < 1.0f && bullet_speed - stable_bullet_speed > -1.0f){
-            this->bullet_speed = stable_bullet_speed;
+        if (bullet_speed > min_bullet_speed) {
+            if (this->bullet_speed <= 1e-6) {
+                this->bullet_speed = bullet_speed;
+            } else {
+                this->bullet_speed =
+                    bullet_speed * bullet_speed_alpha + (1.0 - bullet_speed_alpha) * this->bullet_speed;
+            }
         }
-        this->bullet_speed = stable_bullet_speed;
-        double calculated_time_sec = distance / this->bullet_speed;
+        const double speed_for_calc = std::max(this->bullet_speed, min_bullet_speed);
+        double calculated_time_sec = distance / speed_for_calc;
         
         // [ROS 2] Duration 修復
         flyTime = rclcpp::Duration::from_seconds(calculated_time_sec);

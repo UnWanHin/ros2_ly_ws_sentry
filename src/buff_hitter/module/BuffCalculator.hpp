@@ -1,32 +1,29 @@
-// AUTO-COMMENT: file overview
-// This file belongs to the ROS2 sentry workspace codebase.
-// Keep behavior and interface changes synchronized with related modules.
-
 #pragma once
-
 #include <ceres/ceres.h>
-
+#include <array>
+#include <atomic>
 #include <chrono>
+#include <cmath>
+#include <deque>
 #include <fstream>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <random>
-#include <shared_mutex> //MUTEX
+#include <shared_mutex> 
 #include <thread>
-
-#include <Param/param.hpp>
-
+#include "Param/param.hpp"
 #define ANGLE_BETWEEN_FAN_BLADES (72 * CV_PI / 180)
 #define MIN_FIT_DATA_SIZE 20
 #define MAX_FIT_DATA_SIZE 12000
-
-enum class Direction { UNKNOWN, STABLE, ANTI_CLOCKWISE, CLOCKWISE };  // 旋转方向
-enum class Convexity { UNKNOWN, CONCAVE, CONVEX };                    // 拟合曲线凹凸性
-
+enum class Direction { UNKNOWN, STABLE, ANTI_CLOCKWISE, CLOCKWISE };  
+enum class Convexity { UNKNOWN, CONCAVE, CONVEX };
+/*
+Convexity c=getConvexity(data);
+if(c==Convexity::CONVEX){//convexity;}
+*/
 #define CONSOLE_OUTPUT 2
-
 static std::atomic<bool> STOP_THREAD(false);
 static std::atomic<bool> VALID_PARAMS(false);
 static std::mutex MUTEX; //MUTEX
@@ -43,7 +40,7 @@ inline std::pair<double, double> solveQuadraticEquation(double a, double b, doub
                                      (-b + sqrt((double)(b * b - 4 * a * c))) / (2 * a));
     return result;
 }
-
+//frame()的赋值.capture()
 struct Frame {
     Frame() = default;
     Frame(const cv::Mat& image, const std::chrono::steady_clock::time_point& time, double pitch, double yaw, double roll)
@@ -52,12 +49,36 @@ struct Frame {
     std::chrono::steady_clock::time_point m_time;
     double m_roll, m_pitch, m_yaw;
     void set(const cv::Mat& image, const std::chrono::steady_clock::time_point& time, double pitch,
-             double yaw, double roll) {
+             double yaw, double roll){
         m_image = image;
         m_time = time;
         m_roll = roll;
         m_pitch = pitch;
         m_yaw = yaw;
+    }
+};
+
+/**
+ * @brief 物理约束：a_code * ω + b = 2.09 （其中 a_code 表示 a/ω，即 params[0]）
+ */
+class CostFunctorPhys : public ceres::SizedCostFunction<1, 5> {
+  public:
+    CostFunctorPhys() {}
+    virtual ~CostFunctorPhys() {}
+    virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const {
+        double A = parameters[0][0];
+        double w = parameters[0][1];
+        double b = parameters[0][3];
+        residuals[0] = A * w + b - 2.09;
+        if (jacobians != nullptr && jacobians[0] != nullptr) {
+            // derivative wrt A, w, t0, b, c
+            jacobians[0][0] = w;   // d(A*w)/dA = w
+            jacobians[0][1] = A;   // d(A*w)/dw = A
+            jacobians[0][2] = 0.0; // t0
+            jacobians[0][3] = 1.0; // b
+            jacobians[0][4] = 0.0; // c
+        }
+        return true;
     }
 };
 
@@ -78,22 +99,61 @@ class BuffCalculator {
             m_totalShift = 0;
             m_firstDetect = true;
             m_angleLast = 0;
+            m_buff_mode = 0;
+            m_reload_big_buff = false;
             m_worldPoints = {{0.0, (float)(json_param["buff"]["power_radius"].Double()), 0.0}, //R标
                             {0.0, 0.0, 0.0}, //裝甲板中心
                             {0.0, (float)(-0.5 * json_param["buff"]["armor_width"].Double()), 0.0}, //4點外點
                             {(float)(0.5 * json_param["buff"]["armor_width"].Double()), 0.0, 0.0},
                             {0.0, (float)(0.5 * json_param["buff"]["armor_width"].Double()), 0.0},
                             {(float)(-0.5 * json_param["buff"]["armor_width"].Double()), 0.0, 0.0}};
-            FPS = json_param["buff"]["buff_calculate_FPS"].Double();
+            const auto buff_param = json_param["buff"];
+            if (buff_param.exists("FPS")) {
+                FPS = buff_param["FPS"].Double();
+            } else if (buff_param.exists("buff_calculate_FPS")) {
+                FPS = buff_param["buff_calculate_FPS"].Double();
+            } else {
+                FPS = 120.0;
+            }
             // m_directionThresh = {100 / (1000 / FPS) < 2 ? 2 : 100 / (1000 / FPS)};
             m_directionThresh = {static_cast<int>(100 / (1000 / FPS) < 2.0 ? 2 : 100 / (1000 / FPS))};
             COMPANSATE_TIME = json_param["buff"]["COMPANSATE_TIME"].Double();
             COMPANSATE_PITCH = json_param["buff"]["COMPANSATE_PITCH"].Double();
             COMPANSATE_YAW = json_param["buff"]["COMPANSATE_YAW"].Double();
+            AFTER_PITCH = buff_param.exists("AFTER_PITCH") ? buff_param["AFTER_PITCH"].Double() : 0.0;
+            AFTER_YAW = buff_param.exists("AFTER_YAW") ? buff_param["AFTER_YAW"].Double() : 0.0;
             GRAVITY = json_param["buff"]["GRAVITY"].Double();
             
             m_fitData.reserve(FPS * 20);
             m_fitThread = std::thread(&BuffCalculator::fit, this);
+            force_stable = buff_param.exists("force_stable") ? buff_param["force_stable"].Bool() : false;
+            if (buff_param.exists("auto_mode_enable")) {
+                auto_mode_enable_ = buff_param["auto_mode_enable"].Bool();
+            }
+            if (buff_param.exists("auto_mode_min_samples")) {
+                auto_mode_min_samples_ = buff_param["auto_mode_min_samples"].Int();
+            }
+            if (buff_param.exists("auto_mode_window_sec")) {
+                auto_mode_window_sec_ = buff_param["auto_mode_window_sec"].Double();
+            }
+            if (buff_param.exists("auto_mode_std_high")) {
+                auto_mode_std_high_ = buff_param["auto_mode_std_high"].Double();
+            }
+            if (buff_param.exists("auto_mode_std_low")) {
+                auto_mode_std_low_ = buff_param["auto_mode_std_low"].Double();
+            } else if (buff_param.exists("auto_mode_std_threshold")) {
+                auto_mode_std_high_ = buff_param["auto_mode_std_threshold"].Double();
+                auto_mode_std_low_ = auto_mode_std_high_ * 0.6;
+            }
+            if (buff_param.exists("auto_mode_min_abs_omega")) {
+                auto_mode_min_abs_omega_ = buff_param["auto_mode_min_abs_omega"].Double();
+            }
+            auto_mode_min_samples_ = std::max(5, auto_mode_min_samples_);
+            auto_mode_window_sec_ = std::max(0.2, auto_mode_window_sec_);
+            auto_mode_std_high_ = std::max(0.01, auto_mode_std_high_);
+            auto_mode_std_low_ = std::clamp(auto_mode_std_low_, 0.005, auto_mode_std_high_);
+            auto_mode_min_abs_omega_ = std::max(0.0, auto_mode_min_abs_omega_);
+            loadShootTableAdjust(json_param);
 
             auto intrinsicArray = json_param["solver"]["camera_intrinsic_matrix"].to<std::vector<std::vector<double>>>();
             Eigen::Matrix3d cameraIntrinsicMatrix;
@@ -108,16 +168,17 @@ class BuffCalculator {
             cv::eigen2cv(cameraIntrinsicMatrix, cameraMatrix);
             cv::eigen2cv(distorationCoefficients, distCoeffs);
 
-            tvec_c2g_data = json_param["buff"]["tvec_c2g"].to<std::vector<double>>();
+            tvec_c2g_data = buff_param["tvec_c2g"].to<std::vector<double>>();
             
-            power_radius = json_param["buff"]["power_radius"].Double();
+            power_radius = buff_param["power_radius"].Double();
             armorWorld = (cv::Mat_<double>(4, 1) << 0, 0, 0, 1);
-            centerWorld = (cv::Mat_<double>(4, 1) << 0, json_param["buff"]["power_radius"].Double(), 0, 1);
-            small_power_rune_rotation_speed = json_param["buff"]["SMALL_POWER_RUNE_ROTATION_SPEED"].Double();
+            centerWorld = (cv::Mat_<double>(4, 1) << 0, buff_param["power_radius"].Double(), 0, 1);
+            small_power_rune_rotation_speed = buff_param["SMALL_POWER_RUNE_ROTATION_SPEED"].Double();
 
         }
 
         ~BuffCalculator() {
+            m_fitData.clear();
             STOP_THREAD.store(true);
             m_fitThread.join();
         }
@@ -127,12 +188,27 @@ class BuffCalculator {
             return result_pitch_yaw;
         }
 
-        bool calculate(const Frame &frame, std::vector<cv::Point2f> &cameraPoints, const float &actual_bullet_speed);
+        bool calculate(const Frame &frame, std::vector<cv::Point2f> &cameraPoints, int buff_model, const float &actual_bullet_speed, const bool reload_big_buff);
         inline cv::Point3f getPredictRobot() { return m_predictRobot; }
         inline cv::Point2f getPredictPixel() { return m_predictPixel; }
         inline std::pair<double, double> getPredictPitchYaw() {
             return std::make_pair(m_predictPitch, m_predictYaw);
         }
+        inline int getEstimatedBuffMode() const {
+            return estimated_buff_mode_;
+        }
+        inline double getPredictRotationAngle() const {
+            return m_predictRotationAngle;
+        }
+        inline double getPredictDistanceM() const {
+            return std::hypot(m_predictRobot.x, m_predictRobot.z) * 1e-3;
+        }
+        inline double getPredictHeightM() const {
+            return m_predictRobot.y * 1e-3;
+        }
+        void setApplyStaticShootTableAdjust(bool enable) { static_shoot_table_adjust_enable = enable; }
+        void setApplyPeriodicShootTableAdjust(bool enable) { buff_shoot_table_adjust_enable = enable; }
+        void setForceStable(bool enable) { force_stable = enable; }
         cv::Point2f getPixelFromCamera(const cv::Mat &intrinsicMatrix, const cv::Mat &cameraPoint);
         cv::Point2f getPixelFromRobot(const cv::Point3f &robot, const cv::Mat &w2c, const cv::Mat &w2r);
         std::pair<double, double> getPitchYawFromRobotCoor(const cv::Point3f &target, double bulletSpeed);
@@ -141,6 +217,10 @@ class BuffCalculator {
         }
         double get_predictYaw(){
             return m_predictYaw;
+        }
+        double fitDistance(double org_Distance){
+            // return (1.3675 * org_Distance - 0.0018);
+            return (1.2652*org_Distance+0.2626+1.2);
         }
 
     private:
@@ -152,6 +232,12 @@ class BuffCalculator {
         bool predict();
         void fit();
         bool fitOnce();
+        void updateAutoModeEstimate(double time_sec, double angle_rel);
+        void loadShootTableAdjust(const param::Param& json_param);
+        double fitStaticShootTableDeg(const std::array<double, 6>& coeffs, double z_height_m,
+                                     double horizontal_distance_m) const;
+        double fitBuffPeriodicDeg(const std::array<double, 7>& coeffs, double rotation_angle,
+                                 double distance_m, double height_m) const;
 
         // Eigen::Matrix3d cameraIntrinsicMatrix;
         // Vector5d distorationCoefficients;// k1,k2,p1,p2,k3
@@ -169,9 +255,12 @@ class BuffCalculator {
         double COMPANSATE_TIME;
         double COMPANSATE_PITCH;
         double COMPANSATE_YAW;
+        double AFTER_PITCH;
+        double AFTER_YAW;
         double GRAVITY;
         double FPS;
         int count;
+        bool force_stable;
 
         cv::Mat armorWorld;
         cv::Mat centerWorld;
@@ -185,6 +274,7 @@ class BuffCalculator {
         cv::Mat m_rMatW2RBase;  // 第一次检测有效的世界坐标系转机器人坐标系的 3x3 旋转矩阵
         double m_angleRel;   // 这一帧相对于第一帧的旋转角度（去除了装甲板切换的影响）
         double m_angleLast;  // 上一帧相对于第一帧的旋转角度（不考虑装甲板切换
+        double org_distance2Target;
         double m_distance2Target;
         std::vector<std::pair<double, double>> m_fitData;  // 拟合数据
         std::vector<double> m_directionData;               // 计算旋转方向的数据
@@ -198,15 +288,35 @@ class BuffCalculator {
         double m_receiveYaw;                               // 当前帧的yaw
         double m_predictPitch;
         double m_predictYaw;
+        double m_predictRotationAngle = 0.0;
         int m_directionThresh;
         std::thread m_fitThread;
+        int m_buff_mode;
+        bool m_reload_big_buff;
         std::shared_mutex m_mutex; //MUTEX
+        bool auto_mode_enable_ = true;
+        int auto_mode_min_samples_ = 20;
+        double auto_mode_window_sec_ = 1.5;
+        double auto_mode_std_high_ = 0.16;
+        double auto_mode_std_low_ = 0.08;
+        double auto_mode_min_abs_omega_ = 0.30;
+        int estimated_buff_mode_ = 1;
+        bool mode_auto_request_ = false;
+        std::deque<std::pair<double, double>> mode_history_;
 
         double small_power_rune_rotation_speed;
         double power_radius;
+        bool static_shoot_table_adjust_enable = false;
+        std::array<double, 6> static_pitch_adjust_param{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+        std::array<double, 6> static_yaw_adjust_param{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+        bool buff_shoot_table_adjust_enable = false;
+        bool buff_shoot_table_big_only = true;
+        std::array<double, 7> buff_pitch_adjust_param{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+        std::array<double, 7> buff_yaw_adjust_param{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
         //    m_predictPitch = predictPitch;
         //    m_predictYaw = predictYaw;
 };
+
 
 /**
  * @brief 惩罚项，让拟合的参数更加贴近预设的参数
@@ -304,6 +414,7 @@ inline double getAngleBig(double time, const std::array<double, 5> &params) noex
     return -params[0] * std::cos(params[1] * (time + params[2])) + params[3] * time + params[4];
 }
 
+//brief和@param之间需要空一行，否则会报错。给机器看的注释。
 /**
  * @brief 得到大符旋转角度，这里是相对于最后一次识别，预测的旋转角
  * @param[in] distance      到装甲板中心的距离

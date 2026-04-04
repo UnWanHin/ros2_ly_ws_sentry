@@ -12,6 +12,8 @@ Applied items:
 - P1: Configurable armor visible-angle threshold (replacing hard-coded `pi/3`).
 - P1: 8081 overlay support for predictor center point from `/ly/predictor/debug` (configurable switch).
 - P1: Full 4-armor visualization topic/message for 8081 overlay (`/ly/predictor/vis`).
+- Follow-up: buff_hitter bullet-speed chain switched from fixed value to dynamic uplink + EMA smoothing.
+- Follow-up: buff_hitter core modules (`BuffCalculator/BuffDetector/BuffController`) aligned to infantry implementation shape.
 
 ## Files Changed
 - `src/auto_aim_common/msg/PredictorArmorVis.msg`
@@ -25,6 +27,14 @@ Applied items:
 - `src/predictor/src/controller.cpp`
 - `src/predictor/predictor_node.cpp`
 - `src/detector/detector_node.cpp`
+- `src/gimbal_driver/main.cpp`
+- `src/buff_hitter/main.cpp`
+- `src/buff_hitter/config/config.json`
+- `src/buff_hitter/module/BuffCalculator.hpp`
+- `src/buff_hitter/src/BuffCalculator.cpp`
+- `src/buff_hitter/module/BuffDetector.hpp`
+- `src/buff_hitter/src/BuffDetector.cpp`
+- `src/buff_hitter/src/BuffController.cpp`
 - `scripts/config/auto_aim_config_competition.yaml`
 - `src/detector/config/auto_aim_config.yaml`
 
@@ -85,6 +95,49 @@ Applied items:
   - four armor points with status color overlay on 8081 stream
 - This path is controlled by YAML switch `detector_config.overlay_predictor_full`.
 
+### 8) Bullet-speed chain fix (remove hard-coded return and re-enable smoothing)
+- `gimbal_driver` now publishes measured bullet speed directly:
+  - `msg.data = data.BulletSpeed / 100.0f`
+  - removed hard-coded overwrite `23.0f`
+- `predictor/controller` no longer forces fly-time speed to fixed `23.0`.
+- Controller now uses runtime bullet speed with infantry-style EMA:
+  - valid when incoming speed is above `min_bullet_speed`
+  - update: `v = alpha * v_in + (1 - alpha) * v_prev`
+  - fly-time uses `max(v, min_bullet_speed)` for safety
+
+### 9) Buff_hitter bullet-speed chain fix (fixed -> dynamic)
+- `buff_hitter` now subscribes `/ly/bullet/speed` and uses that as solver input source.
+- Added infantry-style bullet-speed smoothing in `buff_hitter`:
+  - validity gate: incoming speed `> min_bullet_speed`
+  - update: `v = alpha * v_in + (1 - alpha) * v_prev`
+  - safety floor: `max(v, min_bullet_speed)` before `BuffCalculator::calculate(...)`
+- Added config keys under `buff` in `src/buff_hitter/config/config.json`:
+  - `dynamic_bullet_speed_enable`
+  - `default_bullet_speed`
+  - `min_bullet_speed`
+  - `bullet_speed_alpha`
+
+### 10) Buff_hitter core migration from infantry modules
+- Replaced ROS2-side buff core implementation with infantry-side module structure:
+  - `BuffCalculator` now uses infantry-style function signature:
+    - `calculate(frame, camera_points, buff_mode, bullet_speed, reload_big_buff)`
+  - `BuffDetector` now supports dual-model path and color-select inference:
+    - constructor `(red_model_path, blue_model_path)`
+    - `buffDetect(frame, enemy_color)`
+    - multi-candidate handling and camera-point selection API (`getCameraPointsByIndex`)
+  - `BuffController` implementation restored (yaw nearest-angle normalization and validity fallback)
+- Main node integration:
+  - reads infantry-compatible buff config items (`default_mode`, `reload_big_buff`, dual model paths)
+  - supports runtime mode switch via `/ly/ra/mode` (`0=follow default`, `1=small`, `2=big`)
+  - `default_mode=0` now means upper-computer auto mode (vision-side mode estimation, no lower-computer `aim_request` dependency)
+  - supports dual-target scheduling in buff loop (primary/secondary index, rising-edge switch-to-second, timeout reset)
+  - applies `BuffController` output before publish (`valid` gate + nearest-yaw normalization)
+  - keeps ROS2 external topic interface unchanged (`/ly/buff/target`)
+  - keeps armor predictor/tracker chain untouched
+- Compatibility guards added:
+  - `FPS` falls back to legacy `buff_calculate_FPS` when absent
+  - optional params (`AFTER_PITCH`, `AFTER_YAW`, `force_stable`) default safely
+
 ## New/Updated Runtime Parameters
 
 ### Predictor / Motion Model
@@ -125,6 +178,13 @@ Result:
 - `auto_aim_common`: success
 - `predictor`: success
 - `detector`: success
+
+Additional command used:
+```bash
+colcon build --packages-select buff_hitter --event-handlers console_direct+
+```
+Result:
+- `buff_hitter`: success
 
 ## Usage Notes
 - To enable predictor center overlay on 8081 stream:
