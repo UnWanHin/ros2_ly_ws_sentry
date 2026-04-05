@@ -26,7 +26,14 @@ WRITE_CONFIG=""
 OUTPUT_FIT_YAML=""
 DEFAULT_RECORD_DIR="${HOME:-.}/workspace/record"
 RECORD_DIR="${DEFAULT_RECORD_DIR}"
-DEFAULT_COMPETITION_CONFIG="${ROOT_DIR}/scripts/config/auto_aim_config_competition.yaml"
+BASE_CONFIG_FILE=""
+DETECTOR_CONFIG_FILE=""
+PREDICTOR_CONFIG_FILE=""
+DEFAULT_BASE_CONFIG="${ROOT_DIR}/scripts/config/stack/base_competition.yaml"
+DEFAULT_DETECTOR_CONFIG="${ROOT_DIR}/scripts/config/stack/detector_competition.yaml"
+DEFAULT_PREDICTOR_CONFIG="${ROOT_DIR}/scripts/config/stack/predictor_competition.yaml"
+DEFAULT_OVERRIDE_CONFIG="${ROOT_DIR}/scripts/config/stack/override_none.yaml"
+DEFAULT_WRITE_CONFIG="${ROOT_DIR}/scripts/config/stack/predictor_competition.yaml"
 AUTO_FIT_EXPLICIT=0
 WRITE_CONFIG_EXPLICIT=0
 DISABLE_DEFAULT_WRITE_CONFIG=0
@@ -39,7 +46,10 @@ Usage:
   ${SCRIPT_NAME} [options] [-- <extra ros2 launch args...>]
 
 Options:
-  --config <path>             YAML config file (optional, default launch value).
+  --config <path>             Global override YAML (config_file).
+  --base-config <path>        Base shared YAML (base_config_file).
+  --detector-config <path>    Detector YAML (detector_config_file).
+  --predictor-config <path>   Predictor YAML (predictor_config_file).
   --output <screen|log>       Node output mode. Default: screen.
   --use-gimbal <true|false>   Start gimbal_driver. Default: true.
   --use-calib <true|false>    Start shooting_table_calib node. Default: true.
@@ -66,10 +76,10 @@ Examples:
   ./${SCRIPT_NAME}
   ./${SCRIPT_NAME} --latest-csv
   ./${SCRIPT_NAME} --team blue --web-show false
-  ./${SCRIPT_NAME} --config /path/to/auto_aim_config_competition.yaml
+  ./${SCRIPT_NAME} --config /path/to/global_override.yaml
   ./${SCRIPT_NAME}
-  ./${SCRIPT_NAME} --fit-latest --write-config scripts/config/auto_aim_config_competition.yaml
-  ./${SCRIPT_NAME} --auto-fit --write-config scripts/config/auto_aim_config_competition.yaml
+  ./${SCRIPT_NAME} --fit-latest --write-config scripts/config/stack/predictor_competition.yaml
+  ./${SCRIPT_NAME} --auto-fit --write-config scripts/config/stack/predictor_competition.yaml
   ./${SCRIPT_NAME} --param-manager-cmd "bash /home/liu/workspace/scripts/param_manager.bash"
 EOF
 }
@@ -145,6 +155,18 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --config)
       CONFIG_FILE="$2"
+      shift 2
+      ;;
+    --base-config)
+      BASE_CONFIG_FILE="$2"
+      shift 2
+      ;;
+    --detector-config)
+      DETECTOR_CONFIG_FILE="$2"
+      shift 2
+      ;;
+    --predictor-config)
+      PREDICTOR_CONFIG_FILE="$2"
       shift 2
       ;;
     --output)
@@ -315,8 +337,20 @@ if [[ -z "${CSV_STRATEGY}" ]]; then
   CSV_STRATEGY="new"
 fi
 
+if [[ -z "${BASE_CONFIG_FILE}" ]]; then
+  BASE_CONFIG_FILE="${DEFAULT_BASE_CONFIG}"
+fi
+if [[ -z "${DETECTOR_CONFIG_FILE}" ]]; then
+  DETECTOR_CONFIG_FILE="${DEFAULT_DETECTOR_CONFIG}"
+fi
+if [[ -z "${PREDICTOR_CONFIG_FILE}" ]]; then
+  PREDICTOR_CONFIG_FILE="${DEFAULT_PREDICTOR_CONFIG}"
+fi
 if [[ -z "${CONFIG_FILE}" ]]; then
-  CONFIG_FILE="${DEFAULT_COMPETITION_CONFIG}"
+  CONFIG_FILE="${DEFAULT_OVERRIDE_CONFIG}"
+fi
+if [[ -z "${WRITE_CONFIG}" ]] && (( DISABLE_DEFAULT_WRITE_CONFIG == 0 )); then
+  WRITE_CONFIG="${DEFAULT_WRITE_CONFIG}"
 fi
 
 if [[ ! -f "${ROOT_DIR}/install/setup.bash" ]]; then
@@ -359,13 +393,26 @@ LAUNCH_ARGS=(
   "csv_strategy:=${CSV_STRATEGY}"
 )
 
-if [[ -n "${CONFIG_FILE}" ]]; then
-  if [[ ! -f "${CONFIG_FILE}" ]]; then
-    echo "[ERROR] config file not found: ${CONFIG_FILE}" >&2
-    exit 1
-  fi
-  LAUNCH_ARGS+=("config_file:=${CONFIG_FILE}")
+if [[ ! -f "${BASE_CONFIG_FILE}" ]]; then
+  echo "[ERROR] base config file not found: ${BASE_CONFIG_FILE}" >&2
+  exit 1
 fi
+if [[ ! -f "${DETECTOR_CONFIG_FILE}" ]]; then
+  echo "[ERROR] detector config file not found: ${DETECTOR_CONFIG_FILE}" >&2
+  exit 1
+fi
+if [[ ! -f "${PREDICTOR_CONFIG_FILE}" ]]; then
+  echo "[ERROR] predictor config file not found: ${PREDICTOR_CONFIG_FILE}" >&2
+  exit 1
+fi
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+  echo "[ERROR] override config file not found: ${CONFIG_FILE}" >&2
+  exit 1
+fi
+LAUNCH_ARGS+=("base_config_file:=${BASE_CONFIG_FILE}")
+LAUNCH_ARGS+=("detector_config_file:=${DETECTOR_CONFIG_FILE}")
+LAUNCH_ARGS+=("predictor_config_file:=${PREDICTOR_CONFIG_FILE}")
+LAUNCH_ARGS+=("config_file:=${CONFIG_FILE}")
 if [[ -n "${CSV_PATH}" ]]; then
   LAUNCH_ARGS+=("csv_path:=${CSV_PATH}")
 fi
@@ -374,7 +421,10 @@ echo "Starting Shooting Table Calibration System (ROS2)..."
 echo "===================================================="
 echo "[INFO] output=${OUTPUT_MODE} use_gimbal=${USE_GIMBAL} use_calib=${USE_CALIB} team_red=${TEAM_RED} debug_team_blue=${DEBUG_TEAM_BLUE} web_show=${WEB_SHOW} draw_image=${DRAW_IMAGE}"
 echo "[INFO] record_dir=${RECORD_DIR} csv_strategy=${CSV_STRATEGY} auto_fit=${AUTO_FIT}"
-echo "[INFO] config_file=${CONFIG_FILE}"
+echo "[INFO] base_config_file=${BASE_CONFIG_FILE}"
+echo "[INFO] detector_config_file=${DETECTOR_CONFIG_FILE}"
+echo "[INFO] predictor_config_file=${PREDICTOR_CONFIG_FILE}"
+echo "[INFO] config_file(override)=${CONFIG_FILE}"
 if [[ -n "${CSV_PATH}" ]]; then
   echo "[INFO] csv_path=${CSV_PATH}"
 fi

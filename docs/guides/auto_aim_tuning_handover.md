@@ -38,8 +38,8 @@
 ### B. 不在 YAML，需改 JSON
 
 - 檔案：`src/buff_hitter/config/config.json`
-- `buff_hitter` 目前主要從這個 JSON 讀參數（模型、補償、符半徑、內參、方向判定窗口等）。
-- `sentry_all.launch.py` 雖給了 YAML，但 `buff_hitter` 並不以 YAML 為主配置來源。
+- `buff_hitter` 仍以這個 JSON 為基礎配置，但已支持 `buff_config.*` 的 YAML 覆蓋層（由 launch 注入）。
+- 建議：常改項先放 `scripts/config/stack/buff_competition.yaml`；基礎模板保留在 JSON。
 
 ### C. 不在配置檔，需改代碼重編譯
 

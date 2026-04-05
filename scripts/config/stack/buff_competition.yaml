@@ -1,0 +1,38 @@
+/**:
+  ros__parameters:
+    buff_config:
+      enemy_color: "auto"
+      dynamic_bullet_speed_enable: true
+      default_bullet_speed: 23.0
+      min_bullet_speed: 20.0
+      bullet_speed_alpha: 0.5
+
+      default_mode: 0
+      mode_switch_topic_enable: true
+      reload_big_buff: true
+      two_target_enable: true
+      two_target_cycle_timeout_sec: 1.0
+
+      red_buff_model_path: "src/buff_hitter/utils/buff_models/red_best.xml"
+      blue_buff_model_path: "src/buff_hitter/utils/buff_models/blue_best.xml"
+
+      force_stable: false
+      auto_mode_enable: true
+      auto_mode_min_samples: 20
+      auto_mode_window_sec: 1.5
+      auto_mode_std_high: 0.16
+      auto_mode_std_low: 0.08
+      auto_mode_min_abs_omega: 0.30
+
+      # Optional static shooting-table correction for buff solver.
+      # Order: [intercept, coef_z, coef_d, coef_z2, coef_zd, coef_d2]
+      static_shoot_table_adjust_enable: false
+      static_pitch_adjust_coeffs: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      static_yaw_adjust_coeffs: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+      # Optional periodic correction for big-buff compensation.
+      # Order: [intercept, coef_sin, coef_cos, coef_sin2, coef_cos2, coef_dist, coef_height]
+      periodic_shoot_table_adjust_enable: false
+      periodic_apply_on_big_buff_only: true
+      periodic_pitch_adjust_coeffs: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      periodic_yaw_adjust_coeffs: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

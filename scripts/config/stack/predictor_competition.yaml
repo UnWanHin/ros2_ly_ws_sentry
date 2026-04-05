@@ -1,0 +1,41 @@
+/**:
+  ros__parameters:
+    controller_config:
+      bullet_speed: 23.0
+      shoot_delay: 0.02
+      anti_rotate:
+        enable: true
+        omega_threshold: 0.6
+        response_speed: 0.01
+        base_jump_angle_rad: 0.78539816339
+        min_jump_angle_rad: 0.52359877559
+        min_radius: 0.2
+      shoot_table_adjust:
+        enable: true
+        pitch:
+          intercept: -1.547
+          coef_z: -4.876
+          coef_d: 1.1344
+          coef_z2: -16.5213
+          coef_zd: -1.14337
+          coef_d2: -0.1510
+        yaw:
+          intercept: 1.0714
+          coef_z: -7.7968
+          coef_d: -1.25504
+          coef_z2: -15.632
+          coef_zd: 0.1603
+          coef_d2: 0.1827
+
+    "motion_model.q_ax_jerk_base": 40.0
+    "motion_model.q_ay_jerk_base": 40.0
+    "motion_model.q_omega_accel_base": 0.2
+    "motion_model.q_r1_drift_base": 0.00001
+    "motion_model.q_r2_drift_base": 0.00001
+    "motion_model.q_z1_drift_base": 0.01
+    "motion_model.q_z2_drift_base": 0.01
+    "motion_model.r_scale": 0.1
+    "motion_model.boundary_fit_alpha": 0.12
+    "motion_model.boundary_scale_min": 0.5
+    "motion_model.boundary_scale_max": 6.0
+    "predictor.visible_half_angle_rad": 1.0471975512

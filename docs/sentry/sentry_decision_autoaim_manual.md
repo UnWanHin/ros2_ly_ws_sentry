@@ -148,11 +148,11 @@ BT 節點實際調用的就是這些函數。
 
 但要分兩種啟動方式看：
 - 直接 `ros2 launch behavior_tree sentry_all.launch.py`：
-  - 默認讀 `src/detector/config/auto_aim_config.yaml`
+  - 默認讀分層配置（`base + detector/predictor/outpost/buff + override`）
 - `./scripts/start.sh gated`：
-  - 默認注入 `scripts/config/auto_aim_config_competition.yaml`
+  - 默認注入 `scripts/config/stack/*.yaml` 分層配置
   - 僅注入模式相關參數（`competition_profile` / `bt_config_file` / `offline`）
-  - 需要時可手動傳 `config_file:=...` 覆蓋
+  - 需要時可手動傳 `config_file:=...` 做全局覆蓋
 
 同一份參數會被多個節點共用（detector / predictor / gimbal_driver 等 launch 都載這份）。
 

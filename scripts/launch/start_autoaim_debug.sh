@@ -9,7 +9,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_NAME="$(basename "$0")"
 LOCK_FILE="/tmp/sentry_autoaim_debug.lock"
-ONLINE_CONFIG_FILE="${ROOT_DIR}/scripts/config/auto_aim_config_competition.yaml"
+DEFAULT_BASE_CONFIG_FILE="${ROOT_DIR}/scripts/config/stack/base_competition.yaml"
+DEFAULT_DETECTOR_CONFIG_FILE="${ROOT_DIR}/scripts/config/stack/detector_competition.yaml"
+DEFAULT_PREDICTOR_CONFIG_FILE="${ROOT_DIR}/scripts/config/stack/predictor_competition.yaml"
+DEFAULT_OVERRIDE_CONFIG_FILE="${ROOT_DIR}/scripts/config/stack/override_none.yaml"
 
 : "${ROS_LOG_DIR:=/tmp/ros2_logs}"
 mkdir -p "${ROS_LOG_DIR}"
@@ -23,6 +26,9 @@ WAIT_SECONDS=12
 CMD_TIMEOUT=5
 OUTPUT_MODE="screen"
 CONFIG_FILE=""
+BASE_CONFIG_FILE=""
+DETECTOR_CONFIG_FILE=""
+PREDICTOR_CONFIG_FILE=""
 DRY_RUN=0
 LAUNCH_ARGS=()
 
@@ -67,7 +73,10 @@ Key options:
   --wait SECONDS         等待感知链就绪秒数（默认: ${WAIT_SECONDS}）
   --cmd-timeout SECONDS  ros2 命令超时（默认: ${CMD_TIMEOUT}）
   --output screen|log    launch 输出模式（默认: ${OUTPUT_MODE}）
-  --config-file PATH     指定 config_file:=PATH
+  --base-config PATH     指定 base_config_file:=PATH
+  --detector-config PATH 指定 detector_config_file:=PATH
+  --predictor-config PATH 指定 predictor_config_file:=PATH
+  --config-file PATH     指定全局覆蓋 config_file:=PATH（最後疊加）
   --allow-multi-control  允许多控制源同时写 control 话题（默认禁止）
   --dry-run              只打印命令，不执行
 
@@ -207,6 +216,21 @@ while [[ $# -gt 0 ]]; do
     --output)
       require_option_value "$1" "${2-}"
       OUTPUT_MODE="$2"
+      shift 2
+      ;;
+    --base-config)
+      require_option_value "$1" "${2-}"
+      BASE_CONFIG_FILE="$2"
+      shift 2
+      ;;
+    --detector-config)
+      require_option_value "$1" "${2-}"
+      DETECTOR_CONFIG_FILE="$2"
+      shift 2
+      ;;
+    --predictor-config)
+      require_option_value "$1" "${2-}"
+      PREDICTOR_CONFIG_FILE="$2"
       shift 2
       ;;
     --config-file)
@@ -354,21 +378,27 @@ source_workspace() {
 }
 
 select_default_config_if_needed() {
-  if [[ -n "${CONFIG_FILE}" ]]; then
-    return 0
+  if [[ -z "${BASE_CONFIG_FILE}" ]]; then
+    BASE_CONFIG_FILE="${DEFAULT_BASE_CONFIG_FILE}"
   fi
 
-  if (( OFFLINE_MODE == 1 )); then
-    return 0
+  if [[ -z "${DETECTOR_CONFIG_FILE}" ]]; then
+    DETECTOR_CONFIG_FILE="${DEFAULT_DETECTOR_CONFIG_FILE}"
   fi
 
-  if [[ -f "${ONLINE_CONFIG_FILE}" ]]; then
-    CONFIG_FILE="${ONLINE_CONFIG_FILE}"
-    info "Online mode: defaulting to on-robot config ${CONFIG_FILE}"
-    return 0
+  if [[ -z "${PREDICTOR_CONFIG_FILE}" ]]; then
+    PREDICTOR_CONFIG_FILE="${DEFAULT_PREDICTOR_CONFIG_FILE}"
   fi
 
-  warn "Online default config not found: ${ONLINE_CONFIG_FILE}. Falling back to launch default config."
+  if [[ -z "${CONFIG_FILE}" ]]; then
+    CONFIG_FILE="${DEFAULT_OVERRIDE_CONFIG_FILE}"
+  fi
+
+  info "config layering:"
+  info "  base_config_file=${BASE_CONFIG_FILE}"
+  info "  detector_config_file=${DETECTOR_CONFIG_FILE}"
+  info "  predictor_config_file=${PREDICTOR_CONFIG_FILE}"
+  info "  config_file(override)=${CONFIG_FILE}"
   return 0
 }
 
@@ -506,7 +536,16 @@ cleanup_existing_stack_if_needed() {
 
 build_launch_cmd() {
   LAUNCH_CMD=(ros2 launch detector auto_aim.launch.py "output:=${OUTPUT_MODE}" "use_mapper:=false")
-  if [[ -n "${CONFIG_FILE}" ]]; then
+  if ! has_launch_arg_key "base_config_file"; then
+    LAUNCH_CMD+=("base_config_file:=${BASE_CONFIG_FILE}")
+  fi
+  if ! has_launch_arg_key "detector_config_file"; then
+    LAUNCH_CMD+=("detector_config_file:=${DETECTOR_CONFIG_FILE}")
+  fi
+  if ! has_launch_arg_key "predictor_config_file"; then
+    LAUNCH_CMD+=("predictor_config_file:=${PREDICTOR_CONFIG_FILE}")
+  fi
+  if ! has_launch_arg_key "config_file"; then
     LAUNCH_CMD+=("config_file:=${CONFIG_FILE}")
   fi
   if (( OFFLINE_MODE == 1 )); then

@@ -63,12 +63,24 @@ def generate_launch_description():
             SetLaunchConfiguration("resolved_bt_config_file", resolved_bt_config),
         ]
 
-    # 比赛相关入口默认使用比赛配置；如需覆盖，仍可显式传入 config_file:=...
+    # 分层配置默认入口：
+    #   base + module + optional global override(config_file)
     behavior_tree_share = get_package_share_directory("behavior_tree")
-    default_config_file = os.path.join(behavior_tree_share, "config", "auto_aim_config_competition.yaml")
+    config_root = os.path.join(behavior_tree_share, "config")
+    default_base_config_file = os.path.join(config_root, "stack", "base_competition.yaml")
+    default_detector_config_file = os.path.join(config_root, "stack", "detector_competition.yaml")
+    default_predictor_config_file = os.path.join(config_root, "stack", "predictor_competition.yaml")
+    default_outpost_config_file = os.path.join(config_root, "stack", "outpost_competition.yaml")
+    default_buff_config_file = os.path.join(config_root, "stack", "buff_competition.yaml")
+    default_override_config_file = os.path.join(config_root, "stack", "override_none.yaml")
 
     mode = LaunchConfiguration("mode")
     config_file = LaunchConfiguration("config_file")
+    base_config_file = LaunchConfiguration("base_config_file")
+    detector_config_file = LaunchConfiguration("detector_config_file")
+    predictor_config_file = LaunchConfiguration("predictor_config_file")
+    outpost_config_file = LaunchConfiguration("outpost_config_file")
+    buff_config_file = LaunchConfiguration("buff_config_file")
     output = LaunchConfiguration("output")
     competition_profile = LaunchConfiguration("competition_profile")
     bt_config_file = LaunchConfiguration("bt_config_file")
@@ -97,8 +109,33 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "config_file",
-            default_value=default_config_file,
-            description="Shared YAML config file for perception/solver/driver nodes.",
+            default_value=default_override_config_file,
+            description="Optional global override YAML (applied last to all nodes).",
+        ),
+        DeclareLaunchArgument(
+            "base_config_file",
+            default_value=default_base_config_file,
+            description="Base shared YAML for camera/solver/io.",
+        ),
+        DeclareLaunchArgument(
+            "detector_config_file",
+            default_value=default_detector_config_file,
+            description="Detector module YAML.",
+        ),
+        DeclareLaunchArgument(
+            "predictor_config_file",
+            default_value=default_predictor_config_file,
+            description="Predictor/tracker module YAML.",
+        ),
+        DeclareLaunchArgument(
+            "outpost_config_file",
+            default_value=default_outpost_config_file,
+            description="Outpost module YAML.",
+        ),
+        DeclareLaunchArgument(
+            "buff_config_file",
+            default_value=default_buff_config_file,
+            description="Buff module YAML.",
         ),
         DeclareLaunchArgument(
             "output",
@@ -156,6 +193,11 @@ def generate_launch_description():
     info_logs = [
         LogInfo(msg=["[sentry_all] mode: ", mode]),
         LogInfo(msg=["[sentry_all] config: ", config_file]),
+        LogInfo(msg=["[sentry_all] base_config: ", base_config_file]),
+        LogInfo(msg=["[sentry_all] detector_config: ", detector_config_file]),
+        LogInfo(msg=["[sentry_all] predictor_config: ", predictor_config_file]),
+        LogInfo(msg=["[sentry_all] outpost_config: ", outpost_config_file]),
+        LogInfo(msg=["[sentry_all] buff_config: ", buff_config_file]),
         LogInfo(msg=["[sentry_all] output: ", output]),
         LogInfo(msg=["[sentry_all] offline: ", offline]),
         LogInfo(msg=["[sentry_all] competition_profile: ", competition_profile]),
@@ -178,7 +220,7 @@ def generate_launch_description():
                     executable="gimbal_driver_node",
                     name="gimbal_driver",
                     output=output,
-                    parameters=[config_file],
+                    parameters=[base_config_file, config_file],
                     on_exit=Shutdown(reason="gimbal_driver exited"),
                     condition=LaunchConfigurationNotEquals("offline", "true"),
                 ),
@@ -188,6 +230,7 @@ def generate_launch_description():
                     name="gimbal_driver",
                     output=output,
                     parameters=[
+                        base_config_file,
                         config_file,
                         {
                             "io_config/use_virtual_device": True,
@@ -208,7 +251,7 @@ def generate_launch_description():
                     executable="detector_node",
                     name="detector",
                     output=output,
-                    parameters=[config_file],
+                    parameters=[base_config_file, detector_config_file, config_file],
                     on_exit=Shutdown(reason="detector exited"),
                     condition=LaunchConfigurationNotEquals("offline", "true"),
                 ),
@@ -218,6 +261,8 @@ def generate_launch_description():
                     name="detector",
                     output=output,
                     parameters=[
+                        base_config_file,
+                        detector_config_file,
                         config_file,
                         {
                             "detector_config/use_video": True,
@@ -236,7 +281,7 @@ def generate_launch_description():
             executable="tracker_solver_node",
             name="tracker_solver",
             output=output,
-            parameters=[config_file],
+            parameters=[base_config_file, predictor_config_file, config_file],
             on_exit=Shutdown(reason="tracker_solver exited"),
             condition=IfCondition(use_tracker),
         ),
@@ -245,7 +290,7 @@ def generate_launch_description():
             executable="predictor_node",
             name="predictor_node",
             output=output,
-            parameters=[config_file],
+            parameters=[base_config_file, predictor_config_file, config_file],
             on_exit=Shutdown(reason="predictor_node exited"),
             condition=IfCondition(use_predictor),
         ),
@@ -254,7 +299,7 @@ def generate_launch_description():
             executable="outpost_hitter_node",
             name="outpost_hitter",
             output=output,
-            parameters=[config_file],
+            parameters=[base_config_file, outpost_config_file, config_file],
             on_exit=Shutdown(reason="outpost_hitter exited"),
             condition=IfCondition(use_outpost),
         ),
@@ -263,7 +308,7 @@ def generate_launch_description():
             executable="buff_hitter_node",
             name="buff_hitter",
             output=output,
-            parameters=[config_file],
+            parameters=[base_config_file, buff_config_file, config_file],
             on_exit=Shutdown(reason="buff_hitter exited"),
             condition=IfCondition(use_buff),
         ),

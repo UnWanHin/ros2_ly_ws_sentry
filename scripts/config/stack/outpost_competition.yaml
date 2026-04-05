@@ -1,0 +1,8 @@
+/**:
+  ros__parameters:
+    outpost_config:
+      fire:
+        bullet_speed: 23.0
+        pitch_bias_deg: 2.0
+        max_yaw_delta_deg: 80.0
+        time_delay_sec: 0.10

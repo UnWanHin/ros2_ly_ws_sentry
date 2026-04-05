@@ -1,0 +1,36 @@
+/**:
+  ros__parameters:
+    "detector_config.classifier_path": "src/detector/Extras/classifier.xml"
+    "detector_config/classifier_path": "src/detector/Extras/classifier.xml"
+    "detector_config.detector_path": "src/detector/Extras/armor_detector_model.xml"
+    "detector_config/detector_path": "src/detector/Extras/armor_detector_model.xml"
+    "detector_config.car_model_path": "src/detector/Extras/car_detector_model.xml"
+    "detector_config/car_model_path": "src/detector/Extras/car_detector_model.xml"
+    "detector_config.video_path": "src/record/record.mkv"
+    "detector_config/video_path": "src/record/record.mkv"
+
+    "detector_config.debug_mode": false
+    "detector_config/debug_mode": false
+    "detector_config.debug_team_blue": false
+    "detector_config/debug_team_blue": false
+
+    "detector_config.web_show": true
+    "detector_config/web_show": true
+    "detector_config.show": false
+    "detector_config/show": false
+    "detector_config.draw": true
+    "detector_config/draw": true
+    "detector_config.use_ros_bag": false
+    "detector_config/use_ros_bag": false
+    "detector_config.save_video": false
+    "detector_config/save_video": false
+    "detector_config.use_video": false
+    "detector_config/use_video": false
+
+    # 8081 overlay controls
+    "detector_config.overlay_predictor_center": false
+    "detector_config/overlay_predictor_center": false
+    "detector_config.overlay_predictor_full": false
+    "detector_config/overlay_predictor_full": false
+    "detector_config.overlay_predictor_timeout_ms": 120
+    "detector_config/overlay_predictor_timeout_ms": 120

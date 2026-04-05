@@ -82,7 +82,7 @@ scripts/
 
 默认行为：
 
-- 使用 `scripts/config/auto_aim_config_competition.yaml`
+- 使用分层配置（`scripts/config/stack/base_competition.yaml` + `detector_competition.yaml` + `predictor_competition.yaml`，并叠加 `override_none.yaml`）
 - 默认 `--mode regional`
 - 默认 `--nogate`
 - 默认启用：`gimbal_driver / detector / tracker_solver / predictor / behavior_tree`

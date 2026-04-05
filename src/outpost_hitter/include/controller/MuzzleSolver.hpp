@@ -20,6 +20,10 @@ namespace CONTROLLER
         {
             this->bullet_speed = bullet_speed;
         }
+        void setTimeDelay(float time_delay)
+        {
+            this->time_delay = time_delay;
+        }
 
     private:
         float bulletModel(float dis, float angle);

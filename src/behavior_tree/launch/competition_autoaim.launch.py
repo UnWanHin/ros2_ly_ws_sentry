@@ -17,11 +17,22 @@ from launch.substitutions import LaunchConfiguration
 def generate_launch_description():
     behavior_tree_share = get_package_share_directory("behavior_tree")
     sentry_all_launch = os.path.join(behavior_tree_share, "launch", "sentry_all.launch.py")
-    default_config_file = os.path.join(behavior_tree_share, "config", "auto_aim_config_competition.yaml")
+    config_root = os.path.join(behavior_tree_share, "config", "stack")
+    default_base_config_file = os.path.join(config_root, "base_competition.yaml")
+    default_detector_config_file = os.path.join(config_root, "detector_competition.yaml")
+    default_predictor_config_file = os.path.join(config_root, "predictor_competition.yaml")
+    default_outpost_config_file = os.path.join(config_root, "outpost_competition.yaml")
+    default_buff_config_file = os.path.join(config_root, "buff_competition.yaml")
+    default_override_config_file = os.path.join(config_root, "override_none.yaml")
 
     launch_args = [
         DeclareLaunchArgument("mode", default_value="regional"),
-        DeclareLaunchArgument("config_file", default_value=default_config_file),
+        DeclareLaunchArgument("config_file", default_value=default_override_config_file),
+        DeclareLaunchArgument("base_config_file", default_value=default_base_config_file),
+        DeclareLaunchArgument("detector_config_file", default_value=default_detector_config_file),
+        DeclareLaunchArgument("predictor_config_file", default_value=default_predictor_config_file),
+        DeclareLaunchArgument("outpost_config_file", default_value=default_outpost_config_file),
+        DeclareLaunchArgument("buff_config_file", default_value=default_buff_config_file),
         DeclareLaunchArgument("output", default_value="screen"),
         DeclareLaunchArgument("offline", default_value="false"),
         DeclareLaunchArgument("debug_bypass_is_start", default_value="true"),
@@ -44,6 +55,11 @@ def generate_launch_description():
         launch_arguments={
             "mode": LaunchConfiguration("mode"),
             "config_file": LaunchConfiguration("config_file"),
+            "base_config_file": LaunchConfiguration("base_config_file"),
+            "detector_config_file": LaunchConfiguration("detector_config_file"),
+            "predictor_config_file": LaunchConfiguration("predictor_config_file"),
+            "outpost_config_file": LaunchConfiguration("outpost_config_file"),
+            "buff_config_file": LaunchConfiguration("buff_config_file"),
             "output": LaunchConfiguration("output"),
             "offline": LaunchConfiguration("offline"),
             "debug_bypass_is_start": LaunchConfiguration("debug_bypass_is_start"),

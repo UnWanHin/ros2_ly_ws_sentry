@@ -1,5 +1,6 @@
 #pragma once
 #include <ceres/ceres.h>
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -208,6 +209,38 @@ class BuffCalculator {
         }
         void setApplyStaticShootTableAdjust(bool enable) { static_shoot_table_adjust_enable = enable; }
         void setApplyPeriodicShootTableAdjust(bool enable) { buff_shoot_table_adjust_enable = enable; }
+        void setStaticShootTableAdjust(
+            bool enable,
+            const std::array<double, 6>& pitch_coeffs,
+            const std::array<double, 6>& yaw_coeffs) {
+            static_shoot_table_adjust_enable = enable;
+            static_pitch_adjust_param = pitch_coeffs;
+            static_yaw_adjust_param = yaw_coeffs;
+        }
+        void setPeriodicShootTableAdjust(
+            bool enable,
+            bool big_only,
+            const std::array<double, 7>& pitch_coeffs,
+            const std::array<double, 7>& yaw_coeffs) {
+            buff_shoot_table_adjust_enable = enable;
+            buff_shoot_table_big_only = big_only;
+            buff_pitch_adjust_param = pitch_coeffs;
+            buff_yaw_adjust_param = yaw_coeffs;
+        }
+        void setAutoModeConfig(
+            bool enable,
+            int min_samples,
+            double window_sec,
+            double std_high,
+            double std_low,
+            double min_abs_omega) {
+            auto_mode_enable_ = enable;
+            auto_mode_min_samples_ = std::max(5, min_samples);
+            auto_mode_window_sec_ = std::max(0.2, window_sec);
+            auto_mode_std_high_ = std::max(0.01, std_high);
+            auto_mode_std_low_ = std::clamp(std_low, 0.005, auto_mode_std_high_);
+            auto_mode_min_abs_omega_ = std::max(0.0, min_abs_omega);
+        }
         void setForceStable(bool enable) { force_stable = enable; }
         cv::Point2f getPixelFromCamera(const cv::Mat &intrinsicMatrix, const cv::Mat &cameraPoint);
         cv::Point2f getPixelFromRobot(const cv::Point3f &robot, const cv::Mat &w2c, const cv::Mat &w2r);

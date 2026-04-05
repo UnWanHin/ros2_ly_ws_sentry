@@ -351,24 +351,27 @@ check_legacy_hardcoded_camera_sn() {
 }
 
 check_launch_mode_hints() {
-  local default_yaml="${ROOT_DIR}/scripts/config/auto_aim_config_competition.yaml"
-  local cfg_arg
-  cfg_arg="$(launch_arg_value "config_file" "")"
-  local yaml_file="${cfg_arg:-${default_yaml}}"
+  local default_base_yaml="${ROOT_DIR}/scripts/config/stack/base_competition.yaml"
+  local default_detector_yaml="${ROOT_DIR}/scripts/config/stack/detector_competition.yaml"
+  local base_cfg_arg detector_cfg_arg
+  base_cfg_arg="$(launch_arg_value "base_config_file" "")"
+  detector_cfg_arg="$(launch_arg_value "detector_config_file" "")"
+  local base_yaml="${base_cfg_arg:-${default_base_yaml}}"
+  local detector_yaml="${detector_cfg_arg:-${default_detector_yaml}}"
 
-  if [[ ! -f "${yaml_file}" ]]; then
-    warn "Launch mode hint skipped: config file not found: ${yaml_file}"
+  if [[ ! -f "${base_yaml}" || ! -f "${detector_yaml}" ]]; then
+    warn "Launch mode hint skipped: base/detector config file missing: base=${base_yaml}, detector=${detector_yaml}"
     return
   fi
-  info "Launch mode hints based on config: ${yaml_file}"
+  info "Launch mode hints based on base=${base_yaml}, detector=${detector_yaml}"
   if (( OFFLINE_MODE == 1 )); then
     pass "Offline mode enabled: launch will enforce virtual IO + video replay overrides."
   fi
 
   local use_video
   local use_virtual
-  use_video="$(extract_yaml_quoted_key_value "${yaml_file}" 'detector_config/use_video')"
-  use_virtual="$(extract_yaml_quoted_key_value "${yaml_file}" 'io_config/use_virtual_device')"
+  use_video="$(extract_yaml_quoted_key_value "${detector_yaml}" 'detector_config/use_video')"
+  use_virtual="$(extract_yaml_quoted_key_value "${base_yaml}" 'io_config/use_virtual_device')"
 
   if (( OFFLINE_MODE == 1 )); then
     pass "Offline launch override: detector_config/use_video will be forced to true."
@@ -654,6 +657,12 @@ if (( RUNTIME_ONLY == 0 )); then
   check_file_exists "${ROOT_DIR}/src/behavior_tree/Scripts/ConfigJson/navi_debug_competition.json"
   check_file_exists "${ROOT_DIR}/src/behavior_tree/Scripts/ConfigJson/navi_debug_points.json"
   check_file_exists "${ROOT_DIR}/src/behavior_tree/launch/sentry_all.launch.py"
+  check_file_exists "${ROOT_DIR}/scripts/config/stack/base_competition.yaml"
+  check_file_exists "${ROOT_DIR}/scripts/config/stack/detector_competition.yaml"
+  check_file_exists "${ROOT_DIR}/scripts/config/stack/predictor_competition.yaml"
+  check_file_exists "${ROOT_DIR}/scripts/config/stack/outpost_competition.yaml"
+  check_file_exists "${ROOT_DIR}/scripts/config/stack/buff_competition.yaml"
+  check_file_exists "${ROOT_DIR}/scripts/config/stack/override_none.yaml"
   check_file_exists "${ROOT_DIR}/scripts/config/auto_aim_config_competition.yaml"
   check_file_exists "${ROOT_DIR}/scripts/start.sh"
   check_file_exists "${ROOT_DIR}/scripts/debug.sh"
@@ -704,7 +713,7 @@ if (( RUNTIME_ONLY == 0 )); then
   check_bash_syntax "${ROOT_DIR}/scripts/feature_test/standalone/run_standalone_menu.sh"
   check_bash_syntax "${ROOT_DIR}/scripts/feature_test/standalone/modes/navi_patrol_mode.sh"
 
-  check_camera_sn_config "${ROOT_DIR}/scripts/config/auto_aim_config_competition.yaml"
+  check_camera_sn_config "${ROOT_DIR}/scripts/config/stack/base_competition.yaml"
   check_legacy_hardcoded_camera_sn
 
   if grep -Fq 'BTCPP_format="4"' "${ROOT_DIR}/src/behavior_tree/Scripts/main.xml"; then

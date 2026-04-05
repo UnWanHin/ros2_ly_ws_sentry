@@ -52,12 +52,14 @@
 
 // C++ 标准库
 #include <deque>
+#include <array>
 #include <atomic>
 #include <condition_variable>
 #include <thread>
 #include <filesystem>
 #include <algorithm>
 #include <cmath>
+#include <vector>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 // TODO copy to auto aim detector
@@ -178,6 +180,27 @@ private:
     int secondary_target_idx_{1};
     int selected_target_idx_{0};
     std::chrono::steady_clock::time_point dual_cycle_start_{std::chrono::steady_clock::now()};
+
+    template<typename T>
+    void loadParamCompat(const char* slash_key, const char* dot_key, T& value) {
+        Node.GetParam<T>(slash_key, value, value);
+        T dot_value = value;
+        Node.GetParam<T>(dot_key, dot_value, value);
+        value = dot_value;
+    }
+
+    template<std::size_t N>
+    void loadCoeffArrayCompat(const char* slash_key, const char* dot_key, std::array<double, N>& coeffs) {
+        std::vector<double> raw(coeffs.begin(), coeffs.end());
+        loadParamCompat(slash_key, dot_key, raw);
+        if (raw.size() != N) {
+            roslog::warn("buff coeff size mismatch for {} (expect {}, got {})", dot_key, N, raw.size());
+            return;
+        }
+        for (std::size_t i = 0; i < N; ++i) {
+            coeffs[i] = raw[i];
+        }
+    }
 
     void bullet_speed_callback(const std_msgs::msg::Float32::ConstSharedPtr msg) {
         if (!msg) return;
@@ -302,6 +325,7 @@ public:
         roslog::info("vars: {} {} {} {} {} ", 
             udp_enable, web_debug_enable, shoot_enable, record_enable, force_shoot);
         const auto buff_param = param["buff"];
+        std::string enemy_color = param.exists("enemy_color") ? param["enemy_color"].String() : std::string("auto");
         if (buff_param.exists("dynamic_bullet_speed_enable")) {
             dynamic_bullet_speed_enable_ = buff_param["dynamic_bullet_speed_enable"].Bool();
         }
@@ -318,6 +342,29 @@ public:
         if (buff_param.exists("default_bullet_speed")) {
             default_bullet_speed_mps = buff_param["default_bullet_speed"].Double();
         }
+
+        // YAML override layer (buff_config.*), dot/slash both supported.
+        loadParamCompat(
+            "buff_config/dynamic_bullet_speed_enable",
+            "buff_config.dynamic_bullet_speed_enable",
+            dynamic_bullet_speed_enable_);
+        loadParamCompat(
+            "buff_config/min_bullet_speed",
+            "buff_config.min_bullet_speed",
+            min_bullet_speed_mps_);
+        loadParamCompat(
+            "buff_config/bullet_speed_alpha",
+            "buff_config.bullet_speed_alpha",
+            bullet_speed_alpha_);
+        loadParamCompat(
+            "buff_config/default_bullet_speed",
+            "buff_config.default_bullet_speed",
+            default_bullet_speed_mps);
+        loadParamCompat(
+            "buff_config/enemy_color",
+            "buff_config.enemy_color",
+            enemy_color);
+
         if (!std::isfinite(default_bullet_speed_mps) || default_bullet_speed_mps <= 0.0) {
             default_bullet_speed_mps = 22.9;
         }
@@ -334,23 +381,15 @@ public:
         roslog::info(
             "buff bullet speed cfg: dynamic={}, default={} min={} alpha={}",
             dynamic_bullet_speed_enable_, filtered_bullet_speed_mps_, min_bullet_speed_mps_, bullet_speed_alpha_);
-
-        if (param.exists("enemy_color")) {
-            const auto enemy_color = param["enemy_color"].String();
-            if (enemy_color == "blue") {
-                enemy_color_ = 1;
-            } else {
-                enemy_color_ = 0;
-            }
+        if (enemy_color == "blue") {
+            enemy_color_ = 1;
+        } else {
+            enemy_color_ = 0;
         }
 
         if (buff_param.exists("default_mode")) {
             default_buff_mode_ = buff_param["default_mode"].Int();
         }
-        if (default_buff_mode_ != 0 && default_buff_mode_ != 1 && default_buff_mode_ != 2) {
-            default_buff_mode_ = 0;
-        }
-        buff_mode_ = default_buff_mode_;
         if (buff_param.exists("mode_switch_topic_enable")) {
             mode_switch_topic_enable_ = buff_param["mode_switch_topic_enable"].Bool();
         }
@@ -363,6 +402,30 @@ public:
         if (buff_param.exists("two_target_cycle_timeout_sec")) {
             two_target_cycle_timeout_sec_ = buff_param["two_target_cycle_timeout_sec"].Double();
         }
+        loadParamCompat(
+            "buff_config/default_mode",
+            "buff_config.default_mode",
+            default_buff_mode_);
+        loadParamCompat(
+            "buff_config/mode_switch_topic_enable",
+            "buff_config.mode_switch_topic_enable",
+            mode_switch_topic_enable_);
+        loadParamCompat(
+            "buff_config/reload_big_buff",
+            "buff_config.reload_big_buff",
+            reload_big_buff_);
+        loadParamCompat(
+            "buff_config/two_target_enable",
+            "buff_config.two_target_enable",
+            two_target_enable_);
+        loadParamCompat(
+            "buff_config/two_target_cycle_timeout_sec",
+            "buff_config.two_target_cycle_timeout_sec",
+            two_target_cycle_timeout_sec_);
+        if (default_buff_mode_ != 0 && default_buff_mode_ != 1 && default_buff_mode_ != 2) {
+            default_buff_mode_ = 0;
+        }
+        buff_mode_ = default_buff_mode_;
         if (!std::isfinite(two_target_cycle_timeout_sec_) || two_target_cycle_timeout_sec_ < 0.1) {
             two_target_cycle_timeout_sec_ = 1.0;
         }
@@ -393,6 +456,14 @@ public:
         } else if (buff_param.exists("buff_model_path")) {
             blue_buff_model_path = buff_param["buff_model_path"].String();
         }
+        loadParamCompat(
+            "buff_config/red_buff_model_path",
+            "buff_config.red_buff_model_path",
+            red_buff_model_path);
+        loadParamCompat(
+            "buff_config/blue_buff_model_path",
+            "buff_config.blue_buff_model_path",
+            blue_buff_model_path);
         red_buff_model_path = resolve_model_path(red_buff_model_path);
         blue_buff_model_path = resolve_model_path(blue_buff_model_path);
         roslog::info("buff model path: red={}, blue={}", red_buff_model_path, blue_buff_model_path);
@@ -403,6 +474,131 @@ public:
 
         buff_detector_ptr = std::make_shared<BuffDetector>(red_buff_model_path, blue_buff_model_path);
         buff_calculator_ptr = std::make_shared<BuffCalculator>(param);   //属于solver 越級了, 后面加新模塊buff再移
+
+        bool force_stable_cfg = buff_param.exists("force_stable") ? buff_param["force_stable"].Bool() : false;
+        bool auto_mode_enable_cfg = buff_param.exists("auto_mode_enable") ? buff_param["auto_mode_enable"].Bool() : true;
+        int auto_mode_min_samples_cfg = buff_param.exists("auto_mode_min_samples") ? buff_param["auto_mode_min_samples"].Int() : 20;
+        double auto_mode_window_sec_cfg =
+            buff_param.exists("auto_mode_window_sec") ? buff_param["auto_mode_window_sec"].Double() : 1.5;
+        double auto_mode_std_high_cfg =
+            buff_param.exists("auto_mode_std_high") ? buff_param["auto_mode_std_high"].Double() : 0.16;
+        double auto_mode_std_low_cfg =
+            buff_param.exists("auto_mode_std_low") ? buff_param["auto_mode_std_low"].Double() : 0.08;
+        double auto_mode_min_abs_omega_cfg =
+            buff_param.exists("auto_mode_min_abs_omega") ? buff_param["auto_mode_min_abs_omega"].Double() : 0.30;
+
+        bool static_adjust_enable_cfg = false;
+        std::array<double, 6> static_pitch_coeffs{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+        std::array<double, 6> static_yaw_coeffs{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+        if (buff_param.exists("shoot_table_adjust")) {
+            const auto static_param = buff_param["shoot_table_adjust"];
+            static_adjust_enable_cfg = static_param["enable"].Bool();
+            const char* static_keys[] = {"intercept", "coef_z", "coef_d", "coef_z2", "coef_zd", "coef_d2"};
+            for (std::size_t i = 0; i < 6; ++i) {
+                static_pitch_coeffs[i] = static_param["pitch"][static_keys[i]].Double();
+                static_yaw_coeffs[i] = static_param["yaw"][static_keys[i]].Double();
+            }
+        }
+
+        bool periodic_adjust_enable_cfg = false;
+        bool periodic_big_only_cfg = true;
+        std::array<double, 7> periodic_pitch_coeffs{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+        std::array<double, 7> periodic_yaw_coeffs{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+        if (buff_param.exists("buff_shooting_table_calib")) {
+            const auto periodic_param = buff_param["buff_shooting_table_calib"];
+            periodic_adjust_enable_cfg = periodic_param["enable"].Bool();
+            periodic_big_only_cfg = periodic_param.exists("apply_on_big_buff_only")
+                                        ? periodic_param["apply_on_big_buff_only"].Bool()
+                                        : true;
+            const char* periodic_keys[] = {
+                "intercept", "coef_sin", "coef_cos", "coef_sin2", "coef_cos2", "coef_dist", "coef_height"};
+            for (std::size_t i = 0; i < 7; ++i) {
+                periodic_pitch_coeffs[i] = periodic_param["pitch"][periodic_keys[i]].Double();
+                periodic_yaw_coeffs[i] = periodic_param["yaw"][periodic_keys[i]].Double();
+            }
+        }
+
+        loadParamCompat("buff_config/force_stable", "buff_config.force_stable", force_stable_cfg);
+        loadParamCompat("buff_config/auto_mode_enable", "buff_config.auto_mode_enable", auto_mode_enable_cfg);
+        loadParamCompat(
+            "buff_config/auto_mode_min_samples",
+            "buff_config.auto_mode_min_samples",
+            auto_mode_min_samples_cfg);
+        loadParamCompat(
+            "buff_config/auto_mode_window_sec",
+            "buff_config.auto_mode_window_sec",
+            auto_mode_window_sec_cfg);
+        loadParamCompat(
+            "buff_config/auto_mode_std_high",
+            "buff_config.auto_mode_std_high",
+            auto_mode_std_high_cfg);
+        loadParamCompat(
+            "buff_config/auto_mode_std_low",
+            "buff_config.auto_mode_std_low",
+            auto_mode_std_low_cfg);
+        loadParamCompat(
+            "buff_config/auto_mode_min_abs_omega",
+            "buff_config.auto_mode_min_abs_omega",
+            auto_mode_min_abs_omega_cfg);
+        loadParamCompat(
+            "buff_config/static_shoot_table_adjust_enable",
+            "buff_config.static_shoot_table_adjust_enable",
+            static_adjust_enable_cfg);
+        loadCoeffArrayCompat(
+            "buff_config/static_pitch_adjust_coeffs",
+            "buff_config.static_pitch_adjust_coeffs",
+            static_pitch_coeffs);
+        loadCoeffArrayCompat(
+            "buff_config/static_yaw_adjust_coeffs",
+            "buff_config.static_yaw_adjust_coeffs",
+            static_yaw_coeffs);
+        loadParamCompat(
+            "buff_config/periodic_shoot_table_adjust_enable",
+            "buff_config.periodic_shoot_table_adjust_enable",
+            periodic_adjust_enable_cfg);
+        loadParamCompat(
+            "buff_config/periodic_apply_on_big_buff_only",
+            "buff_config.periodic_apply_on_big_buff_only",
+            periodic_big_only_cfg);
+        loadCoeffArrayCompat(
+            "buff_config/periodic_pitch_adjust_coeffs",
+            "buff_config.periodic_pitch_adjust_coeffs",
+            periodic_pitch_coeffs);
+        loadCoeffArrayCompat(
+            "buff_config/periodic_yaw_adjust_coeffs",
+            "buff_config.periodic_yaw_adjust_coeffs",
+            periodic_yaw_coeffs);
+
+        buff_calculator().setForceStable(force_stable_cfg);
+        buff_calculator().setAutoModeConfig(
+            auto_mode_enable_cfg,
+            auto_mode_min_samples_cfg,
+            auto_mode_window_sec_cfg,
+            auto_mode_std_high_cfg,
+            auto_mode_std_low_cfg,
+            auto_mode_min_abs_omega_cfg);
+        buff_calculator().setStaticShootTableAdjust(
+            static_adjust_enable_cfg,
+            static_pitch_coeffs,
+            static_yaw_coeffs);
+        buff_calculator().setPeriodicShootTableAdjust(
+            periodic_adjust_enable_cfg,
+            periodic_big_only_cfg,
+            periodic_pitch_coeffs,
+            periodic_yaw_coeffs);
+
+        roslog::info(
+            "buff solver cfg: force_stable={} auto_mode(enable={},min_samples={},window_sec={:.3f},std_high={:.3f},std_low={:.3f},min_abs_omega={:.3f}) static_adjust={} periodic_adjust={} periodic_big_only={}",
+            force_stable_cfg,
+            auto_mode_enable_cfg,
+            auto_mode_min_samples_cfg,
+            auto_mode_window_sec_cfg,
+            auto_mode_std_high_cfg,
+            auto_mode_std_low_cfg,
+            auto_mode_min_abs_omega_cfg,
+            static_adjust_enable_cfg,
+            periodic_adjust_enable_cfg,
+            periodic_big_only_cfg);
     }
 
     void Run(int argc, char **argv) {

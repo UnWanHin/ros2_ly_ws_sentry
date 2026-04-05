@@ -573,13 +573,28 @@ namespace
             bool useVirtualDevice = false;
             std::string serialDeviceName{"/dev/ttyACM0"};
             int serialBaudRate = 115200;
-            Node.GetParam<bool>("io_config/use_virtual_device", useVirtualDevice, false);
-            Node.GetParam<std::string>("io_config/device_name", serialDeviceName, std::string{"/dev/ttyACM0"});
-            Node.GetParam<int>("io_config/baud_rate", serialBaudRate, 115200);
+            auto getParamCompat = [this](const char* slash_key, const char* dot_key, auto& value, const auto& default_value) {
+                using T = std::decay_t<decltype(value)>;
+                Node.GetParam<T>(slash_key, value, static_cast<T>(default_value));
+                T dot_value = value;
+                Node.GetParam<T>(dot_key, dot_value, value);
+                value = dot_value;
+            };
+            getParamCompat("io_config/use_virtual_device", "io_config.use_virtual_device", useVirtualDevice, false);
+            getParamCompat("io_config/device_name", "io_config.device_name", serialDeviceName, std::string{"/dev/ttyACM0"});
+            getParamCompat("io_config/baud_rate", "io_config.baud_rate", serialBaudRate, 115200);
             int postureRepeatCount = postureTxRepeatCount_;
             int postureRepeatIntervalMs = static_cast<int>(postureTxInterval_.count());
-            Node.GetParam<int>("io_config/posture_repeat_count", postureRepeatCount, postureRepeatCount);
-            Node.GetParam<int>("io_config/posture_repeat_interval_ms", postureRepeatIntervalMs, postureRepeatIntervalMs);
+            getParamCompat(
+                "io_config/posture_repeat_count",
+                "io_config.posture_repeat_count",
+                postureRepeatCount,
+                postureRepeatCount);
+            getParamCompat(
+                "io_config/posture_repeat_interval_ms",
+                "io_config.posture_repeat_interval_ms",
+                postureRepeatIntervalMs,
+                postureRepeatIntervalMs);
 
             if (postureRepeatCount <= 0) {
                 roslog::warn("Invalid posture_repeat_count=%d, fallback to 3", postureRepeatCount);

@@ -9,7 +9,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_NAME="$(basename "$0")"
 USE_NOGATE=1
-DEFAULT_CONFIG_FILE="${ROOT_DIR}/scripts/config/auto_aim_config_competition.yaml"
+DEFAULT_BASE_CONFIG_FILE="${ROOT_DIR}/scripts/config/stack/base_competition.yaml"
+DEFAULT_DETECTOR_CONFIG_FILE="${ROOT_DIR}/scripts/config/stack/detector_competition.yaml"
+DEFAULT_PREDICTOR_CONFIG_FILE="${ROOT_DIR}/scripts/config/stack/predictor_competition.yaml"
+DEFAULT_OVERRIDE_CONFIG_FILE="${ROOT_DIR}/scripts/config/stack/override_none.yaml"
 LAUNCH_ARGS=()
 
 # shellcheck disable=SC1091
@@ -72,8 +75,20 @@ else
   LAUNCH_ARGS=("debug_bypass_is_start:=false" "${LAUNCH_ARGS[@]}")
 fi
 
-if [[ -f "${DEFAULT_CONFIG_FILE}" ]] && ! has_launch_arg_key "config_file"; then
-  LAUNCH_ARGS=("config_file:=${DEFAULT_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
+if [[ -f "${DEFAULT_BASE_CONFIG_FILE}" ]] && ! has_launch_arg_key "base_config_file"; then
+  LAUNCH_ARGS=("base_config_file:=${DEFAULT_BASE_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
+fi
+
+if [[ -f "${DEFAULT_DETECTOR_CONFIG_FILE}" ]] && ! has_launch_arg_key "detector_config_file"; then
+  LAUNCH_ARGS=("detector_config_file:=${DEFAULT_DETECTOR_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
+fi
+
+if [[ -f "${DEFAULT_PREDICTOR_CONFIG_FILE}" ]] && ! has_launch_arg_key "predictor_config_file"; then
+  LAUNCH_ARGS=("predictor_config_file:=${DEFAULT_PREDICTOR_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
+fi
+
+if [[ -f "${DEFAULT_OVERRIDE_CONFIG_FILE}" ]] && ! has_launch_arg_key "config_file"; then
+  LAUNCH_ARGS=("config_file:=${DEFAULT_OVERRIDE_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
 fi
 
 if ! has_launch_arg_key "detector_config.show" && ! has_launch_arg_key "detector_config/show"; then

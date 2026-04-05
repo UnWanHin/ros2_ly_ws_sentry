@@ -27,14 +27,20 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     try:
         behavior_tree_share = get_package_share_directory("behavior_tree")
-        default_config_file = os.path.join(
-            behavior_tree_share, "config", "auto_aim_config_competition.yaml"
-        )
+        config_root = os.path.join(behavior_tree_share, "config", "stack")
+        default_base_config_file = os.path.join(config_root, "base_competition.yaml")
+        default_outpost_config_file = os.path.join(config_root, "outpost_competition.yaml")
+        default_override_config_file = os.path.join(config_root, "override_none.yaml")
     except Exception:
         detector_share = get_package_share_directory("detector")
-        default_config_file = os.path.join(detector_share, "config", "auto_aim_config.yaml")
+        legacy_default = os.path.join(detector_share, "config", "auto_aim_config.yaml")
+        default_base_config_file = legacy_default
+        default_outpost_config_file = legacy_default
+        default_override_config_file = legacy_default
 
     config_file = LaunchConfiguration("config_file")
+    base_config_file = LaunchConfiguration("base_config_file")
+    outpost_config_file = LaunchConfiguration("outpost_config_file")
     output = LaunchConfiguration("output")
     use_gimbal = LaunchConfiguration("use_gimbal")
     use_outpost = LaunchConfiguration("use_outpost")
@@ -42,8 +48,18 @@ def generate_launch_description():
     launch_args = [
         DeclareLaunchArgument(
             "config_file",
-            default_value=default_config_file,
-            description="Shared YAML config file for outpost chain.",
+            default_value=default_override_config_file,
+            description="Optional global override YAML (applied last).",
+        ),
+        DeclareLaunchArgument(
+            "base_config_file",
+            default_value=default_base_config_file,
+            description="Base shared YAML for camera/solver/io.",
+        ),
+        DeclareLaunchArgument(
+            "outpost_config_file",
+            default_value=default_outpost_config_file,
+            description="Outpost module YAML.",
         ),
         DeclareLaunchArgument(
             "output",
@@ -56,6 +72,8 @@ def generate_launch_description():
 
     info_logs = [
         LogInfo(msg=["[outpost] config: ", config_file]),
+        LogInfo(msg=["[outpost] base_config: ", base_config_file]),
+        LogInfo(msg=["[outpost] outpost_config: ", outpost_config_file]),
         LogInfo(msg=["[outpost] output: ", output]),
     ]
 
@@ -65,7 +83,7 @@ def generate_launch_description():
             executable="gimbal_driver_node",
             name="gimbal_driver",
             output=output,
-            parameters=[config_file],
+            parameters=[base_config_file, config_file],
             on_exit=Shutdown(reason="gimbal_driver exited"),
             condition=IfCondition(use_gimbal),
         ),
@@ -74,7 +92,7 @@ def generate_launch_description():
             executable="outpost_hitter_node",
             name="outpost_hitter",
             output=output,
-            parameters=[config_file],
+            parameters=[base_config_file, outpost_config_file, config_file],
             on_exit=Shutdown(reason="outpost_hitter exited"),
             condition=IfCondition(use_outpost),
         ),
