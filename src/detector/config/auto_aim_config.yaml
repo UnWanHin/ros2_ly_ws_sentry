@@ -77,16 +77,16 @@
     "detector_config/save_video": false # 比赛建议 false；调试可开（当前功能受环境影响）
     "detector_config.use_video": false
     "detector_config/use_video": false  # 比赛建议 false；离车调试建议 true
-    "detector_config.overlay_predictor_center": false
-    "detector_config/overlay_predictor_center": false
-    "detector_config.overlay_predictor_full": false
-    "detector_config/overlay_predictor_full": false
-    "detector_config.overlay_predictor_text": false
-    "detector_config/overlay_predictor_text": false
+    "detector_config.overlay_predictor_center": true
+    "detector_config/overlay_predictor_center": true
+    "detector_config.overlay_predictor_full": true
+    "detector_config/overlay_predictor_full": true
+    "detector_config.overlay_predictor_text": true
+    "detector_config/overlay_predictor_text": true
     "detector_config.overlay_predictor_timeout_ms": 120
     "detector_config/overlay_predictor_timeout_ms": 120
-    "detector_config.overlay_buff_text": false
-    "detector_config/overlay_buff_text": false
+    "detector_config.overlay_buff_text": true
+    "detector_config/overlay_buff_text": true
     "detector_config.overlay_buff_show_position": false
     "detector_config/overlay_buff_show_position": false
     "detector_config.overlay_buff_timeout_ms": 150

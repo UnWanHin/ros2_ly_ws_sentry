@@ -16,6 +16,7 @@
 #include <chrono>
 #include <thread>
 #include <algorithm>
+#include <bitset>
 #include <rclcpp/utilities.hpp>
 #include <rclcpp/executors.hpp>
 
@@ -558,8 +559,63 @@ namespace
                         PubPositionData(m.GetDataAs<PositionData>());
                         break;
                     case ExtendData::TypeID:
-                        PubExtendData(m.GetDataAs<ExtendData>());
+                    {
+                        const auto& extend_data = m.GetDataAs<ExtendData>();
+                        const auto decoded = DecodeGimbalYawFromReserve32(extend_data.Reserve_32_1);
+
+                        static auto last_extend_dump_time = std::chrono::steady_clock::time_point{};
+                        const auto now = std::chrono::steady_clock::now();
+                        if (now - last_extend_dump_time > std::chrono::milliseconds(200)) {
+                            last_extend_dump_time = now;
+                            constexpr float kScale = 0.01f;
+                            const auto reserve_32_1_b0 = static_cast<unsigned int>(m.Data[4]);
+                            const auto reserve_32_1_b1 = static_cast<unsigned int>(m.Data[5]);
+                            const auto reserve_32_1_b2 = static_cast<unsigned int>(m.Data[6]);
+                            const auto reserve_32_1_b3 = static_cast<unsigned int>(m.Data[7]);
+                            const auto reserve_32_1_u32 = static_cast<std::uint32_t>(extend_data.Reserve_32_1);
+                            const auto reserve_32_1_low16 = static_cast<std::uint16_t>(reserve_32_1_u32 & 0xFFFFu);
+                            const auto reserve_32_1_high16 = static_cast<std::uint16_t>((reserve_32_1_u32 >> 16) & 0xFFFFu);
+                            const auto reserve_32_1_bin = std::bitset<32>(reserve_32_1_u32).to_string();
+                            const auto reserve_32_1_bin_grouped =
+                                reserve_32_1_bin.substr(0, 8) + " " +
+                                reserve_32_1_bin.substr(8, 8) + " " +
+                                reserve_32_1_bin.substr(16, 8) + " " +
+                                reserve_32_1_bin.substr(24, 8);
+                            const auto reserve_32_1_low16_bin = std::bitset<16>(reserve_32_1_low16).to_string();
+                            const auto reserve_32_1_high16_bin = std::bitset<16>(reserve_32_1_high16).to_string();
+                            const auto posture_high8 =
+                                static_cast<unsigned int>((extend_data.Reserve_16 >> 8) & 0xFFu);
+                            roslog::info(
+                                "RX ExtendData raw[12]=%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
+                                static_cast<unsigned int>(m.Data[0]), static_cast<unsigned int>(m.Data[1]),
+                                static_cast<unsigned int>(m.Data[2]), static_cast<unsigned int>(m.Data[3]),
+                                static_cast<unsigned int>(m.Data[4]), static_cast<unsigned int>(m.Data[5]),
+                                static_cast<unsigned int>(m.Data[6]), static_cast<unsigned int>(m.Data[7]),
+                                static_cast<unsigned int>(m.Data[8]), static_cast<unsigned int>(m.Data[9]),
+                                static_cast<unsigned int>(m.Data[10]), static_cast<unsigned int>(m.Data[11]));
+                            roslog::info(
+                                "ExtendData parse: uwb_yaw=%u reserve16=0x%04X posture_high8=%u reserve32_1=0x%08X "
+                                "bytes[%02X %02X %02X %02X] reserve32_1_bin=%s "
+                                "low16_bin=%s high16_bin=%s -> yaw_vel_raw=%d yaw_angle_raw=%d "
+                                "yaw_vel_deg_s=%.2f yaw_angle_deg=%.2f reserve32_2=0x%08X",
+                                static_cast<unsigned int>(extend_data.UWBAngleYaw),
+                                static_cast<unsigned int>(extend_data.Reserve_16),
+                                posture_high8,
+                                static_cast<unsigned int>(extend_data.Reserve_32_1),
+                                reserve_32_1_b0, reserve_32_1_b1, reserve_32_1_b2, reserve_32_1_b3,
+                                reserve_32_1_bin_grouped.c_str(),
+                                reserve_32_1_low16_bin.c_str(),
+                                reserve_32_1_high16_bin.c_str(),
+                                static_cast<int>(decoded.YawVelRaw),
+                                static_cast<int>(decoded.YawAngleRaw),
+                                static_cast<double>(decoded.YawVelRaw) * kScale,
+                                static_cast<double>(decoded.YawAngleRaw) * kScale,
+                                static_cast<unsigned int>(extend_data.Reserve_32_2));
+                        }
+
+                        PubExtendData(extend_data);
                         break;
+                    }
 
                     default:
                         roslog::error("Application::LoopRead: invalid type id(%u)",
