@@ -887,6 +887,17 @@ void ImageLoop() {
                         global_node->Publisher<ly_outpost_armors>()->publish(armor_list_msg);
                     }
                 };
+                auto publish_debug_image = [&]() {
+                    if (pub_image && !image.empty()) {
+                        image_queue.push(image);
+                    }
+                };
+                auto draw_overlays = [&]() {
+                    DrawPredictorCenterOverlay(image, armors.TimeAngles, armors.TimeStamp);
+                    DrawPredictorFullOverlay(image, armors.TimeAngles, armors.TimeStamp);
+                    DrawPredictorStateTextOverlay(image, armors.TimeStamp);
+                    DrawBuffDebugTextOverlay(image, armors.TimeStamp);
+                };
 
                 auto log_detection_summary = [&](const std::size_t raw_count,
                                                  const std::size_t filtered_count,
@@ -913,7 +924,9 @@ void ImageLoop() {
                 armors.Armors.clear();
                 
                 if (!carAndArmorDetector.Detect(image, armors.Armors, cars)) {
+                    draw_overlays();
                     log_detection_summary(0, 0, 0, "detect_fail");
+                    publish_debug_image();
                     publish_result();
                     continue;
                 }
@@ -933,7 +946,9 @@ void ImageLoop() {
 
                 ly_auto_aim::ArmorType target = atomic_target;
                 if (!filter.Filter(armors.Armors, target, filtered_armors)) {
+                    draw_overlays();
                     log_detection_summary(armors.Armors.size(), 0, armor_list_msg.cars.size(), "filter_empty");
+                    publish_debug_image();
                     publish_result();
                     continue;
                 }
@@ -944,10 +959,8 @@ void ImageLoop() {
 
                 if(draw_image) DrawAllArmor(image, filtered_armors);
                 if(draw_image) DrawAllCar(image, cars);
-                DrawPredictorCenterOverlay(image, armors.TimeAngles, armors.TimeStamp);
-                DrawPredictorFullOverlay(image, armors.TimeAngles, armors.TimeStamp);
-                DrawPredictorStateTextOverlay(image, armors.TimeStamp);
-                DrawBuffDebugTextOverlay(image, armors.TimeStamp);
+                draw_overlays();
+                publish_debug_image();
 
                 log_detection_summary(
                     armors.Armors.size(),
