@@ -482,8 +482,11 @@ namespace
                 const auto decoded = DecodeGimbalYawFromReserve32(data.Reserve_32_1);
                 using topic = ly_gimbal_gimbal_yaw;
                 topic::Msg msg;
+                constexpr float kScale = 0.01f;
                 msg.yaw_vel = decoded.YawVelRaw;
                 msg.yaw_angle = decoded.YawAngleRaw;
+                msg.yaw_vel_deg_s = static_cast<float>(decoded.YawVelRaw) * kScale;
+                msg.yaw_angle_deg = static_cast<float>(decoded.YawAngleRaw) * kScale;
                 Node.Publisher<topic>()->publish(msg);
             }
 

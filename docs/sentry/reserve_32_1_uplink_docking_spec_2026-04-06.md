@@ -77,7 +77,14 @@ reserve_32_1 |= ((uint32_t)((uint16_t)yaw_angle_raw) << 16);  // high16
 ```text
 int16 yaw_vel
 int16 yaw_angle
+float32 yaw_vel_deg_s
+float32 yaw_angle_deg
 ```
+
+其中：
+
+- `yaw_vel / yaw_angle` 是原始量化值（`0.01` 精度）
+- `yaw_vel_deg_s / yaw_angle_deg` 是上位機已換算後的人類可讀值
 
 ### 5.2 行為樹側
 
@@ -101,6 +108,8 @@ ros2 topic echo /ly/gimbal/gimbal_yaw
 ```text
 yaw_vel: 1234
 yaw_angle: -9000
+yaw_vel_deg_s: 12.34
+yaw_angle_deg: -90.0
 ```
 
 對應：
