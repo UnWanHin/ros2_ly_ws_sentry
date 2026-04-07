@@ -82,6 +82,7 @@ LY_DEF_ROS_TOPIC(ly_backcamera_image, "/ly/backcamera/image", sensor_msgs::msg::
 LY_DEF_ROS_TOPIC(ly_me_is_team_red, "/ly/me/is_team_red", std_msgs::msg::Bool);
 LY_DEF_ROS_TOPIC(ly_bt_target, "/ly/bt/target", std_msgs::msg::UInt8);
 LY_DEF_ROS_TOPIC(ly_detector_armors, "/ly/detector/armors", auto_aim_common::msg::Armors);
+LY_DEF_ROS_TOPIC(ly_detector_high_armors, "/ly/detector/high_armors", auto_aim_common::msg::Armors);
 LY_DEF_ROS_TOPIC(ly_gimbal_angles, "/ly/gimbal/angles", gimbal_driver::msg::GimbalAngles);
 LY_DEF_ROS_TOPIC(ly_compressed_image, "/ly/compressed/image", sensor_msgs::msg::CompressedImage);
 LY_DEF_ROS_TOPIC(ly_ra_angle_image, "/ly/ra/angle_image", auto_aim_common::msg::AngleImage);
@@ -843,6 +844,7 @@ void ImageLoop() {
                 TimedArmors armors;
                 std::vector<ly_auto_aim::CarDetection> cars;
                 auto_aim_common::msg::Armors armor_list_msg; // ROS2 增加 ::msg::
+                auto_aim_common::msg::Armors high_armor_list_msg;
                 std::vector<ly_auto_aim::ArmorObject> filtered_armors{};
                 ly_auto_aim::ArmorObject target_armor;
 
@@ -880,9 +882,19 @@ void ImageLoop() {
                 armor_list_msg.is_available_armor_for_predictor = false;
                 armor_list_msg.target_armor_index_for_predictor = -1;
 
+                high_armor_list_msg.armors.clear();
+                high_armor_list_msg.cars.clear();
+                high_armor_list_msg.header.frame_id = "camera";
+                high_armor_list_msg.header.stamp = armors.TimeStamp;
+                high_armor_list_msg.yaw = armors.TimeAngles.yaw;
+                high_armor_list_msg.pitch = armors.TimeAngles.pitch;
+                high_armor_list_msg.is_available_armor_for_predictor = false;
+                high_armor_list_msg.target_armor_index_for_predictor = -1;
+
                 auto publish_result = [&]() {
                     if(aa_enable){
                         global_node->Publisher<ly_detector_armors>()->publish(armor_list_msg);
+                        global_node->Publisher<ly_detector_high_armors>()->publish(high_armor_list_msg);
                     }else if(outpost_enable){
                         global_node->Publisher<ly_outpost_armors>()->publish(armor_list_msg);
                     }
@@ -929,6 +941,44 @@ void ImageLoop() {
                     publish_debug_image();
                     publish_result();
                     continue;
+                }
+
+                // high armor path: independent from car filter / car recognition
+                {
+                    float high_min_offset = FLT_MAX;
+                    int high_min_index = -1;
+                    for (const auto & armor : armors.Armors) {
+                        std::vector<cv::Point2f> pnp_points;
+                        pnp_points.reserve(4);
+                        ly_auto_aim::pnp_solver::ArmorTransform target_transform{};
+                        std::ranges::copy(armor.apex, std::back_inserter(pnp_points));
+                        const bool solved = armor.IsLarge()
+                            ? poseSolver->SolveLargeArmor(pnp_points, target_transform)
+                            : poseSolver->SolveSmallArmor(pnp_points, target_transform);
+                        if (!solved) continue;
+
+                        const auto & t = target_transform.Translation;
+                        const bool is_high_armor = std::abs(t[1]) > 0.0f; // keep y > 0.2m
+                        if (!is_high_armor) continue;
+
+                        auto_aim_common::msg::Armor msg;
+                        msg.type = static_cast<int>(ly_auto_aim::ArmorType::Outpost);
+                        msg.color = armor.ActualColor();
+                        msg.distance = std::sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
+                        msg.translation.clear(); msg.translation.push_back(t[0]); msg.translation.push_back(t[1]); msg.translation.push_back(t[2]);
+                        msg.corners_x.clear(); msg.corners_x.push_back(armor.apex[0].x); msg.corners_x.push_back(armor.apex[1].x); msg.corners_x.push_back(armor.apex[2].x); msg.corners_x.push_back(armor.apex[3].x);
+                        msg.corners_y.clear(); msg.corners_y.push_back(armor.apex[0].y); msg.corners_y.push_back(armor.apex[1].y); msg.corners_y.push_back(armor.apex[2].y); msg.corners_y.push_back(armor.apex[3].y);
+                        msg.distance_to_image_center = finder.CalDistance(armor);
+
+                        const int idx = static_cast<int>(high_armor_list_msg.armors.size());
+                        high_armor_list_msg.armors.emplace_back(std::move(msg));
+                        if (high_armor_list_msg.armors.back().distance_to_image_center < high_min_offset) {
+                            high_min_offset = high_armor_list_msg.armors.back().distance_to_image_center;
+                            high_min_index = idx;
+                        }
+                    }
+                    high_armor_list_msg.is_available_armor_for_predictor = (high_min_index >= 0);
+                    high_armor_list_msg.target_armor_index_for_predictor = high_min_index;
                 }
 
                 filtered_armors.clear();
