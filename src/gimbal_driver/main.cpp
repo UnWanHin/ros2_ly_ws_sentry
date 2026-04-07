@@ -17,6 +17,7 @@
 #include <thread>
 #include <algorithm>
 #include <bitset>
+#include <cmath>
 #include <rclcpp/utilities.hpp>
 #include <rclcpp/executors.hpp>
 
@@ -102,6 +103,13 @@ namespace
         std::uint8_t posturePendingToSend_{0};
         std::uint8_t postureLastSent_{0};
         int posturePendingRepeat_{0};
+        bool hasReserve32_2AnglePrev_{false};
+        std::uint16_t reserve32_2AnglePrevRaw_{0};
+        std::chrono::steady_clock::time_point reserve32_2AnglePrevTime_{
+            std::chrono::steady_clock::time_point::min()
+        };
+        bool hasDerivedYawVelFiltered_{false};
+        float derivedYawVelFilteredDegPerSec_{0.0f};
         std::chrono::steady_clock::time_point postureNextSendTime_{
             std::chrono::steady_clock::time_point::min()
         };
@@ -110,24 +118,19 @@ namespace
             return posture >= 1 && posture <= 3;
         }
 
-        struct DecodedGimbalYaw {
-            std::int16_t YawVelRaw{0};
-            std::int16_t YawAngleRaw{0};
-        };
-
-        static std::int16_t DecodeInt16LittleEndian(const std::uint8_t low, const std::uint8_t high) noexcept {
-            return static_cast<std::int16_t>(
-                static_cast<std::uint16_t>(low) |
-                (static_cast<std::uint16_t>(high) << 8));
+        static std::int16_t NormalizeAngleRawToSigned180(std::uint16_t angle_raw_unsigned) noexcept {
+            // Protocol unit is 0.01 deg. Map [0, 36000) to [-18000, 18000).
+            std::int32_t raw = static_cast<std::int32_t>(angle_raw_unsigned) % 36000;
+            if (raw < 0) raw += 36000;
+            if (raw >= 18000) raw -= 36000;
+            return static_cast<std::int16_t>(raw);
         }
 
-        static DecodedGimbalYaw DecodeGimbalYawFromReserve32(const std::uint32_t& reserve_32_1) noexcept {
-            // Reserve_32_1 byte layout (little-endian):
-            // [0]=yaw_vel low8, [1]=yaw_vel high8, [2]=yaw_angle low8, [3]=yaw_angle high8
-            const auto* bytes = reinterpret_cast<const std::uint8_t*>(&reserve_32_1);
-            return DecodedGimbalYaw{
-                DecodeInt16LittleEndian(bytes[0], bytes[1]),
-                DecodeInt16LittleEndian(bytes[2], bytes[3])};
+        static std::int32_t NormalizeDeltaRaw(std::int32_t delta_raw) noexcept {
+            // Shortest-path unwrap in 0.01 deg domain.
+            if (delta_raw > 18000) delta_raw -= 36000;
+            if (delta_raw < -18000) delta_raw += 36000;
+            return delta_raw;
         }
 
         static std::uint8_t DecodePostureFromReserve16(std::uint16_t reserve16) noexcept {
@@ -472,7 +475,7 @@ namespace
             }
         }
 
-        void PubExtendData(const ExtendData& data) {
+        void PubExtendData(const ExtendData& data, std::int16_t yaw_vel_raw, std::int16_t yaw_angle_raw) {
             {
                 using topic = ly_me_uwb_yaw;
                 topic::Msg msg;
@@ -480,14 +483,13 @@ namespace
                 Node.Publisher<topic>()->publish(msg);
             }
             {
-                const auto decoded = DecodeGimbalYawFromReserve32(data.Reserve_32_1);
                 using topic = ly_gimbal_gimbal_yaw;
                 topic::Msg msg;
                 constexpr float kScale = 0.01f;
-                msg.yaw_vel = decoded.YawVelRaw;
-                msg.yaw_angle = decoded.YawAngleRaw;
-                msg.yaw_vel_deg_s = static_cast<float>(decoded.YawVelRaw) * kScale;
-                msg.yaw_angle_deg = static_cast<float>(decoded.YawAngleRaw) * kScale;
+                msg.yaw_vel = yaw_vel_raw;
+                msg.yaw_angle = yaw_angle_raw;
+                msg.yaw_vel_deg_s = static_cast<float>(yaw_vel_raw) * kScale;
+                msg.yaw_angle_deg = static_cast<float>(yaw_angle_raw) * kScale;
                 Node.Publisher<topic>()->publish(msg);
             }
 
@@ -561,35 +563,85 @@ namespace
                     case ExtendData::TypeID:
                     {
                         const auto& extend_data = m.GetDataAs<ExtendData>();
-                        const auto decoded = DecodeGimbalYawFromReserve32(extend_data.Reserve_32_1);
+                        constexpr float kScale = 0.01f;
+                        constexpr float kVelFilterAlpha = 0.30f;
+                        const auto reserve_32_1_u32 = static_cast<std::uint32_t>(extend_data.Reserve_32_1);
+                        const auto reserve_32_1_low16_u = static_cast<std::uint16_t>(reserve_32_1_u32 & 0xFFFFu);
+                        const auto reserve_32_1_high16_u =
+                            static_cast<std::uint16_t>((reserve_32_1_u32 >> 16) & 0xFFFFu);
+                        const auto reserve_32_1_low16_i = static_cast<std::int16_t>(reserve_32_1_low16_u);
+                        const auto reserve_32_1_high16_i = static_cast<std::int16_t>(reserve_32_1_high16_u);
+
+                        const auto reserve_32_2_u32 = static_cast<std::uint32_t>(extend_data.Reserve_32_2);
+                        const auto reserve_32_2_low16_u = static_cast<std::uint16_t>(reserve_32_2_u32 & 0xFFFFu);
+                        const auto reserve_32_2_high16_u =
+                            static_cast<std::uint16_t>((reserve_32_2_u32 >> 16) & 0xFFFFu);
+                        const auto reserve_32_2_low16_i = static_cast<std::int16_t>(reserve_32_2_low16_u);
+                        const auto reserve_32_2_high16_i = static_cast<std::int16_t>(reserve_32_2_high16_u);
+
+                        const auto now = std::chrono::steady_clock::now();
+                        const auto yaw_angle_raw_from_r32_2 = NormalizeAngleRawToSigned180(reserve_32_2_low16_u);
+                        const auto yaw_angle_deg_from_r32_2 = static_cast<float>(yaw_angle_raw_from_r32_2) * kScale;
+
+                        bool has_instant_vel = false;
+                        std::int16_t yaw_vel_instant_raw = 0;
+                        float yaw_vel_instant_deg_s = 0.0f;
+                        if (hasReserve32_2AnglePrev_) {
+                            const auto dt_sec =
+                                std::chrono::duration<float>(now - reserve32_2AnglePrevTime_).count();
+                            if (dt_sec > 1e-3f && dt_sec < 0.5f) {
+                                auto delta_raw = static_cast<std::int32_t>(reserve_32_2_low16_u) -
+                                                 static_cast<std::int32_t>(reserve32_2AnglePrevRaw_);
+                                delta_raw = NormalizeDeltaRaw(delta_raw);
+                                yaw_vel_instant_deg_s = static_cast<float>(delta_raw) * kScale / dt_sec;
+                                const auto yaw_vel_instant_i32 = static_cast<std::int32_t>(
+                                    std::lround(static_cast<double>(yaw_vel_instant_deg_s / kScale)));
+                                yaw_vel_instant_raw = static_cast<std::int16_t>(
+                                    std::clamp(yaw_vel_instant_i32, -32768, 32767));
+                                has_instant_vel = true;
+                            }
+                        }
+                        reserve32_2AnglePrevRaw_ = reserve_32_2_low16_u;
+                        reserve32_2AnglePrevTime_ = now;
+                        hasReserve32_2AnglePrev_ = true;
+
+                        const auto yaw_vel_candidate_deg_s_from_r32_1_high =
+                            static_cast<float>(reserve_32_1_high16_i) * kScale;
+                        const auto yaw_vel_input_deg_s = has_instant_vel
+                                                             ? yaw_vel_instant_deg_s
+                                                             : yaw_vel_candidate_deg_s_from_r32_1_high;
+                        if (!hasDerivedYawVelFiltered_) {
+                            derivedYawVelFilteredDegPerSec_ = yaw_vel_input_deg_s;
+                            hasDerivedYawVelFiltered_ = true;
+                        } else {
+                            derivedYawVelFilteredDegPerSec_ +=
+                                kVelFilterAlpha * (yaw_vel_input_deg_s - derivedYawVelFilteredDegPerSec_);
+                        }
+                        const auto yaw_vel_publish_i32 = static_cast<std::int32_t>(
+                            std::lround(static_cast<double>(derivedYawVelFilteredDegPerSec_ / kScale)));
+                        const auto yaw_vel_publish_raw = static_cast<std::int16_t>(
+                            std::clamp(yaw_vel_publish_i32, -32768, 32767));
+                        const auto yaw_vel_publish_deg_s = static_cast<float>(yaw_vel_publish_raw) * kScale;
 
                         static auto last_extend_dump_time = std::chrono::steady_clock::time_point{};
-                        const auto now = std::chrono::steady_clock::now();
                         if (now - last_extend_dump_time > std::chrono::milliseconds(50)) {
                             last_extend_dump_time = now;
-                            constexpr float kScale = 0.01f;
                             const auto reserve_32_1_b0 = static_cast<unsigned int>(m.Data[4]);
                             const auto reserve_32_1_b1 = static_cast<unsigned int>(m.Data[5]);
                             const auto reserve_32_1_b2 = static_cast<unsigned int>(m.Data[6]);
                             const auto reserve_32_1_b3 = static_cast<unsigned int>(m.Data[7]);
-                            const auto reserve_32_1_u32 = static_cast<std::uint32_t>(extend_data.Reserve_32_1);
-                            const auto reserve_32_1_low16 = static_cast<std::uint16_t>(reserve_32_1_u32 & 0xFFFFu);
-                            const auto reserve_32_1_high16 = static_cast<std::uint16_t>((reserve_32_1_u32 >> 16) & 0xFFFFu);
                             const auto reserve_32_1_bin = std::bitset<32>(reserve_32_1_u32).to_string();
                             const auto reserve_32_1_bin_grouped =
                                 reserve_32_1_bin.substr(0, 8) + " " +
                                 reserve_32_1_bin.substr(8, 8) + " " +
                                 reserve_32_1_bin.substr(16, 8) + " " +
                                 reserve_32_1_bin.substr(24, 8);
-                            const auto reserve_32_1_low16_bin = std::bitset<16>(reserve_32_1_low16).to_string();
-                            const auto reserve_32_1_high16_bin = std::bitset<16>(reserve_32_1_high16).to_string();
-                            const auto reserve_32_2_u32 = static_cast<std::uint32_t>(extend_data.Reserve_32_2);
-                            const auto reserve_32_2_low16_u = static_cast<std::uint16_t>(reserve_32_2_u32 & 0xFFFFu);
-                            const auto reserve_32_2_high16_u = static_cast<std::uint16_t>((reserve_32_2_u32 >> 16) & 0xFFFFu);
-                            const auto reserve_32_2_low16_i = static_cast<std::int16_t>(reserve_32_2_low16_u);
-                            const auto reserve_32_2_high16_i = static_cast<std::int16_t>(reserve_32_2_high16_u);
+                            const auto reserve_32_1_low16_bin = std::bitset<16>(reserve_32_1_low16_u).to_string();
+                            const auto reserve_32_1_high16_bin = std::bitset<16>(reserve_32_1_high16_u).to_string();
                             const auto reserve_32_2_low16_bin = std::bitset<16>(reserve_32_2_low16_u).to_string();
                             const auto reserve_32_2_high16_bin = std::bitset<16>(reserve_32_2_high16_u).to_string();
+                            const auto compare_raw =
+                                static_cast<std::int32_t>(reserve_32_1_high16_i) - static_cast<std::int32_t>(yaw_vel_publish_raw);
                             const auto posture_high8 =
                                 static_cast<unsigned int>((extend_data.Reserve_16 >> 8) & 0xFFu);
                             roslog::info(
@@ -603,10 +655,14 @@ namespace
                             roslog::info(
                                 "ExtendData parse: uwb_yaw=%u reserve16=0x%04X posture_high8=%u reserve32_1=0x%08X "
                                 "bytes[%02X %02X %02X %02X] reserve32_1_bin=%s "
-                                "low16_bin=%s high16_bin=%s -> yaw_vel_raw=%d yaw_angle_raw=%d "
-                                "yaw_vel_deg_s=%.2f yaw_angle_deg=%.2f reserve32_2=0x%08X "
+                                "low16_bin=%s high16_bin=%s -> legacy_low16(raw)=%d legacy_high16(raw)=%d "
+                                "publish_yaw_vel_raw=%d publish_yaw_angle_raw=%d publish_yaw_vel_deg_s=%.2f publish_yaw_angle_deg=%.2f "
+                                "reserve32_2=0x%08X "
                                 "reserve32_2_low16_raw=%d reserve32_2_low16_bin=%s reserve32_2_low16_x0p01=%.2f "
-                                "reserve32_2_high16_raw=%d reserve32_2_high16_bin=%s reserve32_2_high16_x0p01=%.2f",
+                                "reserve32_2_high16_raw=%d reserve32_2_high16_bin=%s reserve32_2_high16_x0p01=%.2f "
+                                "inst_vel_raw=%d inst_vel_deg_s=%.2f inst_valid=%s "
+                                "r32_1_high16_as_vel_raw=%d r32_1_high16_as_vel_deg_s=%.2f "
+                                "r32_1_high16_minus_publish_vel_raw=%d",
                                 static_cast<unsigned int>(extend_data.UWBAngleYaw),
                                 static_cast<unsigned int>(extend_data.Reserve_16),
                                 posture_high8,
@@ -615,20 +671,28 @@ namespace
                                 reserve_32_1_bin_grouped.c_str(),
                                 reserve_32_1_low16_bin.c_str(),
                                 reserve_32_1_high16_bin.c_str(),
-                                static_cast<int>(decoded.YawVelRaw),
-                                static_cast<int>(decoded.YawAngleRaw),
-                                static_cast<double>(decoded.YawVelRaw) * kScale,
-                                static_cast<double>(decoded.YawAngleRaw) * kScale,
+                                static_cast<int>(reserve_32_1_low16_i),
+                                static_cast<int>(reserve_32_1_high16_i),
+                                static_cast<int>(yaw_vel_publish_raw),
+                                static_cast<int>(yaw_angle_raw_from_r32_2),
+                                static_cast<double>(yaw_vel_publish_deg_s),
+                                static_cast<double>(yaw_angle_deg_from_r32_2),
                                 static_cast<unsigned int>(extend_data.Reserve_32_2),
                                 static_cast<int>(reserve_32_2_low16_i),
                                 reserve_32_2_low16_bin.c_str(),
                                 static_cast<double>(reserve_32_2_low16_i) * kScale,
                                 static_cast<int>(reserve_32_2_high16_i),
                                 reserve_32_2_high16_bin.c_str(),
-                                static_cast<double>(reserve_32_2_high16_i) * kScale);
+                                static_cast<double>(reserve_32_2_high16_i) * kScale,
+                                static_cast<int>(yaw_vel_instant_raw),
+                                static_cast<double>(yaw_vel_instant_deg_s),
+                                has_instant_vel ? "true" : "false",
+                                static_cast<int>(reserve_32_1_high16_i),
+                                static_cast<double>(yaw_vel_candidate_deg_s_from_r32_1_high),
+                                static_cast<int>(compare_raw));
                         }
 
-                        PubExtendData(extend_data);
+                        PubExtendData(extend_data, yaw_vel_publish_raw, yaw_angle_raw_from_r32_2);
                         break;
                     }
 
