@@ -470,9 +470,15 @@ void Tracker::getArmorTrackResultWithWholeCar(const Time::TimeStamp& time, const
 
 TrackResultPairs Tracker::getTrackResult(const Time::TimeStamp& time, const GimbalAngleType& gimbalAngle) 
 {
-    auto armor_results = getArmorTrackResult(time, gimbalAngle);
-    if (armor_results.empty()) {
-        // Fallback to the current-frame init path if the matcher does not yield any armor result.
+    TrackResults armor_results;
+    if (useMatcherTracking_) {
+        armor_results = getArmorTrackResult(time, gimbalAngle);
+        if (armor_results.empty()) {
+            // Fallback to the current-frame init path if the matcher does not yield any armor result.
+            armor_results = initArmorTrackResult(gimbalAngle);
+        }
+    } else {
+        // Legacy path: no matcher smoothing/association.
         armor_results = initArmorTrackResult(gimbalAngle);
     }
     auto car_results = getCarTrackResult(time, gimbalAngle, armor_results);
@@ -480,6 +486,11 @@ TrackResultPairs Tracker::getTrackResult(const Time::TimeStamp& time, const Gimb
     armors.clear();  // 清空当前帧的装甲板
     armors_gray.clear();
     return std::make_pair(armor_results, car_results);
+}
+
+void Tracker::setUseMatcherTracking(bool enable)
+{
+    useMatcherTracking_ = enable;
 }
 
 bool Tracker::isDetected() 

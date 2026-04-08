@@ -28,6 +28,7 @@ private:
     std::vector<std::tuple<cv::Rect2f, int, int>> old_car_rects;// rect, car_id, car_type
     std::vector<std::tuple<cv::Rect2f, int, int>> car_rects;
     Time::TimeStamp last_time;
+    bool useMatcherTracking_ = true;
     //bool first_track = true;
 
     TrackResults initArmorTrackResult(const GimbalAngleType& gimbalAngle);
@@ -44,6 +45,7 @@ public:
     [[deprecated]] std::vector<cv::Rect2i> calcROI(const std::vector<XYV>& projects, int width=416, int height=416, int camera_width=1280, int camera_height=1024);
     // getTrackResult 已替换为匹配算法（基于 TrackerMatcher），接口保持不变
     TrackResultPairs getTrackResult(const Time::TimeStamp& time, const GimbalAngleType& gimbalAngle);
+    void setUseMatcherTracking(bool enable);
     
     bool isDetected();
 };

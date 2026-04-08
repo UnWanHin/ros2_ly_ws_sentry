@@ -74,6 +74,14 @@ namespace{
             // 現在這裡執行時，全域指針已經有值了，Solver 才能讀到參數！
             tracker = ly_auto_aim::tracker::createTracker(); 
             solver = ly_auto_aim::solver::createSolver();
+
+            bool use_matcher_tracking = true;
+            node.GetParam("tracker_config.use_matcher_tracking", use_matcher_tracking, true);
+            tracker->setUseMatcherTracking(use_matcher_tracking);
+            RCLCPP_INFO(
+                node.get_logger(),
+                "tracker_config.use_matcher_tracking=%s",
+                use_matcher_tracking ? "true" : "false");
             
             location::Location::registerSolver(solver);
             
