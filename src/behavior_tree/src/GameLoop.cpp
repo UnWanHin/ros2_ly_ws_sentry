@@ -350,8 +350,7 @@ namespace BehaviorTree {
                     if (aimMode == AimMode::Outpost) {
                         nextAngles.Pitch += 15.0f;
                     }
-                } else if (config.AimDebugSettings.ReuseLatchedAnglesOnNoTarget &&
-                           activeAimData->HasLatchedAngles) {
+                } else if (activeAimData->HasLatchedAngles) {
                     nextAngles = activeAimData->Angles;
                     LoggerPtr->Debug(
                         "Reuse latched aim angles -> Pitch: {}, Yaw: {}",
@@ -360,7 +359,7 @@ namespace BehaviorTree {
                 } else {
                     nextAngles = gimbalAngles;
                     LoggerPtr->Debug(
-                        "Hold current gimbal angles (latched reuse disabled or unavailable) -> Pitch: {}, Yaw: {}",
+                        "No latched aim angles yet -> Pitch: {}, Yaw: {}",
                         gimbalAngles.Pitch,
                         gimbalAngles.Yaw);
                 }

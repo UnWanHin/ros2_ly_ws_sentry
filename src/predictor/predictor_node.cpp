@@ -82,19 +82,6 @@ namespace {
                 solver = ly_auto_aim::solver::createSolver(); 
                 predictor = ly_auto_aim::predictor::createPredictor();
                 controller = ly_auto_aim::controller::createController();
-                node.GetParam(
-                    "predictor_config.publish_only_on_new_tracker_frame",
-                    publish_only_on_new_tracker_frame_,
-                    publish_only_on_new_tracker_frame_);
-                node.GetParam(
-                    "predictor_config.require_observation_fresh_for_target",
-                    require_observation_fresh_for_target_,
-                    require_observation_fresh_for_target_);
-                RCLCPP_INFO(
-                    node.get_logger(),
-                    "predictor_config.publish_only_on_new_tracker_frame=%s, predictor_config.require_observation_fresh_for_target=%s",
-                    publish_only_on_new_tracker_frame_ ? "true" : "false",
-                    require_observation_fresh_for_target_ ? "true" : "false");
                 
                 location::Location::registerSolver(solver);
                 
@@ -173,7 +160,6 @@ namespace {
                 last_tracker_header_ = msg->header;
                 last_update_time_ = node.now();
                 has_tracker_input_ = true;
-                has_new_tracker_frame_.store(true, std::memory_order_release);
                 if (!track_results.first.empty()) {
                     last_observation_time_ = last_update_time_;
                 }
@@ -181,10 +167,6 @@ namespace {
 
             void publish_timer_callback() {
                 if (!has_tracker_input_ || !location::Location::isSolverRegistered()) {
-                    return;
-                }
-                if (publish_only_on_new_tracker_frame_ &&
-                    !has_new_tracker_frame_.exchange(false, std::memory_order_acq_rel)) {
                     return;
                 }
 
@@ -251,8 +233,7 @@ namespace {
                     }
                     publish_vis = true;
 
-                    if ((require_observation_fresh_for_target_ && !observation_fresh) ||
-                        (!has_predictions && !observation_fresh)) {
+                    if (!has_predictions && !observation_fresh) {
                         // Keep the predictor's robust stale/no-prediction handling,
                         // but do not publish invalid targets to behavior_tree.
                         target_msg.status = false;
@@ -334,9 +315,6 @@ namespace {
             rclcpp::Time last_update_time_{};
             rclcpp::Time last_observation_time_{};
             std::atomic_bool has_tracker_input_{false};
-            std::atomic_bool has_new_tracker_frame_{false};
-            bool publish_only_on_new_tracker_frame_{false};
-            bool require_observation_fresh_for_target_{false};
             const rclcpp::Duration coast_timeout_{rclcpp::Duration::from_seconds(0.5)};
             rclcpp::Time last_invalid_reason_log_time_{};
             const rclcpp::Duration invalid_reason_log_interval_{rclcpp::Duration::from_seconds(0.5)};

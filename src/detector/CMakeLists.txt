@@ -112,6 +112,12 @@ install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_node
 )
 
 install(PROGRAMS
+  script/mapper_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME mapper_node
+)
+
+install(PROGRAMS
   script/fire_flip_test.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME fire_flip_test

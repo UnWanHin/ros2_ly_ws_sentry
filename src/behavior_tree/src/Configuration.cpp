@@ -155,7 +155,6 @@ namespace LangYa {
         ad.HitBuff = j.value("HitBuff", ad.HitBuff);
         ad.HitCar = j.value("HitCar", ad.HitCar);
         ad.FireRequireTargetStatus = j.value("FireRequireTargetStatus", ad.FireRequireTargetStatus);
-        ad.ReuseLatchedAnglesOnNoTarget = j.value("ReuseLatchedAnglesOnNoTarget", ad.ReuseLatchedAnglesOnNoTarget);
     }
 
     void from_json(const json& j, Rate& r) {
@@ -328,7 +327,6 @@ namespace BehaviorTree {
         LoggerPtr->Debug("HitBuff: {}", config.AimDebugSettings.HitBuff);
         LoggerPtr->Debug("HitCar: {}", config.AimDebugSettings.HitCar);
         LoggerPtr->Debug("FireRequireTargetStatus: {}", config.AimDebugSettings.FireRequireTargetStatus);
-        LoggerPtr->Debug("ReuseLatchedAnglesOnNoTarget: {}", config.AimDebugSettings.ReuseLatchedAnglesOnNoTarget);
         LoggerPtr->Debug("------ Rate ------");
         LoggerPtr->Debug("FireRate: {}", config.RateSettings.FireRate);
         LoggerPtr->Debug("TickRate: {}", config.RateSettings.TreeTickRate);
