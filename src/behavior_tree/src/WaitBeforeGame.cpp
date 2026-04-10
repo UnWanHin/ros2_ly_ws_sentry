@@ -23,6 +23,7 @@ namespace BehaviorTree {
         gimbalControlData.FireCode.FireStatus = 0;
         gimbalControlData.FireCode.Rotate = 0;
         gimbalControlData.FireCode.AimMode = 0;
+        naviVelocityInput = VelocityType{0, 0};
         naviVelocity = VelocityType{0, 0};
         postureCommand = 0;
 
@@ -60,6 +61,8 @@ namespace BehaviorTree {
             }
 
             // 开赛门控期间持续压零速度，避免下位机沿用上一拍底盘控制量。
+            naviVelocityInput.X = 0;
+            naviVelocityInput.Y = 0;
             naviVelocity.X = 0;
             naviVelocity.Y = 0;
             PubNaviControlData();

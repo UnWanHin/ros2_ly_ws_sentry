@@ -1,41 +1,32 @@
-/predictor_node:
+/**:
   ros__parameters:
-    # ----------------------------------------------------
-    # Solver 必須用點 (.)，因為 solver.cpp 是這樣寫的
-    # ----------------------------------------------------
-    "solver_config.camera_intrinsic_matrix": [
-      1331.1, 0.0, 624.5817,
-      0.0, 1330.1, 526.3662,
-      0.0, 0.0, 1.0
-    ]
-    "solver_config.camera_distortion_coefficients": [-0.1059, -0.3427, 0.0072, 0.0, 1.4125]
-    "solver_config.camera_offset": [0.0, 0.0, 52.6]
-    "solver_config.camera_rotation": [0.0, 3.3, 0.0]
+    controller_config:
+      bullet_speed: 23.0
+      shoot_delay: 0.02
+      anti_rotate:
+        enable: true
+        omega_threshold: 0.6
+        response_speed: 0.01
+        base_jump_angle_rad: 0.78539816339
+        min_jump_angle_rad: 0.52359877559
+        min_radius: 0.2
+      shoot_table_adjust:
+        enable: true
+        pitch:
+          intercept: -1.547
+          coef_z: -4.876
+          coef_d: 1.1344
+          coef_z2: -16.5213
+          coef_zd: -1.14337
+          coef_d2: -0.1510
+        yaw:
+          intercept: 1.0714
+          coef_z: -7.7968
+          coef_d: -1.25504
+          coef_z2: -15.632
+          coef_zd: 0.1603
+          coef_d2: 0.1827
 
-    # ----------------------------------------------------
-    # Controller 必須用點 (.)，因為 controller.cpp 是這樣寫的
-    # ----------------------------------------------------
-    "controller_config.bullet_speed": 23.0
-    "controller_config.shoot_delay": 0.02
-    
-    # 射擊表開關
-    "controller_config.shoot_table_adjust.enable": true
-    "controller_config.shoot_table_adjust.pitch.intercept": -1.278237
-    "controller_config.shoot_table_adjust.pitch.coef_z": -8.305226
-    "controller_config.shoot_table_adjust.pitch.coef_d": 0.382394
-    "controller_config.shoot_table_adjust.pitch.coef_z2": -0.055430
-    "controller_config.shoot_table_adjust.pitch.coef_zd": 2.316426
-    "controller_config.shoot_table_adjust.pitch.coef_d2": 0.072275
-    "controller_config.shoot_table_adjust.yaw.intercept": -0.437271
-    "controller_config.shoot_table_adjust.yaw.coef_z": -7.101441
-    "controller_config.shoot_table_adjust.yaw.coef_d": -0.727940
-    "controller_config.shoot_table_adjust.yaw.coef_z2": 8.601493
-    "controller_config.shoot_table_adjust.yaw.coef_zd": 1.944495
-    "controller_config.shoot_table_adjust.yaw.coef_d2": 0.141359
-
-    # ----------------------------------------------------
-    # MotionModel Q/R (process and measurement noise)
-    # ----------------------------------------------------
     "motion_model.q_ax_jerk_base": 40.0
     "motion_model.q_ay_jerk_base": 40.0
     "motion_model.q_omega_accel_base": 0.2
@@ -43,4 +34,8 @@
     "motion_model.q_r2_drift_base": 0.00001
     "motion_model.q_z1_drift_base": 0.01
     "motion_model.q_z2_drift_base": 0.01
-    "motion_model.r_scale": 0.015
+    "motion_model.r_scale": 0.1
+    "motion_model.boundary_fit_alpha": 0.12
+    "motion_model.boundary_scale_min": 0.5
+    "motion_model.boundary_scale_max": 6.0
+    "predictor.visible_half_angle_rad": 1.0471975512

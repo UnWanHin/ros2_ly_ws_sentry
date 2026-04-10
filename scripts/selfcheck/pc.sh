@@ -15,7 +15,7 @@ export ROS_LOG_DIR
 
 DO_BUILD=1
 DO_TEST=0
-PACKAGES="behavior_tree outpost_hitter predictor buff_hitter detector gimbal_driver tracker_solver shooting_table_calib auto_aim_common"
+PACKAGES="behavior_tree outpost_hitter predictor buff_hitter detector gimbal_driver tracker_solver shooting_table_calib buff_shooting_table_calib auto_aim_common"
 
 usage() {
   cat <<EOF

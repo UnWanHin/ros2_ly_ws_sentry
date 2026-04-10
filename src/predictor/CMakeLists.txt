@@ -99,6 +99,12 @@ install(DIRECTORY include/
     DESTINATION include
 )
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/config")
+  install(DIRECTORY config
+    DESTINATION share/${PROJECT_NAME}
+  )
+endif()
+
 # 6. Export Dependencies (For other packages to use this one)
 ament_export_include_directories(include)
 ament_export_libraries(${PROJECT_NAME})

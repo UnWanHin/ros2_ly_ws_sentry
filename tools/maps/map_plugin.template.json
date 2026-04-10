@@ -1,0 +1,238 @@
+{
+  "map_name": "RMUC2026_V1.2.0",
+  "frame": "left_bottom_origin_cm",
+  "map_size_cm": {
+    "width": 2800,
+    "height": 1500
+  },
+  "points": [
+    {
+      "id": 0,
+      "name": "Home",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 1,
+      "name": "Base",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Recovery",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 3,
+      "name": "BuffShoot",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 4,
+      "name": "LeftHighLand",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 5,
+      "name": "CastleLeft",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Castle",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 7,
+      "name": "CastleRight1",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 8,
+      "name": "CastleRight2",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 9,
+      "name": "FlyRoad",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 10,
+      "name": "OutpostArea",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 11,
+      "name": "MidShoot",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 12,
+      "name": "LeftShoot",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 13,
+      "name": "OutpostShoot",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 14,
+      "name": "BuffAround1",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 15,
+      "name": "BuffAround2",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 16,
+      "name": "RightShoot",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 17,
+      "name": "HoleRoad",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 18,
+      "name": "OccupyArea",
+      "red": [
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0
+      ]
+    }
+  ]
+}

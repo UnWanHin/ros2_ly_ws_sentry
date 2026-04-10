@@ -18,6 +18,7 @@
   - `/ly/navi/goal`
   - `/ly/navi/goal_pos`
   - `/ly/navi/speed_level`
+  - `/ly/navi/target_rel`（追击相对目标点，x/y/z）
 - BT 订阅：
   - `/ly/navi/vel`
   - `/ly/navi/lower_head`
@@ -37,6 +38,8 @@
 
 - `behavior_tree` 已恢复速度桥接：`/ly/navi/vel -> /ly/control/vel`。  
   即：导航回传速度先进入 BT，再由 BT 转发给 gimbal_driver。
+- 当 `Chase.UseRelativeTargetTopic=true` 时，BT 会发布 `/ly/navi/target_rel`，由导航侧决定速度分配；  
+  BT 不再执行本地追击速度闭环。
 - 姿态 topic `/ly/control/posture` 已并入主控制幀字段 `GimbalControlData.Posture`（单通道下发）。
 - 下发全量规格见：`docs/sentry/lower_downlink_message_contract.md`。
 

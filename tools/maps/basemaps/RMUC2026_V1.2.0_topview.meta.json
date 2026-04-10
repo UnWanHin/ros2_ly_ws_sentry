@@ -1,0 +1,29 @@
+{
+  "input": "/home/unwanhin/ros2_ly_ws_sentary/tools/maps/src/RMUC2026_V1.2.0.step",
+  "output": "/home/unwanhin/ros2_ly_ws_sentary/tools/maps/basemaps/RMUC2026_V1.2.0_topview.png",
+  "width": 2800,
+  "height": 1500,
+  "z_filter": {
+    "min": null,
+    "max": null
+  },
+  "pca": {
+    "mean_x": -25.72087535343221,
+    "mean_y": 300.78330158758274,
+    "angle_rad": 1.0907230400178693,
+    "angle_deg": 62.49382681070271,
+    "point_count": 1225254
+  },
+  "rotated_bounds": {
+    "min_x": -12631.086773140072,
+    "max_x": 15021.211687534207,
+    "min_y": -16018.682938573105,
+    "max_y": 17160.134975000037,
+    "range_x": 27652.29846067428,
+    "range_y": 33178.81791357314
+  },
+  "render": {
+    "blur": 3,
+    "percentile": 70.0
+  }
+}

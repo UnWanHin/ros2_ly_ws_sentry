@@ -252,6 +252,12 @@ install(DIRECTORY include/
   DESTINATION include
 )
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/config")
+  install(DIRECTORY config
+    DESTINATION share/${PROJECT_NAME}
+  )
+endif()
+
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES
 #   # myfile1

@@ -257,6 +257,7 @@ void TreeTick() {
 | `/ly/ra/enable` | 打符模式開關 |
 | `/ly/outpost/enable` | 前哨站瞄準開關 |
 | `/ly/bt/target` | 當前打擊目標類型（→ `detector` 和 `predictor`） |
+| `/ly/navi/target_rel` | 追擊相對目標點（x/y/z，供導航側閉環） |
 | `/ly/navi/goal` | 導航目標點位 |
 | `/ly/navi/goal_pos` | 導航目標座標 |
 | `/ly/navi/speed_level` | 底盤速度等級 |
@@ -291,7 +292,8 @@ void TreeTick() {
 - `./scripts/start.sh gated`
   - 啟動時會交互選擇 `league/regional`（或直接傳 `--mode`）
   - 腳本會自動對齊 `competition_profile` 與 `bt_config_file`
-  - `config_file` 默認注入 `scripts/config/auto_aim_config_competition.yaml`，只在顯式傳入時覆蓋
+  - 默認分層注入：`scripts/config/base_config.yaml` + `src/*/config/*_config.yaml` + `scripts/config/override_config.yaml`
+  - `config_file` 只作為最後覆蓋層，顯式傳入時覆蓋 `override_config.yaml`
 - `./scripts/start.sh gated --mode league`
   - 非交互固定聯盟賽
 - `./scripts/start.sh gated --mode regional`
@@ -318,6 +320,21 @@ void TreeTick() {
 - `Area::OccupyArea` 只保留兼容坐標，占位給舊的 `goal_pos` 鏈路，不建議聯盟賽依賴它。
 - `bt_tree_file:=Scripts/main.xml`
   - 顯式指定 BT XML 文件
+
+### 追擊配置（新增）
+
+比賽配置文件（`regional_competition.json` / `league_competition.json`）新增：
+
+- `AimTargetPriority`：目標優先級（按 `ArmorType` 整數 ID 排序）
+  - 默認：`[1, 3, 4, 6, 2]`（Hero > Infantry1 > Infantry2 > Sentry > Engineer）
+- `Chase`：底盤追擊配置
+  - `Enable`：總開關
+  - `UseRelativeTargetTopic`：改由 BT 發布 `/ly/navi/target_rel`（x/y/z 相對目標點），導航側負責速度閉環
+  - `PreferredDistanceCm`：與目標保持的最適距離（cm）
+  - `DistanceDeadbandCm`：距離死區（cm）
+  - `DistanceKp` / `MaxForwardSpeed` / `MaxBackwardSpeed`：前後追擊控制
+  - `UseYawStrafe` / `YawKp` / `YawDeadbandDeg` / `MaxStrafeSpeed`：側向跟隨控制
+  - `LostTargetHoldMs` / `StopWhenNoTarget`：丟目標回退策略
 
 ### 黑板結構（兩種賽制一致）
 

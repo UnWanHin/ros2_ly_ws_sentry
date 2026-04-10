@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>buff_shooting_table_calib</name>
+  <version>0.0.1</version>
+  <description>Buff-specific shooting-table calibration tools for ROS2 sentry stack.</description>
+
+  <maintainer email="unwanhin@todo.todo">unwanhin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>gimbal_driver</depend>
+  <depend>auto_aim_common</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

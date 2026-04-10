@@ -1,0 +1,70 @@
+/**:
+  ros__parameters:
+    # Camera (shared by detector / calib)
+    "camera_param.camera_sn": "KE0200060396"
+    "camera_param/camera_sn": "KE0200060396"
+    "camera_param.ExposureTime": 5000.0
+    "camera_param/ExposureTime": 5000.0
+    "camera_param.Gain": 16.0
+    "camera_param/Gain": 16.0
+    "camera_param.RedBalanceRatio": 1.2266
+    "camera_param/RedBalanceRatio": 1.2266
+    "camera_param.GreenBalanceRatio": 1.0
+    "camera_param/GreenBalanceRatio": 1.0
+    "camera_param.BlueBalanceRatio": 1.3711
+    "camera_param/BlueBalanceRatio": 1.3711
+
+    # Solver intrinsics / extrinsics (shared by detector / tracker_solver / predictor / outpost_hitter)
+    solver_config:
+      camera_offset: [0.0, 0.0, 52.6]
+      camera_rotation: [0.0, 3.3, 0.0]
+      camera_intrinsic_matrix:
+        - 1281.23456
+        - 0.0
+        - 630.293177
+        - 0.0
+        - 1280.62617
+        - 508.575495
+        - 0.0
+        - 0.0
+        - 1.0
+      camera_distortion_coefficients:
+        - -0.19702588
+        - 0.10417594
+        - 0.00093009
+        - 0.00060859
+        - 0.09416784
+
+    # Legacy slash-style aliases kept for compatibility readers
+    "solver_config/camera_offset": [0.0, 0.0, 52.6]
+    "solver_config/camera_rotation": [0.0, 3.3, 0.0]
+    "solver_config/camera_intrinsic_matrix":
+      - 1281.23456
+      - 0.0
+      - 630.293177
+      - 0.0
+      - 1280.62617
+      - 508.575495
+      - 0.0
+      - 0.0
+      - 1.0
+    "solver_config/camera_distortion_coefficients":
+      - -0.19702588
+      - 0.10417594
+      - 0.00093009
+      - 0.00060859
+      - 0.09416784
+
+    # IO / serial base (shared by gimbal_driver and startup wrappers)
+    io_config:
+      use_virtual_device: false
+      device_name: "/dev/ttyACM0"
+      baud_rate: 115200
+      posture_repeat_count: 3
+      posture_repeat_interval_ms: 20
+
+    "io_config/use_virtual_device": false
+    "io_config/device_name": "/dev/ttyACM0"
+    "io_config/baud_rate": 115200
+    "io_config/posture_repeat_count": 3
+    "io_config/posture_repeat_interval_ms": 20

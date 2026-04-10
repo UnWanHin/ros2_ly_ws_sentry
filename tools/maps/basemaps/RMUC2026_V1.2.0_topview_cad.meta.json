@@ -1,0 +1,43 @@
+{
+  "input": "/home/unwanhin/ros2_ly_ws_sentary/tools/maps/src/RMUC2026_V1.2.0.step",
+  "output": "/home/unwanhin/ros2_ly_ws_sentary/tools/maps/basemaps/RMUC2026_V1.2.0_topview_cad.png",
+  "engine": "cad_wireframe",
+  "input_size_mb": 947.2825527191162,
+  "width": 2800,
+  "height": 1500,
+  "z_filter": {
+    "min": null,
+    "max": null
+  },
+  "roots": {
+    "total": 1,
+    "selected": [
+      1
+    ]
+  },
+  "mesh": {
+    "deflection": 20.0,
+    "angle": 0.5
+  },
+  "draw": {
+    "line_thickness": 1,
+    "blur": 3
+  },
+  "bounds": {
+    "min_x": -14880.99972789,
+    "max_x": 14880.99972788,
+    "min_y": -6400.656323507,
+    "max_y": 9649.343676497,
+    "range_x": 29761.999455769997,
+    "range_y": 16050.000000003998
+  },
+  "triangles": {
+    "for_bounds": 3620136,
+    "drawn": 3620136
+  },
+  "mapper": {
+    "scale": 0.09339563862926023,
+    "x_pad": 9.679526972332951,
+    "y_pad": 0.0
+  }
+}

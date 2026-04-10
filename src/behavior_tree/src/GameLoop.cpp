@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 using namespace LangYa;
 
@@ -28,6 +29,57 @@ namespace BehaviorTree {
 
     bool IsValidBaseGoalId(const std::uint8_t goal_id) {
         return goal_id <= kMaxBaseGoalId;
+    }
+
+    std::optional<ArmorType> ArmorTypeFromPriorityId(const int armor_type_id) {
+        switch (static_cast<ArmorType>(armor_type_id)) {
+            case ArmorType::Hero:
+            case ArmorType::Engineer:
+            case ArmorType::Infantry1:
+            case ArmorType::Infantry2:
+            case ArmorType::Sentry:
+                return static_cast<ArmorType>(armor_type_id);
+            default:
+                return std::nullopt;
+        }
+    }
+
+    std::optional<UnitType> UnitTypeFromArmorType(const ArmorType armor_type) {
+        switch (armor_type) {
+            case ArmorType::Hero:
+                return UnitType::Hero;
+            case ArmorType::Engineer:
+                return UnitType::Engineer;
+            case ArmorType::Infantry1:
+                return UnitType::Infantry1;
+            case ArmorType::Infantry2:
+                return UnitType::Infantry2;
+            case ArmorType::Sentry:
+                return UnitType::Sentry;
+            default:
+                return std::nullopt;
+        }
+    }
+
+    std::optional<ArmorType> ArmorTypeFromUnitType(const UnitType unit_type) {
+        switch (unit_type) {
+            case UnitType::Hero:
+                return ArmorType::Hero;
+            case UnitType::Engineer:
+                return ArmorType::Engineer;
+            case UnitType::Infantry1:
+                return ArmorType::Infantry1;
+            case UnitType::Infantry2:
+                return ArmorType::Infantry2;
+            case UnitType::Sentry:
+                return ArmorType::Sentry;
+            default:
+                return std::nullopt;
+        }
+    }
+
+    int ClampToInt8(const int value) {
+        return std::clamp(value, -128, 127);
     }
     }  // namespace
 
@@ -75,6 +127,10 @@ namespace BehaviorTree {
         GlobalBlackboard_->set<std::uint8_t>("PostureCommand", postureCommand);
         GlobalBlackboard_->set<bool>("PostureUnderFireRecent", IsUnderFireRecent());
         GlobalBlackboard_->set<bool>("PostureUnderFireBurst", IsUnderFireBurst());
+        GlobalBlackboard_->set<std::int16_t>("GimbalYawVelRaw", gimbalYawVelRaw);
+        GlobalBlackboard_->set<float>("GimbalYawVelDegPerSec", gimbalYawVelDegPerSec);
+        GlobalBlackboard_->set<std::int16_t>("GimbalYawAngleRaw", gimbalYawAngleRaw);
+        GlobalBlackboard_->set<float>("GimbalYawAngleDeg", gimbalYawAngleDeg);
 
         const auto now = std::chrono::steady_clock::now();
         if (now - lastUpdateBlackboardLogTime_ > std::chrono::seconds(2)) {
@@ -116,8 +172,8 @@ namespace BehaviorTree {
         int now_time = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - gameStartTime).count();
         static constexpr auto delta_yaw = 1.0f;
         static constexpr auto buff_yaw = -50.0f + 360.0f;
-        static constexpr auto kPatrolScanYawStep = 4.0f * delta_yaw;
-        static constexpr auto kPatrolScanYawBoostStep = 6.0f * delta_yaw;
+        static constexpr auto kPatrolScanYawStep = 9.0f * delta_yaw;
+        static constexpr auto kPatrolScanYawBoostStep = 10.0f * delta_yaw;
         static constexpr int kDamageScanBoostWindowMs = 1300;
         static constexpr int kDamageScanYawPhaseMs = 160;
 
@@ -179,7 +235,7 @@ namespace BehaviorTree {
 
         gimbalControlData.FireCode.Rotate = rotate_gear;
         if (config.AimDebugSettings.StopRotate) {
-            gimbalControlData.FireCode.Rotate = 0;
+            gimbalControlData.FireCode.Rotate = 3;
         }
 
         static auto last_rotate_log = std::chrono::steady_clock::time_point{};
@@ -205,7 +261,34 @@ namespace BehaviorTree {
             activeAimData = &outpostAimData;
         }
         GimbalAnglesType nextAngles = gimbalAngles;
+        VelocityType nextVelocity = naviVelocityInput;
         const bool find_target = isFindTargetAtomic.load(std::memory_order_relaxed);
+        const auto chase_mode_enabled = [&]() -> bool {
+            if (!config.ChaseSettings.Enable || !config.ChaseSettings.FollowAimTarget) {
+                return false;
+            }
+            switch (aimMode) {
+                case AimMode::AutoAim:
+                    return config.ChaseSettings.EnableInAutoAim;
+                case AimMode::RotateScan:
+                    return config.ChaseSettings.EnableInRotateScan;
+                case AimMode::Outpost:
+                    return config.ChaseSettings.EnableInOutpostMode;
+                case AimMode::Buff:
+                    return config.ChaseSettings.EnableInBuffMode;
+                default:
+                    return false;
+            }
+        }();
+        naviRelativeTargetValid = false;
+        naviRelativeTargetX = 0.0F;
+        naviRelativeTargetY = 0.0F;
+        naviRelativeTargetZ = 0.0F;
+        naviRelativeTargetDistance = 0.0F;
+        naviRelativeTargetYawErrorDeg = 0.0F;
+        naviRelativeTargetPitchErrorDeg = 0.0F;
+        naviRelativeTargetArmorType = 0U;
+        naviRelativeTargetAimMode = static_cast<std::uint8_t>(aimMode);
         if (find_target) {
             LoggerPtr->Debug("Find Target, AimMode={}", static_cast<int>(aimMode));
             if (!config.AimDebugSettings.StopFire){
@@ -306,11 +389,93 @@ namespace BehaviorTree {
             }
             gimbalControlData.FireCode.FireStatus = RecFireCode.FireStatus;
         }
+
+        if (chase_mode_enabled) {
+            const bool use_relative_target_topic = config.ChaseSettings.UseRelativeTargetTopic;
+            bool has_chase_target = find_target;
+            if (!has_chase_target &&
+                config.ChaseSettings.LostTargetHoldMs > 0 &&
+                activeAimData->HasLatchedAngles &&
+                lastTargetSeenTime.time_since_epoch().count() != 0) {
+                has_chase_target = (now - lastTargetSeenTime) <=
+                    std::chrono::milliseconds(config.ChaseSettings.LostTargetHoldMs);
+            }
+
+            bool chase_distance_valid = false;
+            float distance_cm = 0.0f;
+            if (std::isfinite(targetArmor.Distance) && targetArmor.Distance > 0.0f) {
+                distance_cm = targetArmor.Distance * 100.0f;
+                chase_distance_valid =
+                    distance_cm >= static_cast<float>(config.ChaseSettings.MinValidDistanceCm) &&
+                    distance_cm <= static_cast<float>(config.ChaseSettings.MaxValidDistanceCm);
+            }
+
+            if (has_chase_target &&
+                chase_distance_valid &&
+                targetArmor.Type != ArmorType::UnKnown) {
+                const auto yaw_error_deg = static_cast<double>(
+                    std::remainder(nextAngles.Yaw - gimbalAngles.Yaw, 360.0f));
+                const auto pitch_error_deg = static_cast<double>(
+                    std::remainder(nextAngles.Pitch - gimbalAngles.Pitch, 360.0f));
+                const double distance_m = static_cast<double>(distance_cm) * 0.01;
+                constexpr double kDegToRad = 0.017453292519943295;
+                const double yaw_rad = yaw_error_deg * kDegToRad;
+                const double pitch_rad = pitch_error_deg * kDegToRad;
+                const double cos_pitch = std::cos(pitch_rad);
+
+                naviRelativeTargetValid = true;
+                naviRelativeTargetX = static_cast<float>(distance_m * cos_pitch * std::cos(yaw_rad));
+                naviRelativeTargetY = static_cast<float>(distance_m * cos_pitch * std::sin(yaw_rad));
+                naviRelativeTargetZ = static_cast<float>(distance_m * std::sin(pitch_rad));
+                naviRelativeTargetDistance = static_cast<float>(distance_m);
+                naviRelativeTargetYawErrorDeg = static_cast<float>(yaw_error_deg);
+                naviRelativeTargetPitchErrorDeg = static_cast<float>(pitch_error_deg);
+                naviRelativeTargetArmorType = static_cast<std::uint8_t>(targetArmor.Type);
+
+                if (!use_relative_target_topic) {
+                    const double distance_error_cm =
+                        static_cast<double>(distance_cm) -
+                        static_cast<double>(config.ChaseSettings.PreferredDistanceCm);
+
+                    int chase_vx = 0;
+                    if (std::abs(distance_error_cm) >
+                        static_cast<double>(config.ChaseSettings.DistanceDeadbandCm)) {
+                        chase_vx = static_cast<int>(std::lround(config.ChaseSettings.DistanceKp * distance_error_cm));
+                        chase_vx = std::clamp(
+                            chase_vx,
+                            -config.ChaseSettings.MaxBackwardSpeed,
+                            config.ChaseSettings.MaxForwardSpeed);
+                    }
+
+                    int chase_vy = 0;
+                    if (config.ChaseSettings.UseYawStrafe) {
+                        if (std::abs(yaw_error_deg) > static_cast<double>(config.ChaseSettings.YawDeadbandDeg)) {
+                            chase_vy = static_cast<int>(std::lround(config.ChaseSettings.YawKp * yaw_error_deg));
+                            if (config.ChaseSettings.InvertStrafeDirection) {
+                                chase_vy = -chase_vy;
+                            }
+                            chase_vy = std::clamp(
+                                chase_vy,
+                                -config.ChaseSettings.MaxStrafeSpeed,
+                                config.ChaseSettings.MaxStrafeSpeed);
+                        }
+                    }
+
+                    nextVelocity.X = static_cast<std::int8_t>(ClampToInt8(chase_vx));
+                    nextVelocity.Y = static_cast<std::int8_t>(ClampToInt8(chase_vy));
+                }
+            } else if (!config.ChaseSettings.UseRelativeTargetTopic &&
+                       config.ChaseSettings.StopWhenNoTarget) {
+                nextVelocity = VelocityType{0, 0};
+            }
+        }
+
         // lower_head 只在未锁目标时生效，并且整对角一起切换，避免混用旧 yaw/new pitch。
         if(naviLowerHead && !find_target) {
             nextAngles = GimbalAnglesType{gimbalAngles.Yaw, -15.0f}; //-22.5 - 26.0
         }
         gimbalControlData.GimbalAngles = nextAngles;
+        naviVelocity = nextVelocity;
 
         PublishMessageAll();
         autoAimData.Fresh = false;
@@ -507,9 +672,12 @@ namespace BehaviorTree {
             if(naviCommandGoal == LangYa::HoleRoad(EnemyTeam)) { // 英雄点位1
                 if(BehaviorTree::Area::HoleRoad.near(nowx, nowy, 100, MyTeam)) {
                     targetArmor.Type = ArmorType::Hero;
+                    targetArmor.Distance = enemyRobots[UnitType::Hero].distance_;
                 } else {
                     SetAimTargetNormal();
                 }
+            } else {
+                SetAimTargetNormal();
             }
             LoggerPtr->Info("Target: {}", static_cast<int>(targetArmor.Type));
         }
@@ -517,80 +685,74 @@ namespace BehaviorTree {
     }
 
     void Application::SetAimTargetNormal() {
-        if(hitableTargets.size() > 0) {
-            bool hero_find = (std::find(hitableTargets.begin(), hitableTargets.end(), UnitType::Hero) != hitableTargets.end());
-            bool sentry_find = (std::find(hitableTargets.begin(), hitableTargets.end(), UnitType::Sentry) != hitableTargets.end());
-            bool engnieer_find = (std::find(hitableTargets.begin(), hitableTargets.end(), UnitType::Engineer) != hitableTargets.end());
-            bool infantry1_find = (std::find(hitableTargets.begin(),  hitableTargets.end(), UnitType::Infantry1) != hitableTargets.end());
-            bool infantry2_find = (std::find(hitableTargets.begin(),  hitableTargets.end(), UnitType::Infantry2) != hitableTargets.end());
-            if (hero_find) {
-                targetArmor.Type = ArmorType::Hero;
-                targetArmor.Distance = enemyRobots[UnitType::Hero].distance_;
-            }else if(infantry1_find || infantry2_find) {
-                if(infantry1_find && !infantry2_find) {
-                    targetArmor.Type = ArmorType::Infantry1;
-                    targetArmor.Distance = enemyRobots[UnitType::Infantry1].distance_;
-                }else if(!infantry1_find && infantry2_find) {
-                    targetArmor.Type = ArmorType::Infantry2;
-                    targetArmor.Distance = enemyRobots[UnitType::Infantry2].distance_;
-                }else {
-                    int delta_distance = enemyRobots[UnitType::Infantry1].distance_ - enemyRobots[UnitType::Infantry2].distance_;
-                    int delta_health = enemyRobots[UnitType::Infantry1].currentHealth_ - enemyRobots[UnitType::Infantry2].currentHealth_;
-                    if(std::fabs(delta_distance) > 1) {
-                        if(enemyRobots[UnitType::Infantry1].distance_ < enemyRobots[UnitType::Infantry2].distance_) {
-                            targetArmor.Type = ArmorType::Infantry1;
-                            targetArmor.Distance = enemyRobots[UnitType::Infantry1].distance_;
-                        }else {
-                            targetArmor.Type = ArmorType::Infantry2;
-                            targetArmor.Distance = enemyRobots[UnitType::Infantry2].distance_;
+        auto set_target = [&](const ArmorType armor_type, const UnitType unit_type) {
+            targetArmor.Type = armor_type;
+            targetArmor.Distance = enemyRobots[unit_type].distance_;
+        };
+        const auto has_target = [&](const UnitType unit_type) -> bool {
+            return std::find(hitableTargets.begin(), hitableTargets.end(), unit_type) != hitableTargets.end();
+        };
+        const bool infantry1_find = has_target(UnitType::Infantry1);
+        const bool infantry2_find = has_target(UnitType::Infantry2);
+
+        if (!hitableTargets.empty()) {
+            for (const auto armor_id : config.AimTargetPriority) {
+                const auto armor_type = ArmorTypeFromPriorityId(armor_id);
+                if (!armor_type.has_value()) {
+                    continue;
+                }
+                if ((*armor_type == ArmorType::Infantry1 || *armor_type == ArmorType::Infantry2) &&
+                    infantry1_find && infantry2_find) {
+                    // 兼容旧逻辑：步兵1/2同时可打时，优先近距离；距离接近时看血量更低者。
+                    const auto distance1 = enemyRobots[UnitType::Infantry1].distance_;
+                    const auto distance2 = enemyRobots[UnitType::Infantry2].distance_;
+                    const auto delta_distance = distance1 - distance2;
+                    if (std::fabs(delta_distance) > 1.0f) {
+                        if (distance1 < distance2) {
+                            set_target(ArmorType::Infantry1, UnitType::Infantry1);
+                        } else {
+                            set_target(ArmorType::Infantry2, UnitType::Infantry2);
                         }
-                    } else { 
-                        if(delta_health < 0) {
-                            targetArmor.Type = ArmorType::Infantry1;
-                            targetArmor.Distance = enemyRobots[UnitType::Infantry1].distance_;
-                        }else {
-                            targetArmor.Type = ArmorType::Infantry2;
-                            targetArmor.Distance = enemyRobots[UnitType::Infantry2].distance_;
+                    } else {
+                        const auto health1 = enemyRobots[UnitType::Infantry1].currentHealth_;
+                        const auto health2 = enemyRobots[UnitType::Infantry2].currentHealth_;
+                        if (health1 < health2) {
+                            set_target(ArmorType::Infantry1, UnitType::Infantry1);
+                        } else {
+                            set_target(ArmorType::Infantry2, UnitType::Infantry2);
                         }
                     }
-                } 
-            }else if(sentry_find){
-                targetArmor.Type = ArmorType::Sentry;
-                targetArmor.Distance = enemyRobots[UnitType::Sentry].distance_;
-            }else if(engnieer_find) {
-                targetArmor.Type = ArmorType::Engineer;
-                targetArmor.Distance = enemyRobots[UnitType::Engineer].distance_;
+                    return;
+                }
+                const auto unit_type = UnitTypeFromArmorType(*armor_type);
+                if (!unit_type.has_value()) {
+                    continue;
+                }
+                if (!has_target(*unit_type)) {
+                    continue;
+                }
+                set_target(*armor_type, *unit_type);
+                return;
             }
-            // else {
-            //     int min_health = 9999;
-            //     UnitType min_health_unit;
-            //     for(auto unit : hitableTargets) {
-            //         if(enemyRobots[unit].currentHealth_ < min_health) {
-            //             min_health = enemyRobots[unit].currentHealth_;
-            //             min_health_unit = unit;
-            //         }
-            //     }
-            //     if(min_health_unit == UnitType::Engineer) {
-            //         targetArmor.Type = ArmorType::Engineer;
-            //         targetArmor.Distance = enemyRobots[UnitType::Engineer].distance_;
-            //     }else if(min_health_unit == UnitType::Infantry1) {
-            //         targetArmor.Type = ArmorType::Infantry1;
-            //         targetArmor.Distance = enemyRobots[UnitType::Infantry1].distance_;
-            //     }else if(min_health_unit == UnitType::Infantry2) { 
-            //         targetArmor.Type = ArmorType::Infantry2;
-            //         targetArmor.Distance = enemyRobots[UnitType::Infantry2].distance_;
-            //     }else if(min_health_unit == UnitType::Sentry) {
-            //         targetArmor.Type = ArmorType::Sentry;
-            //         targetArmor.Distance = enemyRobots[UnitType::Sentry].distance_;
-            //     }else if(min_health_unit == UnitType::Hero) {
-            //         targetArmor.Type = ArmorType::Hero;
-            //         targetArmor.Distance = enemyRobots[UnitType::Hero].distance_;
-            //     }
-            // }
-        }else {
-            targetArmor.Type = ArmorType::Hero;
-            targetArmor.Distance = 30;
+
+            // 配置优先级没有命中时，回退到最近目标
+            const auto nearest_it = std::min_element(
+                hitableTargets.begin(),
+                hitableTargets.end(),
+                [this](const UnitType lhs, const UnitType rhs) {
+                    return enemyRobots[lhs].distance_ < enemyRobots[rhs].distance_;
+                });
+            if (nearest_it != hitableTargets.end()) {
+                const auto armor_type = ArmorTypeFromUnitType(*nearest_it);
+                if (armor_type.has_value()) {
+                    set_target(*armor_type, *nearest_it);
+                    return;
+                }
+            }
         }
+
+        targetArmor.Type = ArmorType::Hero;
+        targetArmor.Distance = 30;
     }
 
     void Application::CheckDebug() {
@@ -608,7 +770,9 @@ namespace BehaviorTree {
 namespace BehaviorTree {
 
     bool Application::IsLeagueRouteCompatEnabled() const noexcept {
-        return IsLeagueProfile() && !config.NaviSettings.UseXY;
+        return IsLeagueProfile() &&
+            !config.NaviSettings.UseXY &&
+            config.LeagueStrategySettings.EnableRouteCompat;
     }
 
     bool Application::IsLeagueGoalSwitchBetween2And3(

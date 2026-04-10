@@ -395,6 +395,7 @@ namespace LangYa
     };
 
     struct LeagueStrategySetting {
+        bool EnableRouteCompat{true};
         bool UseHealthRecovery{true};
         std::uint16_t HealthRecoveryThreshold{100};
         bool UseAmmoRecovery{true};
@@ -434,6 +435,37 @@ namespace LangYa
         std::uint8_t SpeedLevel{1};
     };
 
+    // 底盘追击配置
+    struct ChaseSetting {
+        bool Enable{false};
+        bool FollowAimTarget{true};
+        bool UseRelativeTargetTopic{false}; // true: publish /ly/navi/target_rel and let navi own speed control
+        bool EnableInAutoAim{true};
+        bool EnableInRotateScan{true};
+        bool EnableInOutpostMode{false};
+        bool EnableInBuffMode{false};
+        bool StopWhenNoTarget{false};
+        int LostTargetHoldMs{200};
+
+        // 与目标保持的最佳距离（单位：cm）
+        int PreferredDistanceCm{100};
+        int DistanceDeadbandCm{60};
+        int MinValidDistanceCm{80};
+        int MaxValidDistanceCm{1200};
+
+        // 追击速度控制
+        double DistanceKp{0.06};
+        int MaxForwardSpeed{35};
+        int MaxBackwardSpeed{25};
+
+        // 侧向修正（基于云台 yaw 误差）
+        bool UseYawStrafe{true};
+        double YawKp{0.4};
+        int YawDeadbandDeg{3};
+        int MaxStrafeSpeed{22};
+        bool InvertStrafeDirection{false};
+    };
+
     // 姿态模块配置
     struct PostureSetting {
         bool Enable{true};
@@ -465,6 +497,14 @@ namespace LangYa
         LeagueStrategySetting LeagueStrategySettings{};
         ShowcasePatrolSetting ShowcasePatrolSettings{};
         NaviDebugSetting NaviDebugSettings{};
+        std::vector<int> AimTargetPriority{
+            static_cast<int>(ArmorType::Hero),
+            static_cast<int>(ArmorType::Infantry1),
+            static_cast<int>(ArmorType::Infantry2),
+            static_cast<int>(ArmorType::Sentry),
+            static_cast<int>(ArmorType::Engineer)
+        };
+        ChaseSetting ChaseSettings{};
         PostureSetting PostureSettings{};
         int ScanCounter{1};  /// 扫描模式计数器，一定值后Yaw动一次
         std::string CompetitionProfile{"regional"};

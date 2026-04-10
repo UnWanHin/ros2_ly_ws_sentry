@@ -19,6 +19,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Armor.msg"
   "msg/Armors.msg"
   "msg/Target.msg"
+  "msg/RelativeTarget.msg"
   "msg/DebugFilter.msg"
   "msg/Rect.msg"
   "msg/Car.msg"
@@ -26,6 +27,10 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CarTracker.msg"
   "msg/Trackers.msg"
   "msg/AngleImage.msg"
+  "msg/BuffDebug.msg"
+  "msg/PredictorArmorVis.msg"
+  "msg/PredictorCarVis.msg"
+  "msg/PredictorVis.msg"
   DEPENDENCIES geometry_msgs std_msgs sensor_msgs
 )
 

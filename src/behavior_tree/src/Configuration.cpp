@@ -174,6 +174,7 @@ namespace LangYa {
     }
 
     void from_json(const json& j, LeagueStrategySetting& ls) {
+        ls.EnableRouteCompat = j.value("EnableRouteCompat", ls.EnableRouteCompat);
         ls.UseHealthRecovery = j.value("UseHealthRecovery", ls.UseHealthRecovery);
         ls.HealthRecoveryThreshold = j.value("HealthRecoveryThreshold", ls.HealthRecoveryThreshold);
         ls.UseAmmoRecovery = j.value("UseAmmoRecovery", ls.UseAmmoRecovery);
@@ -220,6 +221,30 @@ namespace LangYa {
         }
     }
 
+    void from_json(const json& j, ChaseSetting& cs) {
+        cs.Enable = j.value("Enable", cs.Enable);
+        cs.FollowAimTarget = j.value("FollowAimTarget", cs.FollowAimTarget);
+        cs.UseRelativeTargetTopic = j.value("UseRelativeTargetTopic", cs.UseRelativeTargetTopic);
+        cs.EnableInAutoAim = j.value("EnableInAutoAim", cs.EnableInAutoAim);
+        cs.EnableInRotateScan = j.value("EnableInRotateScan", cs.EnableInRotateScan);
+        cs.EnableInOutpostMode = j.value("EnableInOutpostMode", cs.EnableInOutpostMode);
+        cs.EnableInBuffMode = j.value("EnableInBuffMode", cs.EnableInBuffMode);
+        cs.StopWhenNoTarget = j.value("StopWhenNoTarget", cs.StopWhenNoTarget);
+        cs.LostTargetHoldMs = j.value("LostTargetHoldMs", cs.LostTargetHoldMs);
+        cs.PreferredDistanceCm = j.value("PreferredDistanceCm", cs.PreferredDistanceCm);
+        cs.DistanceDeadbandCm = j.value("DistanceDeadbandCm", cs.DistanceDeadbandCm);
+        cs.MinValidDistanceCm = j.value("MinValidDistanceCm", cs.MinValidDistanceCm);
+        cs.MaxValidDistanceCm = j.value("MaxValidDistanceCm", cs.MaxValidDistanceCm);
+        cs.DistanceKp = j.value("DistanceKp", cs.DistanceKp);
+        cs.MaxForwardSpeed = j.value("MaxForwardSpeed", cs.MaxForwardSpeed);
+        cs.MaxBackwardSpeed = j.value("MaxBackwardSpeed", cs.MaxBackwardSpeed);
+        cs.UseYawStrafe = j.value("UseYawStrafe", cs.UseYawStrafe);
+        cs.YawKp = j.value("YawKp", cs.YawKp);
+        cs.YawDeadbandDeg = j.value("YawDeadbandDeg", cs.YawDeadbandDeg);
+        cs.MaxStrafeSpeed = j.value("MaxStrafeSpeed", cs.MaxStrafeSpeed);
+        cs.InvertStrafeDirection = j.value("InvertStrafeDirection", cs.InvertStrafeDirection);
+    }
+
     void from_json(const json& j, PostureSetting& ps) {
         ps.Enable = j.value("Enable", ps.Enable);
         ps.SwitchCooldownSec = j.value("SwitchCooldownSec", ps.SwitchCooldownSec);
@@ -263,6 +288,12 @@ namespace LangYa {
         }
         if (j.contains("NaviDebug")) {
             j.at("NaviDebug").get_to(c.NaviDebugSettings);
+        }
+        if (j.contains("AimTargetPriority")) {
+            j.at("AimTargetPriority").get_to(c.AimTargetPriority);
+        }
+        if (j.contains("Chase")) {
+            j.at("Chase").get_to(c.ChaseSettings);
         }
         if (j.contains("Posture")) {
             j.at("Posture").get_to(c.PostureSettings);
@@ -310,6 +341,7 @@ namespace BehaviorTree {
         LoggerPtr->Debug("------ NaviSetting ------");
         LoggerPtr->Debug("UseXY: {}", config.NaviSettings.UseXY);
         LoggerPtr->Debug("------ LeagueStrategy ------");
+        LoggerPtr->Debug("EnableRouteCompat: {}", config.LeagueStrategySettings.EnableRouteCompat);
         LoggerPtr->Debug("UseHealthRecovery: {}", config.LeagueStrategySettings.UseHealthRecovery);
         LoggerPtr->Debug("HealthRecoveryThreshold: {}", config.LeagueStrategySettings.HealthRecoveryThreshold);
         LoggerPtr->Debug("UseAmmoRecovery: {}", config.LeagueStrategySettings.UseAmmoRecovery);
@@ -335,6 +367,32 @@ namespace BehaviorTree {
         LoggerPtr->Debug("Enable: {}", config.NaviDebugSettings.Enable);
         LoggerPtr->Debug("PlanFile: {}", config.NaviDebugSettings.PlanFile);
         LoggerPtr->Debug("ActivePlan: {}", config.NaviDebugSettings.ActivePlan);
+        LoggerPtr->Debug("------ AimTargetPriority ------");
+        for (const auto armor_id : config.AimTargetPriority) {
+            LoggerPtr->Debug("ArmorTypeId: {}", armor_id);
+        }
+        LoggerPtr->Debug("------ Chase ------");
+        LoggerPtr->Debug("Enable: {}", config.ChaseSettings.Enable);
+        LoggerPtr->Debug("FollowAimTarget: {}", config.ChaseSettings.FollowAimTarget);
+        LoggerPtr->Debug("UseRelativeTargetTopic: {}", config.ChaseSettings.UseRelativeTargetTopic);
+        LoggerPtr->Debug("EnableInAutoAim: {}", config.ChaseSettings.EnableInAutoAim);
+        LoggerPtr->Debug("EnableInRotateScan: {}", config.ChaseSettings.EnableInRotateScan);
+        LoggerPtr->Debug("EnableInOutpostMode: {}", config.ChaseSettings.EnableInOutpostMode);
+        LoggerPtr->Debug("EnableInBuffMode: {}", config.ChaseSettings.EnableInBuffMode);
+        LoggerPtr->Debug("StopWhenNoTarget: {}", config.ChaseSettings.StopWhenNoTarget);
+        LoggerPtr->Debug("LostTargetHoldMs: {}", config.ChaseSettings.LostTargetHoldMs);
+        LoggerPtr->Debug("PreferredDistanceCm: {}", config.ChaseSettings.PreferredDistanceCm);
+        LoggerPtr->Debug("DistanceDeadbandCm: {}", config.ChaseSettings.DistanceDeadbandCm);
+        LoggerPtr->Debug("MinValidDistanceCm: {}", config.ChaseSettings.MinValidDistanceCm);
+        LoggerPtr->Debug("MaxValidDistanceCm: {}", config.ChaseSettings.MaxValidDistanceCm);
+        LoggerPtr->Debug("DistanceKp: {}", config.ChaseSettings.DistanceKp);
+        LoggerPtr->Debug("MaxForwardSpeed: {}", config.ChaseSettings.MaxForwardSpeed);
+        LoggerPtr->Debug("MaxBackwardSpeed: {}", config.ChaseSettings.MaxBackwardSpeed);
+        LoggerPtr->Debug("UseYawStrafe: {}", config.ChaseSettings.UseYawStrafe);
+        LoggerPtr->Debug("YawKp: {}", config.ChaseSettings.YawKp);
+        LoggerPtr->Debug("YawDeadbandDeg: {}", config.ChaseSettings.YawDeadbandDeg);
+        LoggerPtr->Debug("MaxStrafeSpeed: {}", config.ChaseSettings.MaxStrafeSpeed);
+        LoggerPtr->Debug("InvertStrafeDirection: {}", config.ChaseSettings.InvertStrafeDirection);
         LoggerPtr->Debug("------ PostureSetting ------");
         LoggerPtr->Debug("Enable: {}", config.PostureSettings.Enable);
         LoggerPtr->Debug("SwitchCooldownSec: {}", config.PostureSettings.SwitchCooldownSec);
@@ -492,6 +550,92 @@ namespace BehaviorTree {
         if (config.NaviDebugSettings.Enable && config.NaviDebugSettings.Goals.empty()) {
             LoggerPtr->Warning("NaviDebug enabled but no valid goals found, fallback to OccupyArea.");
             config.NaviDebugSettings.Goals.push_back(LangYa::OccupyArea.ID);
+        }
+
+        const std::vector<int> default_aim_target_priority{
+            static_cast<int>(ArmorType::Hero),
+            static_cast<int>(ArmorType::Infantry1),
+            static_cast<int>(ArmorType::Infantry2),
+            static_cast<int>(ArmorType::Sentry),
+            static_cast<int>(ArmorType::Engineer)
+        };
+        const auto is_valid_armor_priority = [](const int armor_id) -> bool {
+            switch (static_cast<ArmorType>(armor_id)) {
+                case ArmorType::Hero:
+                case ArmorType::Engineer:
+                case ArmorType::Infantry1:
+                case ArmorType::Infantry2:
+                case ArmorType::Sentry:
+                    return true;
+                default:
+                    return false;
+            }
+        };
+        std::vector<int> sanitized_aim_target_priority;
+        sanitized_aim_target_priority.reserve(config.AimTargetPriority.size());
+        for (const auto armor_id : config.AimTargetPriority) {
+            if (!is_valid_armor_priority(armor_id)) {
+                LoggerPtr->Warning("Ignore invalid AimTargetPriority item={}.", armor_id);
+                continue;
+            }
+            if (std::find(sanitized_aim_target_priority.begin(),
+                          sanitized_aim_target_priority.end(),
+                          armor_id) != sanitized_aim_target_priority.end()) {
+                continue;
+            }
+            sanitized_aim_target_priority.push_back(armor_id);
+        }
+        if (sanitized_aim_target_priority.empty()) {
+            LoggerPtr->Warning("AimTargetPriority is empty after sanitize, fallback to default.");
+            sanitized_aim_target_priority = default_aim_target_priority;
+        }
+        config.AimTargetPriority = std::move(sanitized_aim_target_priority);
+
+        if (config.ChaseSettings.LostTargetHoldMs < 0) {
+            LoggerPtr->Warning("Invalid Chase.LostTargetHoldMs={}, fallback to 0.",
+                               config.ChaseSettings.LostTargetHoldMs);
+            config.ChaseSettings.LostTargetHoldMs = 0;
+        }
+        if (config.ChaseSettings.PreferredDistanceCm <= 0) {
+            LoggerPtr->Warning("Invalid Chase.PreferredDistanceCm={}, fallback to 100.",
+                               config.ChaseSettings.PreferredDistanceCm);
+            config.ChaseSettings.PreferredDistanceCm = 100;
+        }
+        if (config.ChaseSettings.DistanceDeadbandCm < 0) {
+            LoggerPtr->Warning("Invalid Chase.DistanceDeadbandCm={}, fallback to 0.",
+                               config.ChaseSettings.DistanceDeadbandCm);
+            config.ChaseSettings.DistanceDeadbandCm = 0;
+        }
+        if (config.ChaseSettings.MinValidDistanceCm < 0) {
+            LoggerPtr->Warning("Invalid Chase.MinValidDistanceCm={}, fallback to 0.",
+                               config.ChaseSettings.MinValidDistanceCm);
+            config.ChaseSettings.MinValidDistanceCm = 0;
+        }
+        if (config.ChaseSettings.MaxValidDistanceCm <= config.ChaseSettings.MinValidDistanceCm) {
+            LoggerPtr->Warning(
+                "Invalid Chase distance range [{}, {}], fallback to [80, 1200].",
+                config.ChaseSettings.MinValidDistanceCm,
+                config.ChaseSettings.MaxValidDistanceCm);
+            config.ChaseSettings.MinValidDistanceCm = 80;
+            config.ChaseSettings.MaxValidDistanceCm = 1200;
+        }
+        if (config.ChaseSettings.DistanceKp < 0.0) {
+            LoggerPtr->Warning("Invalid Chase.DistanceKp={}, fallback to 0.06.",
+                               config.ChaseSettings.DistanceKp);
+            config.ChaseSettings.DistanceKp = 0.06;
+        }
+        config.ChaseSettings.MaxForwardSpeed = std::clamp(config.ChaseSettings.MaxForwardSpeed, 0, 127);
+        config.ChaseSettings.MaxBackwardSpeed = std::clamp(config.ChaseSettings.MaxBackwardSpeed, 0, 127);
+        config.ChaseSettings.MaxStrafeSpeed = std::clamp(config.ChaseSettings.MaxStrafeSpeed, 0, 127);
+        if (config.ChaseSettings.YawKp < 0.0) {
+            LoggerPtr->Warning("Invalid Chase.YawKp={}, fallback to 0.4.",
+                               config.ChaseSettings.YawKp);
+            config.ChaseSettings.YawKp = 0.4;
+        }
+        if (config.ChaseSettings.YawDeadbandDeg < 0) {
+            LoggerPtr->Warning("Invalid Chase.YawDeadbandDeg={}, fallback to 0.",
+                               config.ChaseSettings.YawDeadbandDeg);
+            config.ChaseSettings.YawDeadbandDeg = 0;
         }
 
         const std::string config_profile = NormalizeProfile(config.CompetitionProfile);

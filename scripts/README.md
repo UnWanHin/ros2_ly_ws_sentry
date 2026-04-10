@@ -16,7 +16,7 @@
 ```bash
 ./scripts/start.sh
 ./scripts/start.sh gated --mode league
-./scripts/debug.sh autoaim-debug --online
+./scripts/debug.sh armor_test --mode regional
 ./scripts/selfcheck.sh sentry --runtime-only --launch --wait 12 --skip-hz
 ```
 
@@ -37,13 +37,15 @@ scripts/
 ├── launch/                  # 真实启动实现
 ├── feature_test/            # 单项功能测试框架
 ├── tools/                   # 工具脚本
-└── config/                  # 比赛/测试配置
+└── config/                  # 根层配置（base + override）
 ```
 
 原则：
 
 - `scripts/start/`、`scripts/debug/`、`scripts/selfcheck/` 是你平时真正需要打开的分类入口。
 - `scripts/launch/` 是实现层，不是给人记命令用的。
+- 根层 `config/` 只放 `base_config.yaml` 和 `override_config.yaml`。
+- 功能测试配置放在 `scripts/feature_test/config/`。
 - 旧的根目录壳脚本已经删掉，避免同一件事出现两三个名字。
 
 ## 一眼看懂
@@ -65,24 +67,24 @@ scripts/
 - `scripts/start/sentry_all_nogate.sh`
 - 实际实现：`scripts/launch/start_sentry_all.sh`
 
-### 2. `competition_autoaim` 是什么
+### 2. `armor_test` 是什么
 
 现在用这个名字：
 
 ```bash
-./scripts/debug.sh competition-autoaim
+./scripts/debug.sh armor_test
 ```
 
 对应脚本：
 
-- `scripts/debug/competition_autoaim.sh`
-- 实际实现：`scripts/launch/start_competition_autoaim_test.sh`
+- `scripts/debug/armor_test.sh`
+- 实际实现：`scripts/launch/armor_test.sh`
 
 它不是“正式比赛完全等价入口”，而是“比赛风格辅瞄预设”。
 
 默认行为：
 
-- 使用 `scripts/config/auto_aim_config_competition.yaml`
+- 使用分层配置（`config/base_config.yaml` + `src/detector/config/detector_config.yaml` + `src/predictor/config/predictor_config.yaml`，并叠加 `config/override_config.yaml`）
 - 默认 `--mode regional`
 - 默认 `--nogate`
 - 默认启用：`gimbal_driver / detector / tracker_solver / predictor / behavior_tree`
@@ -148,21 +150,19 @@ scripts/
 
 | 分类脚本 | 用途 | 实际实现 |
 | --- | --- | --- |
-| `scripts/debug/competition_autoaim.sh` | 比赛风格辅瞄预设 | `scripts/launch/start_competition_autoaim_test.sh` |
-| `scripts/debug/autoaim_debug.sh` | 感知链 / mapper / 火控联调 | `scripts/launch/start_autoaim_debug.sh` |
-| `scripts/debug/autoaim_test.sh` | 一键装甲板辅瞄测试 | `scripts/feature_test/standalone/modes/armor_mode.sh` |
+| `scripts/debug/armor_test.sh` | 比赛风格辅瞄预设 | `scripts/launch/armor_test.sh` |
 | `scripts/debug/navi_debug.sh` | behavior_tree-only 导航调试 | `scripts/launch/start_sentry_navi_debug.sh` |
 | `scripts/debug/standalone.sh` | 单项功能测试菜单 | `scripts/feature_test/standalone/run_standalone_menu.sh` |
-| `scripts/debug/navi_patrol.sh` | JSON 巡逻点发 `/ly/navi/goal` | `scripts/feature_test/standalone/modes/navi_patrol_mode.sh` |
+| `scripts/debug/navi_goal.sh` | JSON 巡逻点发 `/ly/navi/goal` | `scripts/feature_test/standalone/modes/navi_patrol_mode.sh` |
 | `scripts/debug/navi_goal_cli.sh` | 手动发导航目标 | `scripts/feature_test/standalone/tools/navi_goal_cli_pub.py` |
 | `scripts/debug/ballistic_error_log.sh` | 过滤弹道/锁敌日志 | `scripts/tools/monitor_ballistic_errors.sh` |
-| `scripts/debug/shooting_table_calib.sh` | 射表标定 | `scripts/launch/start_shooting_table_calib.sh` |
-| `scripts/debug/shooting_table_autoaim.sh` | 射表直连 autoaim 验证 | `scripts/launch/start_shooting_table_autoaim.sh` |
+| `scripts/debug/shooting_table_calib.sh` | 射表标定 | `scripts/launch/shooting_table_calib.sh` |
+| `scripts/debug/buff_shooting_table_calib.sh` | 打符射表标定 | `scripts/launch/buff_shooting_table_calib.sh` |
 | `scripts/debug/control_angles_test.sh` | 直接发 `/ly/control/angles` 角度命令 | 脚本内置发布逻辑 |
-| `scripts/debug/chassis_gyro.sh` | 小陀螺/Rotate 链路测试 | `scripts/feature_test/standalone/modes/chassis_spin_mode.sh` |
-| `scripts/debug/chassis_spin_translate.sh` | 小陀螺 + 底盘速度联动测试 | `scripts/feature_test/standalone/modes/chassis_spin_translate_mode.sh` |
-| `scripts/debug/rotate_level_test.sh` | Rotate 档位循环与回读测试 | 脚本内置发布/回读逻辑 |
+| `scripts/debug/rotate_level.sh` | Rotate 档位循环与回读测试 | 脚本内置发布/回读逻辑 |
+| `scripts/debug/move_rotate.sh` | 小陀螺 + 正弦平移联动测试 | `scripts/feature_test/standalone/modes/chassis_spin_sine_translate_mode.sh` |
 | `scripts/debug/posture_test.sh` | 姿态切换循环与回读测试 | 脚本内置发布/回读逻辑 |
+| `scripts/debug/chase_only.sh` | 纯追击联调（无门控，默认连下位机） | `scripts/launch/start_sentry_chase_only.sh` |
 
 ### Selfcheck
 
@@ -194,21 +194,19 @@ scripts/
 
 菜单项：
 
-1. `competition-autoaim`
-2. `autoaim-debug`
-3. `autoaim-test`
-4. `navi-debug`
-5. `standalone`
-6. `navi-patrol`
-7. `navi-goal-cli`
-8. `ballistic-log`
-9. `shooting-table-calib`
-10. `shooting-table-autoaim`
-11. `control-angles-test`
-12. `chassis-gyro`
-13. `chassis-gyro-translate`
-14. `rotate-level-test`
-15. `posture-test`
+1. `armor_test`
+2. `navi-debug`
+3. `standalone`
+4. `navi_goal`
+5. `navi-goal-cli`
+6. `ballistic-log`
+7. `shooting-table-calib`
+8. `buff-shooting-table-calib`
+9. `control-angles-test`
+10. `rotate_level`
+11. `move_rotate`
+12. `posture-test`
+13. `chase-only`
 
 ### `./scripts/selfcheck.sh`
 
@@ -237,16 +235,22 @@ scripts/
 ./scripts/start.sh showcase
 
 # 比赛风格 autoaim 预设
-./scripts/debug.sh competition-autoaim --mode league
+./scripts/debug.sh armor_test --mode league
 
 # 射表标定
 ./scripts/debug.sh shooting-table-calib --team red --output screen
 
-# 一键装甲板联调
-./scripts/debug.sh autoaim-test --online
+# 打符射表标定（采样）
+./scripts/debug.sh buff-shooting-table-calib --calib-mode periodic --csv-strategy latest
+
+# 弹道/锁敌异常日志过滤
+./scripts/debug.sh ballistic-log --with-valid
 
 # 导航调试
 ./scripts/debug.sh navi-debug
+
+# 纯追击联调（默认无门控，连下位机）
+./scripts/debug.sh chase-only
 
 # 离车自检
 ./scripts/selfcheck.sh pc

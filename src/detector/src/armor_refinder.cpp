@@ -42,7 +42,7 @@ namespace ly_auto_aim::inline detector {
             auto &t = target_transform.Translation;
             temp_armor_msg.distance = std::sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
             // temp_armor_msg.rotation = std::move(target_transform.Rotation);
-            // temp_armor_msg.translation = std::move(target_transform.Translation);
+            temp_armor_msg.translation = std::move(target_transform.Translation);
 
             /// 提醒: apex是顺时针排布，从左上开始
             temp_armor_msg.corners_x = {armor.apex[0].x, armor.apex[1].x, armor.apex[2].x, armor.apex[3].x};

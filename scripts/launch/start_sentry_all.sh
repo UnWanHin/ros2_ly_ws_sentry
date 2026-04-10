@@ -12,7 +12,12 @@ CLEANUP_EXISTING=1
 OFFLINE_MODE=0
 MODE_ARG=""
 LAUNCH_ARGS=()
-DEFAULT_CONFIG_FILE="${ROOT_DIR}/scripts/config/auto_aim_config_competition.yaml"
+DEFAULT_BASE_CONFIG_FILE="${ROOT_DIR}/config/base_config.yaml"
+DEFAULT_DETECTOR_CONFIG_FILE="${ROOT_DIR}/src/detector/config/detector_config.yaml"
+DEFAULT_PREDICTOR_CONFIG_FILE="${ROOT_DIR}/src/predictor/config/predictor_config.yaml"
+DEFAULT_OUTPOST_CONFIG_FILE="${ROOT_DIR}/src/outpost_hitter/config/outpost_config.yaml"
+DEFAULT_BUFF_CONFIG_FILE="${ROOT_DIR}/src/buff_hitter/config/buff_config.yaml"
+DEFAULT_OVERRIDE_CONFIG_FILE="${ROOT_DIR}/config/override_config.yaml"
 
 STACK_LAUNCH_REGEX="ros2 launch behavior_tree sentry_all.launch.py"
 
@@ -33,6 +38,17 @@ Examples:
   ./${SCRIPT_NAME} --mode 3 --no-prompt
   ./${SCRIPT_NAME} -- use_buff:=false use_outpost:=false
 EOF2
+}
+
+has_launch_arg_key() {
+  local key="$1"
+  local arg
+  for arg in "${LAUNCH_ARGS[@]}"; do
+    if [[ "${arg}" == "${key}:="* ]]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 while [[ $# -gt 0 ]]; do
@@ -79,24 +95,46 @@ done
 source_ros_workspace "${ROOT_DIR}"
 cleanup_existing_launch_tree "${CLEANUP_EXISTING}" "${STACK_LAUNCH_REGEX}"
 
-has_config_override=0
-for arg in "${LAUNCH_ARGS[@]}"; do
-  if [[ "${arg}" == config_file:=* ]]; then
-    has_config_override=1
-    break
-  fi
-done
-
-if (( has_config_override == 0 )); then
-  LAUNCH_ARGS=("config_file:=${DEFAULT_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
-  echo "[INFO] default config_file=${DEFAULT_CONFIG_FILE}"
+if ! has_launch_arg_key "base_config_file"; then
+  LAUNCH_ARGS=("base_config_file:=${DEFAULT_BASE_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
+  echo "[INFO] default base_config_file=${DEFAULT_BASE_CONFIG_FILE}"
 else
-  for arg in "${LAUNCH_ARGS[@]}"; do
-    if [[ "${arg}" == config_file:=* ]]; then
-      echo "[INFO] override config_file=${arg#config_file:=}"
-      break
-    fi
-  done
+  for arg in "${LAUNCH_ARGS[@]}"; do [[ "${arg}" == base_config_file:=* ]] && echo "[INFO] override base_config_file=${arg#base_config_file:=}"; done
+fi
+
+if ! has_launch_arg_key "detector_config_file"; then
+  LAUNCH_ARGS=("detector_config_file:=${DEFAULT_DETECTOR_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
+  echo "[INFO] default detector_config_file=${DEFAULT_DETECTOR_CONFIG_FILE}"
+else
+  for arg in "${LAUNCH_ARGS[@]}"; do [[ "${arg}" == detector_config_file:=* ]] && echo "[INFO] override detector_config_file=${arg#detector_config_file:=}"; done
+fi
+
+if ! has_launch_arg_key "predictor_config_file"; then
+  LAUNCH_ARGS=("predictor_config_file:=${DEFAULT_PREDICTOR_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
+  echo "[INFO] default predictor_config_file=${DEFAULT_PREDICTOR_CONFIG_FILE}"
+else
+  for arg in "${LAUNCH_ARGS[@]}"; do [[ "${arg}" == predictor_config_file:=* ]] && echo "[INFO] override predictor_config_file=${arg#predictor_config_file:=}"; done
+fi
+
+if ! has_launch_arg_key "outpost_config_file"; then
+  LAUNCH_ARGS=("outpost_config_file:=${DEFAULT_OUTPOST_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
+  echo "[INFO] default outpost_config_file=${DEFAULT_OUTPOST_CONFIG_FILE}"
+else
+  for arg in "${LAUNCH_ARGS[@]}"; do [[ "${arg}" == outpost_config_file:=* ]] && echo "[INFO] override outpost_config_file=${arg#outpost_config_file:=}"; done
+fi
+
+if ! has_launch_arg_key "buff_config_file"; then
+  LAUNCH_ARGS=("buff_config_file:=${DEFAULT_BUFF_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
+  echo "[INFO] default buff_config_file=${DEFAULT_BUFF_CONFIG_FILE}"
+else
+  for arg in "${LAUNCH_ARGS[@]}"; do [[ "${arg}" == buff_config_file:=* ]] && echo "[INFO] override buff_config_file=${arg#buff_config_file:=}"; done
+fi
+
+if ! has_launch_arg_key "config_file"; then
+  LAUNCH_ARGS=("config_file:=${DEFAULT_OVERRIDE_CONFIG_FILE}" "${LAUNCH_ARGS[@]}")
+  echo "[INFO] default config_file(override)=${DEFAULT_OVERRIDE_CONFIG_FILE}"
+else
+  for arg in "${LAUNCH_ARGS[@]}"; do [[ "${arg}" == config_file:=* ]] && echo "[INFO] override config_file=${arg#config_file:=}"; done
 fi
 
 if [[ -n "${MODE_ARG}" ]]; then

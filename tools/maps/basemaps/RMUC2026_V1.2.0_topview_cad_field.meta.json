@@ -1,0 +1,27 @@
+{
+  "source_meta": "/home/unwanhin/ros2_ly_ws_sentary/tools/maps/basemaps/RMUC2026_V1.2.0_topview_cad.meta.json",
+  "source_gray": "/home/unwanhin/ros2_ly_ws_sentary/tools/maps/basemaps/RMUC2026_V1.2.0_topview_cad.png",
+  "source_color": "/home/unwanhin/ros2_ly_ws_sentary/tools/maps/basemaps/RMUC2026_V1.2.0_topview_cad_color.png",
+  "output_gray": "/home/unwanhin/ros2_ly_ws_sentary/tools/maps/basemaps/RMUC2026_V1.2.0_topview_cad_field.png",
+  "output_color": "/home/unwanhin/ros2_ly_ws_sentary/tools/maps/basemaps/RMUC2026_V1.2.0_topview_cad_color_field.png",
+  "crop_box_px": {
+    "x0": 92,
+    "y0": 49,
+    "x1": 2707,
+    "y1": 1450,
+    "width": 2616,
+    "height": 1402
+  },
+  "target_field_mm": {
+    "width": 28000.0,
+    "height": 15000.0
+  },
+  "raw_bounds": {
+    "min_x": -14880.99972789,
+    "max_x": 14880.99972788,
+    "min_y": -6400.656323507,
+    "max_y": 9649.343676497,
+    "range_x": 29761.999455769997,
+    "range_y": 16050.000000003998
+  }
+}

@@ -2,35 +2,52 @@
   <!-- Legacy all-in-one launcher kept for standalone debugging.
        Recommended entry for daily use is:
        ros2 launch behavior_tree sentry_all.launch.py -->
-  <arg name="config_file" default="$(find-pkg-share detector)/config/auto_aim_config.yaml"/>
+  <arg name="base_config_file" default="$(find-pkg-share behavior_tree)/config/base_config.yaml"/>
+  <arg name="detector_config_file" default="$(find-pkg-share detector)/config/detector_config.yaml"/>
+  <arg name="predictor_config_file" default="$(find-pkg-share predictor)/config/predictor_config.yaml"/>
+  <arg name="outpost_config_file" default="$(find-pkg-share outpost_hitter)/config/outpost_config.yaml"/>
+  <arg name="buff_config_file" default="$(find-pkg-share buff_hitter)/config/buff_config.yaml"/>
+  <arg name="config_file" default="$(find-pkg-share behavior_tree)/config/override_config.yaml"/>
 
   <node pkg="gimbal_driver" exec="gimbal_driver_node" name="gimbal_driver" output="log">
+    <param from="$(var base_config_file)"/>
     <param from="$(var config_file)"/>
     <env name="ROS_LOG_DIR" value="$(env HOME)/workspace/logs/gimbal_driver/log" />
   </node>
 
   <node pkg="behavior_tree" exec="behavior_tree_node" name="behavior_tree" output="log">
+    <param from="$(var base_config_file)"/>
     <param from="$(var config_file)"/>
     <env name="ROS_LOG_DIR" value="$(env HOME)/workspace/logs/behavior_tree/log" />
   </node>
 
   <node pkg="detector" exec="detector_node" name="detector" output="log">
+    <param from="$(var base_config_file)"/>
+    <param from="$(var detector_config_file)"/>
     <param from="$(var config_file)"/>
-    </node>
+  </node>
 
   <node pkg="tracker_solver" exec="tracker_solver_node" name="tracker_solver" output="log">
+    <param from="$(var base_config_file)"/>
+    <param from="$(var predictor_config_file)"/>
     <param from="$(var config_file)"/>
   </node>
 
   <node pkg="predictor" exec="predictor_node" name="predictor" output="log">
+    <param from="$(var base_config_file)"/>
+    <param from="$(var predictor_config_file)"/>
     <param from="$(var config_file)"/>
   </node>
 
   <node pkg="buff_hitter" exec="buff_hitter_node" name="buff_hitter" output="log">
+    <param from="$(var base_config_file)"/>
+    <param from="$(var buff_config_file)"/>
     <param from="$(var config_file)"/>
   </node>
 
   <node pkg="outpost_hitter" exec="outpost_hitter_node" name="outpost_hitter" output="screen">
+    <param from="$(var base_config_file)"/>
+    <param from="$(var outpost_config_file)"/>
     <param from="$(var config_file)"/>
   </node>
 

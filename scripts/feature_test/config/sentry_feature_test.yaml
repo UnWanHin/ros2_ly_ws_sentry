@@ -1,0 +1,100 @@
+# 哨兵功能测试总配置（BehaviorTree 外）
+# 用法：
+#   ./scripts/feature_test/run_feature_test.sh --config ./scripts/feature_test/config/sentry_feature_test.yaml
+# 说明：
+#   - 当前为 Phase 1：稳定支持 gimbal.armor / gimbal.scan / chassis.velocity
+#   - 默认启用单控制源保护（allow_multi_control: false）
+
+global:
+  # 是否离线模式：
+  # true  -> 传给 auto_aim 脚本 offline，适合离车视频回放调试
+  # false -> 在线模式，按真实设备链路运行
+  offline: false
+
+  # 启动前是否清理同类残留进程
+  # 建议保持 true，避免“第二次启动卡住”
+  cleanup_existing: true
+
+  # 是否允许多控制源同时写 /ly/control/*
+  # false（推荐）: 严格单控制源，不允许抢控制
+  # true: 放开保护，仅用于特殊排查
+  allow_multi_control: false
+
+  # 拉起感知链后等待就绪时间（秒）
+  wait_stack_sec: 12
+
+  # ros2 命令超时时间（秒）
+  cmd_timeout_sec: 5
+
+  # 可选：指定 detector 配置文件
+  # 留空表示用默认配置
+  config_file: ""
+
+run:
+  # 是否启用云台测试组
+  gimbal: true
+
+  # 是否启用底盘测试组
+  chassis: false
+
+gimbal:
+  mode:
+    # 云台模式四选一（run.gimbal=true 时必须且只能有一个 true）
+    # Phase 1 已支持：armor / scan
+    # Phase 1 未落地：outpost / buff（先保持 false）
+    armor: true
+    outpost: false
+    buff: false
+    scan: false
+  fire:
+    # 是否启用 firecode 发布
+    enable: true
+
+    # 是否按目标状态自动切换开火位
+    auto_fire: true
+  target:
+    # 目标类型优先级（按顺序尝试）
+    # 例：[6,3,4,5] -> 先打 6，没有再看 3/4/5
+    priority: [6, 3, 4, 5]
+
+    # 回退目标ID（无可用目标或超时后使用）
+    fallback_id: 6
+
+    # 目标超时（秒）
+    timeout_sec: 1.0
+
+  # mapper 诊断日志周期（秒）
+  diag_period: 1.0
+  scan:
+    # 扫描模式参数（单位：角度/Hz）
+    yaw_min: -15.0
+    yaw_max: 15.0
+    pitch: 8.0
+    step_deg: 1.0
+    hz: 20.0
+
+chassis:
+  mode:
+    # 底盘模式开关
+    # Phase 1 仅支持 velocity=true
+    # spin/nav_goal/patrol 预留，当前未接入执行器
+    velocity: false
+    spin: false
+    nav_goal: false
+    patrol: false
+  velocity:
+    # 速度模式参数
+    # profile:
+    #   constant -> 固定速度
+    #   square   -> 方形轨迹速度切换（按 period_sec 分相）
+    profile: constant
+
+    # /ly/control/vel x,y（int8，建议范围 -100~100）
+    speed_x: 20
+    speed_y: 0
+
+    # 发布频率（Hz）
+    publish_hz: 20.0
+
+    # 周期（秒，主要用于 square 模式）
+    period_sec: 8.0

@@ -50,7 +50,8 @@ struct ExtendData {
 | `UWBAngleYaw` | 16 bit | 自身 UWB 朝向角 | 发布到 `/ly/me/uwb_yaw` |
 | `Reserve_16` | bit8~15（高8位） | 姿态状态回读 | 解析后发布到 `/ly/gimbal/posture` |
 | `Reserve_16` | bit0~7（低8位） | 预留 | 无独立发布 |
-| `Reserve_32_1` | 32 bit | 本仓库当前未发现解析/发布引用 | 无 |
+| `Reserve_32_1` | low16（byte0~1） | 云台 yaw 角速度（`int16`, 0.01deg/s） | 发布到 `/ly/gimbal/gimbal_yaw` 的 `yaw_vel` 字段 |
+| `Reserve_32_1` | high16（byte2~3） | 云台 yaw 当前角（`int16`, 0.01deg） | 发布到 `/ly/gimbal/gimbal_yaw` 的 `yaw_angle` 字段 |
 | `Reserve_32_2` | 32 bit | 本仓库当前未发现解析/发布引用 | 无 |
 
 当前上位机对 `Reserve_16` 的解释：
@@ -64,16 +65,21 @@ struct ExtendData {
 
 ## 4. 当前上位机真实行为
 
-`src/gimbal_driver/main.cpp` 里，`PubExtendData()` 只做两件事：
+`src/gimbal_driver/main.cpp` 里，`PubExtendData()` 当前做三件事：
 
 1. 读取 `UWBAngleYaw`，发布 `/ly/me/uwb_yaw`
-2. 读取 `Reserve_16` 高 8 位，作为姿态值
+2. 读取 `Reserve_32_1`：
+   - 低 16 位作为 yaw 角速度（`yaw_vel`）
+   - 高 16 位作为 yaw 当前角（`yaw_angle`）
+   并发布 `/ly/gimbal/gimbal_yaw`
+3. 读取 `Reserve_16` 高 8 位，作为姿态值
 
 对应逻辑要点：
 
 - 只有 `1/2/3` 会被视为有效姿态并发布
 - 如果下位机回传 `0`，当前实现不会发布新的 `/ly/gimbal/posture`
-- `Reserve_32_1` 和 `Reserve_32_2` 在本仓库当前代码里未发现解析/发布逻辑
+- `Reserve_32_1` 当前 32 位都已解析（低16=角速度，高16=当前角）
+- `Reserve_32_2` 当前未解析/发布
 
 这点要特别注意：
 
@@ -91,7 +97,10 @@ struct ExtendData {
 1. 继续发送 `TypeID=6` 的 `ExtendData`
 2. `UWBAngleYaw` 正常填写
 3. 把姿态状态写入 `Reserve_16` 高 8 bit
-4. `Reserve_32_1/2` 可以先不填，置 0 即可
+4. `Reserve_32_1` 按约定填写：
+   - low16: `yaw_vel_raw`（`int16`, `0.01deg/s`）
+   - high16: `yaw_angle_raw`（`int16`, `0.01deg`）
+5. `Reserve_32_2` 可先置 0
 
 姿态编码方式（高 8 bit）：
 
@@ -112,14 +121,14 @@ reserve_16 = ((uint16_t)(posture & 0xFFu) << 8) | reserve_8;
 
 当前最安全的扩展顺序建议是：
 
-1. 优先使用 `Reserve_32_1`
-2. 再使用 `Reserve_32_2`
-3. 谨慎使用 `Reserve_16` 低 8 位（高 8 位已承载 posture）
+1. 优先使用 `Reserve_32_2`
+2. 再考虑 `Reserve_16` 低 8 位（高 8 位已承载 posture）
 
 原因：
 
 - `Reserve_16` 高 8 bit 已承载 posture（当前主约定）
-- `Reserve_32_1/2` 当前完全未被上位机解析，冲突最小
+- `Reserve_32_1` 当前 32 位都已有语义（角速度 + 当前角）
+- `Reserve_32_2` 当前完全未被上位机解析，冲突最小
 - 扩展时只需要同步修改：
   - `src/gimbal_driver/main.cpp`
   - 对应 topic / message 定义

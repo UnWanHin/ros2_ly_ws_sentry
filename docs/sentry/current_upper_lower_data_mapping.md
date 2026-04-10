@@ -412,7 +412,8 @@ struct ExtendData {
 | `UWBAngleYaw` | 直接读 `uint16` | `/ly/me/uwb_yaw` | 自身朝向角 |
 | `Reserve_16` bit8~15（高8位） | 按 `uint8` 姿态值解析 | `/ly/gimbal/posture` | 仅 `1/2/3` 才发布 |
 | `Reserve_16` bit0~7（低8位） | 当前未解析 | 无 | 预留 |
-| `Reserve_32_1` | 当前未解析 | 无 | 本仓库当前未发现解析/发布逻辑 |
+| `Reserve_32_1` low16（byte0~1） | 按 `int16` 解析，缩放 `0.01deg/s` | `/ly/gimbal/gimbal_yaw` | `yaw_vel`：yaw 角速度 |
+| `Reserve_32_1` high16（byte2~3） | 按 `int16` 解析，缩放 `0.01deg` | `/ly/gimbal/gimbal_yaw` | `yaw_angle`：当前 yaw 角，推荐区间 `[-180,180)` |
 | `Reserve_32_2` | 当前未解析 | 无 | 本仓库当前未发现解析/发布逻辑 |
 
 ### 5.7.2 姿态回读规则
@@ -475,6 +476,8 @@ struct ExtendData {
 | `5` | 自身 UWB 坐标 | `PositionData.Friend.X/Y` | `/ly/me/uwb_pos` |
 | `5` | 弹速 | `PositionData.BulletSpeed` | `/ly/bullet/speed` |
 | `6` | 自身朝向 | `ExtendData.UWBAngleYaw` | `/ly/me/uwb_yaw` |
+| `6` | 云台 yaw 角速度 | `ExtendData.Reserve_32_1` low16（`int16`, `0.01deg/s`） | `/ly/gimbal/gimbal_yaw` |
+| `6` | 云台 yaw 当前角 | `ExtendData.Reserve_32_1` high16（`int16`, `0.01deg`） | `/ly/gimbal/gimbal_yaw` |
 | `6` | 姿态回读 | `ExtendData.Reserve_16` 高 8 位 | `/ly/gimbal/posture` |
 
 ---
@@ -487,7 +490,6 @@ struct ExtendData {
 |---|---|---|
 | `RFIDAndBuffData.BuffStatus` | `reserve` | 未发布 |
 | `ExtendData` | `Reserve_16` 剩余位（除 posture 编码） | 未解析 |
-| `ExtendData` | `Reserve_32_1` | 未解析 |
 | `ExtendData` | `Reserve_32_2` | 未解析 |
 | `ExtEventDataType` | 各 bit 子字段 | 仅整体透传，未单独拆 topic |
 

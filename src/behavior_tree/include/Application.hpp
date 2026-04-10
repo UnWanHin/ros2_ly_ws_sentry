@@ -144,6 +144,10 @@ private:
     std::chrono::steady_clock::time_point gameStartTime{std::chrono::steady_clock::now()};
     std::chrono::steady_clock::time_point lastFoundEnemyTime{std::chrono::steady_clock::now()}; 
     GimbalAnglesType gimbalAngles{0, 0}; 
+    std::int16_t gimbalYawVelRaw{0};   // from /ly/gimbal/gimbal_yaw, unit 0.01 deg/s
+    float gimbalYawVelDegPerSec{0.0f};
+    std::int16_t gimbalYawAngleRaw{0}; // from /ly/gimbal/gimbal_yaw, unit 0.01 deg
+    float gimbalYawAngleDeg{0.0f};
     std::atomic<bool> hasReceivedGimbalAngles_{false};
     std::chrono::steady_clock::time_point lastGimbalAnglesRxTime{};
     std::vector<UnitType> reliableEnemyPosuition; 
@@ -178,7 +182,17 @@ private:
     std::uint8_t naviCommandGoal{0}; // 导航目标
     Area::Point<std::uint16_t> naviGoalPosition{}; // 导航定位目标
     std::uint8_t lastNaviComnamdGoal{0}; // 上一次导航目标
+    VelocityType naviVelocityInput{0, 0}; /// 外部导航输入速度（/ly/navi/vel）
     VelocityType naviVelocity{0, 0}; /// 定义回调，接收导航的速度控制数据
+    bool naviRelativeTargetValid{false};
+    float naviRelativeTargetX{0.0F};
+    float naviRelativeTargetY{0.0F};
+    float naviRelativeTargetZ{0.0F};
+    float naviRelativeTargetDistance{0.0F};
+    float naviRelativeTargetYawErrorDeg{0.0F};
+    float naviRelativeTargetPitchErrorDeg{0.0F};
+    std::uint8_t naviRelativeTargetArmorType{0U};
+    std::uint8_t naviRelativeTargetAimMode{0U};
     TimerClock naviCommandIntervalClock{Seconds{10}}, recoveryClock{Seconds{90}}; // 控制间隔，回家时间 
     std::uint8_t speedLevel{1}; // 0 没电, 1 正常, 2 快速
     StrategyMode strategyMode_{StrategyMode::HitHero}; // 当前策略
@@ -304,6 +318,7 @@ private:
     rclcpp::Publisher<auto_aim_common::msg::Target>::SharedPtr pub_predictor_target_;
     
     rclcpp::Publisher<gimbal_driver::msg::Vel>::SharedPtr pub_navi_vel_;
+    rclcpp::Publisher<auto_aim_common::msg::RelativeTarget>::SharedPtr pub_navi_target_rel_;
     rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr pub_navi_goal_;
     rclcpp::Publisher<std_msgs::msg::UInt16MultiArray>::SharedPtr pub_navi_goal_pos_;
     rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr pub_navi_speed_level_;
@@ -325,6 +340,7 @@ public:
     void PubPostureControlData();
     void PubAimTargetData();
     void PubNaviControlData();
+    void PubNaviRelativeTarget();
     void PubNaviGoal();
     void PubNaviGoalPos();
 

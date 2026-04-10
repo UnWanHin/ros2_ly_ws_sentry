@@ -5,6 +5,8 @@
 #include "predictor/predictor.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <fmt/format.h> // 必須包含
+#include <algorithm>
+#include <cmath>
 
 using namespace ly_auto_aim;
 
@@ -38,6 +40,31 @@ namespace roslog_fmt {
         RCLCPP_ERROR(get_logger(), "%s", fmt::vformat(format_str, fmt::make_format_args(args...)).c_str());
     }
 }
+
+namespace {
+double readVisibleHalfAngleRad()
+{
+    constexpr double kDefaultHalfAngleRad = M_PI / 3.0;
+    constexpr double kMinHalfAngleRad = M_PI / 36.0;
+    constexpr double kMaxHalfAngleRad = M_PI / 2.0;
+    auto node = ly_auto_aim::predictor::global_predictor_node;
+    if (!node) {
+        return kDefaultHalfAngleRad;
+    }
+
+    const std::string key = "predictor.visible_half_angle_rad";
+    if (!node->has_parameter(key)) {
+        node->declare_parameter(key, kDefaultHalfAngleRad);
+    }
+
+    double configured = kDefaultHalfAngleRad;
+    node->get_parameter(key, configured);
+    if (!std::isfinite(configured)) {
+        configured = kDefaultHalfAngleRad;
+    }
+    return std::clamp(configured, kMinHalfAngleRad, kMaxHalfAngleRad);
+}
+}  // namespace
 
 // 使用宏替換
 #define roslog roslog_fmt
@@ -77,11 +104,16 @@ namespace ly_auto_aim:: inline predictor {
         for(const auto& trackResult : trackResults.first)
         {
             VectorY measure;
+            measure.setZero();
             XYZ armor_xyz = trackResult.location.xyz_imu;
             measure[0] = armor_xyz.x;
             measure[1] = armor_xyz.y;
             measure[2] = armor_xyz.z;
             measure[3] = trackResult.yaw;
+            const auto pyd = static_cast<PYD>(trackResult.location.pyd_imu);
+            measure[7] = pyd.pitch;
+            measure[8] = pyd.pitch;
+            measure[9] = pyd.pitch;
             measures[trackResult.car_id].push_back(std::make_tuple(measure, trackResult.armor_id, trackResult.location, false));
             detect_count[trackResult.car_id] = 0;
         }
@@ -92,6 +124,8 @@ namespace ly_auto_aim:: inline predictor {
             CXYD temp;
             double leftx = trackResult.bounding_rect.x;
             double rightx = trackResult.bounding_rect.x + trackResult.bounding_rect.width;
+            double topy = trackResult.bounding_rect.y;
+            double bottomy = trackResult.bounding_rect.y + trackResult.bounding_rect.height;
             if(measures.find(trackResult.car_id) == measures.end())
                 continue;
             for(auto& measure_tuple: measures[trackResult.car_id])
@@ -106,6 +140,18 @@ namespace ly_auto_aim:: inline predictor {
                 std::get<0>(measure_tuple)[5] = static_cast<PYD>(edge.pyd_imu).yaw;
                 double yaw_diff = std::remainder(std::get<0>(measure_tuple)[5] - std::get<0>(measure_tuple)[4], 2 * M_PI)/2.0;
                 std::get<0>(measure_tuple)[6] = yaw_diff + std::get<0>(measure_tuple)[4];
+
+                temp = std::get<2>(measure_tuple).cxy;
+                temp.cy = topy;
+                edge.cxy = temp;
+                std::get<0>(measure_tuple)[7] = static_cast<PYD>(edge.pyd_imu).pitch;
+
+                temp.cy = bottomy;
+                edge.cxy = temp;
+                std::get<0>(measure_tuple)[8] = static_cast<PYD>(edge.pyd_imu).pitch;
+                double pitch_diff =
+                    std::remainder(std::get<0>(measure_tuple)[8] - std::get<0>(measure_tuple)[7], 2 * M_PI) / 2.0;
+                std::get<0>(measure_tuple)[9] = pitch_diff + std::get<0>(measure_tuple)[7];
                 std::get<3>(measure_tuple) = true;
             }
         }
@@ -180,7 +226,8 @@ namespace ly_auto_aim:: inline predictor {
             prediction.armors[i].theta = prediction.theta + M_PI / 2 * i;
             double see_angle = std::atan2(state[0],state[2]);
             double armor_angle = std::remainder(prediction.armors[i].theta - M_PI / 2 - see_angle, 2 * M_PI);
-            if(armor_angle < M_PI / 3 && armor_angle > -M_PI / 3)
+            const double visible_half_angle = readVisibleHalfAngleRad();
+            if(armor_angle < visible_half_angle && armor_angle > -visible_half_angle)
             {
                 prediction.armors[i].status = Armor::AVAILABLE;
             }
@@ -209,6 +256,9 @@ namespace ly_auto_aim:: inline predictor {
         measure_model[4] = -0.5 * M_PI - measure[4];
         measure_model[5] = -0.5 * M_PI - measure[5];
         measure_model[6] = -0.5 * M_PI - measure[6];
+        measure_model[7] = measure[7];
+        measure_model[8] = measure[8];
+        measure_model[9] = measure[9];
         return measure_model;
     }
 

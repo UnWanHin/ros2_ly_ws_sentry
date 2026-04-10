@@ -16,6 +16,7 @@
 #include <opencv2/opencv.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <cmath>
+#include <initializer_list>
 
 // [ROS 2] 引入你的工具庫和消息頭文件
 #include "RosTools/RosTools.hpp"
@@ -77,6 +78,7 @@ namespace {
             top_filter = std::make_unique<PREDICTOR::TopFilter>();
             muzzle_solver = std::make_unique<CONTROLLER::MuzzleSolver>(Eigen::Vector3d(0.0, 0.0, 0.0));
             board_selector = std::make_unique<CONTROLLER::BoardSelector>();
+            loadOutpostConfig();
 
             // 初始化時間戳
             last_time_stamp = node.now();
@@ -96,6 +98,70 @@ namespace {
                 RCLCPP_ERROR(node.get_logger(), "OutpostHitterNode> PoseSolver init failed: %s", e.what());
                 return false;
             }
+        }
+
+        template<typename T>
+        bool tryGetParamCompat(const std::initializer_list<const char*>& keys, T& value) {
+            for (const auto* key : keys) {
+                if (node.has_parameter(key) && node.get_parameter(key, value)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        template<typename T>
+        void loadParamCompat(const std::initializer_list<const char*>& keys, T& value, const T& default_value) {
+            if (tryGetParamCompat(keys, value)) {
+                return;
+            }
+            const auto* primary = *keys.begin();
+            if (!node.has_parameter(primary)) {
+                node.declare_parameter<T>(primary, default_value);
+            }
+            node.get_parameter(primary, value);
+        }
+
+        void loadOutpostConfig() {
+            loadParamCompat<double>(
+                {"outpost_config.fire.bullet_speed", "outpost_config/fire/bullet_speed"},
+                outpost_bullet_speed_,
+                23.0);
+            loadParamCompat<double>(
+                {"outpost_config.fire.pitch_bias_deg", "outpost_config/fire/pitch_bias_deg"},
+                outpost_pitch_bias_deg_,
+                2.0);
+            loadParamCompat<double>(
+                {"outpost_config.fire.max_yaw_delta_deg", "outpost_config/fire/max_yaw_delta_deg"},
+                outpost_max_yaw_delta_deg_,
+                80.0);
+            loadParamCompat<double>(
+                {"outpost_config.fire.time_delay_sec", "outpost_config/fire/time_delay_sec"},
+                outpost_time_delay_sec_,
+                0.10);
+
+            if (!std::isfinite(outpost_bullet_speed_) || outpost_bullet_speed_ <= 0.0) {
+                outpost_bullet_speed_ = 23.0;
+            }
+            if (!std::isfinite(outpost_pitch_bias_deg_)) {
+                outpost_pitch_bias_deg_ = 2.0;
+            }
+            if (!std::isfinite(outpost_max_yaw_delta_deg_) || outpost_max_yaw_delta_deg_ <= 0.0) {
+                outpost_max_yaw_delta_deg_ = 80.0;
+            }
+            if (!std::isfinite(outpost_time_delay_sec_) || outpost_time_delay_sec_ < 0.0) {
+                outpost_time_delay_sec_ = 0.10;
+            }
+
+            muzzle_solver->setBulletSpeed(static_cast<float>(outpost_bullet_speed_));
+            muzzle_solver->setTimeDelay(static_cast<float>(outpost_time_delay_sec_));
+            RCLCPP_INFO(
+                node.get_logger(),
+                "Outpost fire config: bullet_speed=%.3f pitch_bias_deg=%.3f max_yaw_delta_deg=%.3f time_delay_sec=%.3f",
+                outpost_bullet_speed_,
+                outpost_pitch_bias_deg_,
+                outpost_max_yaw_delta_deg_,
+                outpost_time_delay_sec_);
         }
 
         // [ROS 2] Callback 修正：類型為 ConstSharedPtr
@@ -174,8 +240,6 @@ namespace {
             }
 
             // ** 步驟四：計算角度 **
-            muzzle_solver->setBulletSpeed(23.0);
-
             CONTROLLER::BoardInformations board_info = muzzle_solver->solveMuzzle(outpost_info);
 
             if(board_info.size()==0) return ;
@@ -183,11 +247,11 @@ namespace {
             auto best_board = board_selector->selectBestBoard(board_info);
             double pitch_setpoint = best_board.aim_pitch;
             pitch_setpoint *= 180 / M_PI;
-            pitch_setpoint -= 2.0; // 需要減去2度的偏差
+            pitch_setpoint -= outpost_pitch_bias_deg_;
             double yaw_setpoint = best_board.aim_yaw;
             yaw_setpoint *= 180 / M_PI;
             yaw_setpoint = (float)(yaw_setpoint + std::round((yaw_now - yaw_setpoint) / 360.0) * 360.0);
-            if(yaw_setpoint - yaw_now > 80 || yaw_setpoint - yaw_now < -80){
+            if (std::abs(yaw_setpoint - yaw_now) > outpost_max_yaw_delta_deg_) {
                 // roslog::warn("OutpostHitterNode> Yaw setpoint is too far from current yaw, skipping.");
                 return;
             }
@@ -238,6 +302,10 @@ namespace {
         std::unique_ptr<CONTROLLER::MuzzleSolver> muzzle_solver;
         std::unique_ptr<CONTROLLER::BoardSelector> board_selector;
         rclcpp::Time last_time_stamp;
+        double outpost_bullet_speed_{23.0};
+        double outpost_pitch_bias_deg_{2.0};
+        double outpost_max_yaw_delta_deg_{80.0};
+        double outpost_time_delay_sec_{0.10};
     };
 } // namespace
 

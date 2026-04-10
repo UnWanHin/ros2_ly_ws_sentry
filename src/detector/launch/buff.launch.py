@@ -27,14 +27,19 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     try:
         behavior_tree_share = get_package_share_directory("behavior_tree")
-        default_config_file = os.path.join(
-            behavior_tree_share, "config", "auto_aim_config_competition.yaml"
-        )
+        buff_share = get_package_share_directory("buff_hitter")
+        config_root = os.path.join(behavior_tree_share, "config")
+        default_base_config_file = os.path.join(config_root, "base_config.yaml")
+        default_override_config_file = os.path.join(config_root, "override_config.yaml")
+        default_buff_config_file = os.path.join(buff_share, "config", "buff_config.yaml")
     except Exception:
-        detector_share = get_package_share_directory("detector")
-        default_config_file = os.path.join(detector_share, "config", "auto_aim_config.yaml")
+        default_base_config_file = "config/base_config.yaml"
+        default_buff_config_file = "src/buff_hitter/config/buff_config.yaml"
+        default_override_config_file = "config/override_config.yaml"
 
     config_file = LaunchConfiguration("config_file")
+    base_config_file = LaunchConfiguration("base_config_file")
+    buff_config_file = LaunchConfiguration("buff_config_file")
     output = LaunchConfiguration("output")
     use_gimbal = LaunchConfiguration("use_gimbal")
     use_buff = LaunchConfiguration("use_buff")
@@ -42,8 +47,18 @@ def generate_launch_description():
     launch_args = [
         DeclareLaunchArgument(
             "config_file",
-            default_value=default_config_file,
-            description="Shared YAML config file for buff chain.",
+            default_value=default_override_config_file,
+            description="Optional global override YAML (applied last).",
+        ),
+        DeclareLaunchArgument(
+            "base_config_file",
+            default_value=default_base_config_file,
+            description="Base shared YAML for camera/solver/io.",
+        ),
+        DeclareLaunchArgument(
+            "buff_config_file",
+            default_value=default_buff_config_file,
+            description="Buff module YAML.",
         ),
         DeclareLaunchArgument(
             "output",
@@ -56,6 +71,8 @@ def generate_launch_description():
 
     info_logs = [
         LogInfo(msg=["[buff] config: ", config_file]),
+        LogInfo(msg=["[buff] base_config: ", base_config_file]),
+        LogInfo(msg=["[buff] buff_config: ", buff_config_file]),
         LogInfo(msg=["[buff] output: ", output]),
     ]
 
@@ -65,7 +82,7 @@ def generate_launch_description():
             executable="gimbal_driver_node",
             name="gimbal_driver",
             output=output,
-            parameters=[config_file],
+            parameters=[base_config_file, config_file],
             on_exit=Shutdown(reason="gimbal_driver exited"),
             condition=IfCondition(use_gimbal),
         ),
@@ -74,7 +91,7 @@ def generate_launch_description():
             executable="buff_hitter_node",
             name="buff_hitter",
             output=output,
-            parameters=[config_file],
+            parameters=[base_config_file, buff_config_file, config_file],
             on_exit=Shutdown(reason="buff_hitter exited"),
             condition=IfCondition(use_buff),
         ),

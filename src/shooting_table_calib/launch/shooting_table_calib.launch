@@ -1,12 +1,19 @@
 <launch>
   <!-- ROS 2 XML launch (frontend) -->
-  <arg name="config_file" default="$(find-pkg-share detector)/config/auto_aim_config.yaml"/>
+  <arg name="base_config_file" default="$(find-pkg-share behavior_tree)/config/base_config.yaml"/>
+  <arg name="detector_config_file" default="$(find-pkg-share detector)/config/detector_config.yaml"/>
+  <arg name="predictor_config_file" default="$(find-pkg-share predictor)/config/predictor_config.yaml"/>
+  <arg name="config_file" default="$(find-pkg-share behavior_tree)/config/override_config.yaml"/>
 
   <node pkg="gimbal_driver" exec="gimbal_driver_node" name="gimbal_driver" output="screen">
+    <param from="$(var base_config_file)"/>
     <param from="$(var config_file)"/>
   </node>
 
   <node pkg="shooting_table_calib" exec="shooting_table_calib_node" name="shooting_table_calib" output="screen">
+    <param from="$(var base_config_file)"/>
+    <param from="$(var detector_config_file)"/>
+    <param from="$(var predictor_config_file)"/>
     <param from="$(var config_file)"/>
     <param name="detector_config.classifier_path" value="$(find-pkg-share detector)/Extras/classifier.xml"/>
     <param name="detector_config.detector_path" value="$(find-pkg-share detector)/Extras/armor_detector_model.xml"/>

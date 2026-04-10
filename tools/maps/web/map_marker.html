@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RM 地圖標點工具</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #f4f5f7; color: #222; }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 16px; }
+    .card { background: #fff; border-radius: 10px; padding: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); margin-bottom: 12px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .row > * { margin: 4px 0; }
+    input, select, button, textarea { font-size: 14px; padding: 6px 8px; }
+    button { cursor: pointer; }
+    .map-box { position: relative; display: inline-block; border: 1px solid #d0d2d7; background: #000; }
+    #mapImage { display: block; max-width: 100%; max-height: 75vh; }
+    #overlay { position: absolute; left: 0; top: 0; }
+    #hoverText { position: absolute; display: none; pointer-events: none; background: rgba(0,0,0,.8); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; z-index: 10; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border: 1px solid #d9dbe0; padding: 6px 8px; text-align: left; }
+    th { background: #f0f2f5; }
+    .small { color: #666; font-size: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    textarea { width: 100%; height: 180px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="row">
+        <label>底圖：
+          <input type="file" id="imageInput" accept="image/*" />
+        </label>
+        <label>地圖寬(cm)：
+          <input type="number" id="mapWidth" value="2800" min="1" />
+        </label>
+        <label>地圖高(cm)：
+          <input type="number" id="mapHeight" value="1500" min="1" />
+        </label>
+        <label>Map Name：
+          <input type="text" id="mapName" value="RMUC2026_custom" />
+        </label>
+      </div>
+      <div class="row">
+        <label>點位：
+          <select id="pointSelect"></select>
+        </label>
+        <label>隊伍：
+          <select id="teamSelect">
+            <option value="red">紅方</option>
+            <option value="blue">藍方</option>
+          </select>
+        </label>
+        <label>
+          <input type="checkbox" id="showTagToggle" checked />
+          顯示 Tag
+        </label>
+        <button id="undoBtn">撤銷上一次點選</button>
+        <button id="clearBtn">清空當前點位(當前隊伍)</button>
+        <button id="exportBtn">匯出 map_plugin.json</button>
+      </div>
+      <div class="small">
+        坐標系固定：左下角為 (0,0)，X 向右，Y 向上；點圖時會自動換算 cm。
+      </div>
+      <div class="small" id="pointStats">已標記 0/38，完整點位 0/19</div>
+      <div class="small" id="statusText">狀態：待操作</div>
+    </div>
+
+    <div class="card">
+      <div class="map-box">
+        <img id="mapImage" alt="map" />
+        <canvas id="overlay"></canvas>
+        <div id="hoverText"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <table id="pointsTable">
+        <thead>
+          <tr>
+            <th>ID</th><th>Name</th><th>Red(x,y)</th><th>Blue(x,y)</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <label>從 JSON 檔載入：
+          <input type="file" id="pluginFileInput" accept=".json,application/json" />
+        </label>
+        <button id="importBtn">從文字框 JSON 載入</button>
+      </div>
+      <textarea id="jsonText" class="mono" placeholder="匯出 JSON 會在這裡，也可貼 JSON 後按『從 JSON 載入』"></textarea>
+    </div>
+  </div>
+
+  <script>
+    const DEFAULT_POINTS = [
+      [0, "Home"], [1, "Base"], [2, "Recovery"], [3, "BuffShoot"], [4, "LeftHighLand"],
+      [5, "CastleLeft"], [6, "Castle"], [7, "CastleRight1"], [8, "CastleRight2"], [9, "FlyRoad"],
+      [10, "OutpostArea"], [11, "MidShoot"], [12, "LeftShoot"], [13, "OutpostShoot"], [14, "BuffAround1"],
+      [15, "BuffAround2"], [16, "RightShoot"], [17, "HoleRoad"], [18, "OccupyArea"]
+    ];
+
+    const state = {
+      points: DEFAULT_POINTS.map(([id, name]) => ({ id, name, red: null, blue: null })),
+      history: []
+    };
+
+    const imageInput = document.getElementById("imageInput");
+    const mapImage = document.getElementById("mapImage");
+    const overlay = document.getElementById("overlay");
+    const ctx = overlay.getContext("2d");
+    const hoverText = document.getElementById("hoverText");
+    const pointSelect = document.getElementById("pointSelect");
+    const teamSelect = document.getElementById("teamSelect");
+    const mapWidth = document.getElementById("mapWidth");
+    const mapHeight = document.getElementById("mapHeight");
+    const mapName = document.getElementById("mapName");
+    const pointsTableBody = document.querySelector("#pointsTable tbody");
+    const jsonText = document.getElementById("jsonText");
+    const pluginFileInput = document.getElementById("pluginFileInput");
+    const showTagToggle = document.getElementById("showTagToggle");
+    const pointStats = document.getElementById("pointStats");
+    const statusText = document.getElementById("statusText");
+    const TEAM_STYLE = {
+      red: { color: "#ff3b30", prefix: "R" },
+      blue: { color: "#007aff", prefix: "B" }
+    };
+
+    function setStatus(message) {
+      statusText.textContent = `狀態：${message}`;
+    }
+
+    function pointOptionLabel(point) {
+      return `${point.id} - ${point.name}`;
+    }
+
+    function fillPointSelect() {
+      pointSelect.innerHTML = "";
+      for (const point of state.points) {
+        const opt = document.createElement("option");
+        opt.value = String(point.id);
+        opt.textContent = pointOptionLabel(point);
+        pointSelect.appendChild(opt);
+      }
+    }
+
+    function mapSize() {
+      return {
+        width: Math.max(1, Number(mapWidth.value || 2800)),
+        height: Math.max(1, Number(mapHeight.value || 1500))
+      };
+    }
+
+    function resizeOverlay() {
+      overlay.width = mapImage.clientWidth;
+      overlay.height = mapImage.clientHeight;
+      drawAll();
+    }
+
+    function toCm(screenX, screenY) {
+      const size = mapSize();
+      const cmX = Math.round((screenX / overlay.width) * size.width);
+      const cmY = Math.round((1 - screenY / overlay.height) * size.height);
+      return [cmX, cmY];
+    }
+
+    function toScreen(cmX, cmY) {
+      const size = mapSize();
+      const x = (cmX / size.width) * overlay.width;
+      const y = overlay.height - (cmY / size.height) * overlay.height;
+      return [x, y];
+    }
+
+    function drawTag(x, y, text, color) {
+      const fontSize = 12;
+      const padX = 4;
+      const padY = 2;
+      ctx.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.textBaseline = "top";
+      const width = Math.ceil(ctx.measureText(text).width) + padX * 2;
+      const height = fontSize + padY * 2;
+
+      let tx = x + 8;
+      let ty = y - height - 8;
+      if (tx + width > overlay.width) tx = x - width - 8;
+      if (tx < 0) tx = 0;
+      if (ty < 0) ty = y + 8;
+      if (ty + height > overlay.height) ty = Math.max(0, overlay.height - height);
+
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.fillRect(tx, ty, width, height);
+      ctx.strokeRect(tx, ty, width, height);
+      ctx.fillStyle = color;
+      ctx.fillText(text, tx + padX, ty + padY);
+    }
+
+    function drawPoint(p, team) {
+      const value = p[team];
+      if (!value) return;
+      const [x, y] = toScreen(value[0], value[1]);
+      const style = TEAM_STYLE[team];
+      const selected = Number(pointSelect.value) === p.id && teamSelect.value === team;
+      const radius = selected ? 6 : 5;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = style.color;
+      ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = selected ? 2 : 1.5;
+      ctx.stroke();
+      if (showTagToggle.checked) {
+        drawTag(x, y, `${style.prefix}${p.id}:${p.name}`, style.color);
+      }
+    }
+
+    function drawAll() {
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      for (const p of state.points) {
+        drawPoint(p, "red");
+        drawPoint(p, "blue");
+      }
+      renderTable();
+    }
+
+    function renderTable() {
+      pointsTableBody.innerHTML = "";
+      let marked = 0;
+      let complete = 0;
+      for (const p of state.points) {
+        const tr = document.createElement("tr");
+        const redText = p.red ? `${p.red[0]}, ${p.red[1]}` : "-";
+        const blueText = p.blue ? `${p.blue[0]}, ${p.blue[1]}` : "-";
+        const ok = p.red && p.blue;
+        if (p.red) marked += 1;
+        if (p.blue) marked += 1;
+        if (ok) complete += 1;
+        tr.innerHTML = `<td>${p.id}</td><td>${p.name}</td><td>${redText}</td><td>${blueText}</td><td>${ok ? "OK" : "MISSING"}</td>`;
+        pointsTableBody.appendChild(tr);
+      }
+      pointStats.textContent = `已標記 ${marked}/${state.points.length * 2}，完整點位 ${complete}/${state.points.length}`;
+    }
+
+    function findPointById(id) {
+      return state.points.find(item => item.id === id);
+    }
+
+    function exportPluginJson() {
+      const plugin = {
+        map_name: mapName.value || "RMUC2026_custom",
+        frame: "left_bottom_origin_cm",
+        map_size_cm: {
+          width: Number(mapWidth.value || 2800),
+          height: Number(mapHeight.value || 1500)
+        },
+        points: state.points.map(p => ({
+          id: p.id,
+          name: p.name,
+          red: p.red || [0, 0],
+          blue: p.blue || [0, 0]
+        }))
+      };
+      const text = JSON.stringify(plugin, null, 2);
+      jsonText.value = text;
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "map_plugin.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importFromPayload(payload) {
+      if (payload.map_name) mapName.value = payload.map_name;
+      if (payload.map_size_cm) {
+        if (payload.map_size_cm.width) mapWidth.value = String(payload.map_size_cm.width);
+        if (payload.map_size_cm.height) mapHeight.value = String(payload.map_size_cm.height);
+      }
+      for (const point of state.points) {
+        point.red = null;
+        point.blue = null;
+      }
+      if (Array.isArray(payload.points)) {
+        for (const item of payload.points) {
+          const p = findPointById(Number(item.id));
+          if (!p) continue;
+          if (Array.isArray(item.red) && item.red.length === 2) {
+            const redX = Number(item.red[0]);
+            const redY = Number(item.red[1]);
+            if (Number.isFinite(redX) && Number.isFinite(redY)) p.red = [redX, redY];
+          }
+          if (Array.isArray(item.blue) && item.blue.length === 2) {
+            const blueX = Number(item.blue[0]);
+            const blueY = Number(item.blue[1]);
+            if (Number.isFinite(blueX) && Number.isFinite(blueY)) p.blue = [blueX, blueY];
+          }
+        }
+      }
+      drawAll();
+    }
+
+    function decodeBase64Url(value) {
+      const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+      const padLength = (4 - (base64.length % 4)) % 4;
+      const padded = base64 + "=".repeat(padLength);
+      const binary = atob(padded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return new TextDecoder().decode(bytes);
+    }
+
+    function importFromBase64(encodedText) {
+      try {
+        const text = decodeBase64Url(encodedText);
+        jsonText.value = text;
+        const payload = JSON.parse(text);
+        importFromPayload(payload);
+        setStatus("已從 URL 自動載入點位(JSON)");
+        return true;
+      } catch (error) {
+        setStatus("URL 內嵌 JSON 載入失敗");
+        return false;
+      }
+    }
+
+    async function importFromUri(uri) {
+      try {
+        const response = await fetch(uri);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const text = await response.text();
+        jsonText.value = text;
+        const payload = JSON.parse(text);
+        importFromPayload(payload);
+        setStatus("已從 URL 檔案載入點位(JSON)");
+        return true;
+      } catch (error) {
+        setStatus("URL 檔案載入失敗，請手動選 JSON");
+        return false;
+      }
+    }
+
+    function importPluginJson() {
+      let payload;
+      try {
+        payload = JSON.parse(jsonText.value);
+      } catch (error) {
+        alert("JSON 解析失敗");
+        return false;
+      }
+      importFromPayload(payload);
+      return true;
+    }
+
+    imageInput.addEventListener("change", event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => { mapImage.src = String(e.target?.result || ""); };
+      reader.readAsDataURL(file);
+    });
+
+    mapImage.addEventListener("load", resizeOverlay);
+    window.addEventListener("resize", resizeOverlay);
+
+    overlay.addEventListener("mousemove", event => {
+      const rect = overlay.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const [cmX, cmY] = toCm(x, y);
+      hoverText.style.display = "block";
+      hoverText.style.left = `${x + 10}px`;
+      hoverText.style.top = `${Math.max(0, y - 24)}px`;
+      hoverText.textContent = `${cmX}, ${cmY}`;
+    });
+
+    overlay.addEventListener("mouseleave", () => {
+      hoverText.style.display = "none";
+    });
+
+    overlay.addEventListener("click", event => {
+      if (!overlay.width || !overlay.height) return;
+      const id = Number(pointSelect.value);
+      const team = teamSelect.value;
+      const target = findPointById(id);
+      if (!target) return;
+      const rect = overlay.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const value = toCm(x, y);
+      const prev = target[team] ? [...target[team]] : null;
+      state.history.push({ id, team, prev });
+      target[team] = value;
+      setStatus(`已標記 ${team === "red" ? "紅" : "藍"}方 ID=${id} (${value[0]}, ${value[1]})`);
+      drawAll();
+    });
+
+    document.getElementById("undoBtn").addEventListener("click", () => {
+      const last = state.history.pop();
+      if (!last) return;
+      const point = findPointById(last.id);
+      if (!point) return;
+      point[last.team] = last.prev;
+      setStatus(`已撤銷 ${last.team === "red" ? "紅" : "藍"}方 ID=${last.id}`);
+      drawAll();
+    });
+
+    document.getElementById("clearBtn").addEventListener("click", () => {
+      const id = Number(pointSelect.value);
+      const team = teamSelect.value;
+      const point = findPointById(id);
+      if (!point) return;
+      point[team] = null;
+      setStatus(`已清空 ${team === "red" ? "紅" : "藍"}方 ID=${id}`);
+      drawAll();
+    });
+
+    showTagToggle.addEventListener("change", () => {
+      drawAll();
+    });
+    pointSelect.addEventListener("change", () => drawAll());
+    teamSelect.addEventListener("change", () => drawAll());
+
+    document.getElementById("exportBtn").addEventListener("click", exportPluginJson);
+    document.getElementById("importBtn").addEventListener("click", () => {
+      if (importPluginJson()) {
+        setStatus("已從文字框載入 JSON");
+      } else {
+        setStatus("文字框 JSON 解析失敗");
+      }
+    });
+    pluginFileInput.addEventListener("change", event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const text = String(e.target?.result || "");
+          jsonText.value = text;
+          const payload = JSON.parse(text);
+          importFromPayload(payload);
+          setStatus(`已從檔案載入 JSON：${file.name}`);
+        } catch (error) {
+          alert("載入 JSON 檔失敗");
+          setStatus("JSON 檔載入失敗");
+        }
+      };
+      reader.readAsText(file, "utf-8");
+    });
+
+    fillPointSelect();
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("map_name")) {
+      mapName.value = query.get("map_name");
+    }
+    if (query.get("map_width")) {
+      mapWidth.value = query.get("map_width");
+    }
+    if (query.get("map_height")) {
+      mapHeight.value = query.get("map_height");
+    }
+    if (query.get("image_uri")) {
+      mapImage.src = query.get("image_uri");
+    }
+    const pluginB64 = query.get("plugin_b64");
+    const pluginUri = query.get("plugin_uri");
+    if (pluginB64) {
+      const ok = importFromBase64(pluginB64);
+      if (!ok && pluginUri) {
+        importFromUri(pluginUri);
+      }
+    } else if (pluginUri) {
+      importFromUri(pluginUri);
+    }
+    renderTable();
+  </script>
+</body>
+</html>

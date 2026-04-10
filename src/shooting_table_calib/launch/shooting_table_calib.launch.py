@@ -26,10 +26,18 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     detector_share = get_package_share_directory("detector")
+    predictor_share = get_package_share_directory("predictor")
     behavior_tree_share = get_package_share_directory("behavior_tree")
-    default_config_file = os.path.join(behavior_tree_share, "config", "auto_aim_config_competition.yaml")
+    config_root = os.path.join(behavior_tree_share, "config")
+    default_base_config_file = os.path.join(config_root, "base_config.yaml")
+    default_override_config_file = os.path.join(config_root, "override_config.yaml")
+    default_detector_config_file = os.path.join(detector_share, "config", "detector_config.yaml")
+    default_predictor_config_file = os.path.join(predictor_share, "config", "predictor_config.yaml")
 
     config_file = LaunchConfiguration("config_file")
+    base_config_file = LaunchConfiguration("base_config_file")
+    detector_config_file = LaunchConfiguration("detector_config_file")
+    predictor_config_file = LaunchConfiguration("predictor_config_file")
     output = LaunchConfiguration("output")
     use_gimbal = LaunchConfiguration("use_gimbal")
     use_calib = LaunchConfiguration("use_calib")
@@ -47,8 +55,23 @@ def generate_launch_description():
     launch_args = [
         DeclareLaunchArgument(
             "config_file",
-            default_value=default_config_file,
-            description="Shared YAML config file for calibration chain.",
+            default_value=default_override_config_file,
+            description="Optional global override YAML (applied last).",
+        ),
+        DeclareLaunchArgument(
+            "base_config_file",
+            default_value=default_base_config_file,
+            description="Base shared YAML for camera/solver/io.",
+        ),
+        DeclareLaunchArgument(
+            "detector_config_file",
+            default_value=default_detector_config_file,
+            description="Detector module YAML.",
+        ),
+        DeclareLaunchArgument(
+            "predictor_config_file",
+            default_value=default_predictor_config_file,
+            description="Predictor/controller module YAML.",
         ),
         DeclareLaunchArgument(
             "output",
@@ -71,6 +94,9 @@ def generate_launch_description():
 
     info_logs = [
         LogInfo(msg=["[shooting_table_calib] config: ", config_file]),
+        LogInfo(msg=["[shooting_table_calib] base_config: ", base_config_file]),
+        LogInfo(msg=["[shooting_table_calib] detector_config: ", detector_config_file]),
+        LogInfo(msg=["[shooting_table_calib] predictor_config: ", predictor_config_file]),
         LogInfo(msg=["[shooting_table_calib] output: ", output]),
         LogInfo(msg=["[shooting_table_calib] auto_lock_fire: ", auto_lock_fire]),
         LogInfo(msg=["[shooting_table_calib] auto_fire: ", auto_fire]),
@@ -86,7 +112,7 @@ def generate_launch_description():
             executable="gimbal_driver_node",
             name="gimbal_driver",
             output=output,
-            parameters=[config_file],
+            parameters=[base_config_file, config_file],
             on_exit=Shutdown(reason="gimbal_driver exited"),
             condition=IfCondition(use_gimbal),
         ),
@@ -96,6 +122,9 @@ def generate_launch_description():
             name="shooting_table_calib",
             output=output,
             parameters=[
+                base_config_file,
+                detector_config_file,
+                predictor_config_file,
                 config_file,
                 {
                     "detector_config.classifier_path": os.path.join(detector_share, "Extras", "classifier.xml"),

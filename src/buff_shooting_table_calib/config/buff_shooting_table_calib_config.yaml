@@ -1,0 +1,13 @@
+/**:
+  ros__parameters:
+    buff_shooting_table_calib:
+      calib_mode: "static"            # static | periodic | all
+      record_dir: "~/workspace/record"
+      csv_strategy: "new"             # new | latest
+      csv_path: ""
+      buff_debug_topic: "/ly/buff/debug"
+      gimbal_topic: "/ly/gimbal/angles"
+      firecode_topic: "/ly/gimbal/firecode"
+      require_valid_debug: true
+      sample_on_rising_edge: true
+      min_sample_interval_sec: 0.08

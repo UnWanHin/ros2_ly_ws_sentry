@@ -1,0 +1,21 @@
+{
+  "path": "/home/unwanhin/ros2_ly_ws_sentary/tools/maps/src/RMUC2026_V1.2.0.step",
+  "size_bytes": 993297750,
+  "size_mb": 947.28,
+  "unit": "millimeter",
+  "cartesian_point_count": 1225254,
+  "step_internal_name": "rmuc2026__0001_asm_1230_igs_stp.step",
+  "step_timestamp": "2025-12-30T17:19:37+08:00",
+  "file_schema": "AUTOMOTIVE_DESIGN { 1 0 10303 214 3 1 1 }",
+  "bounds": {
+    "min_x": -14800.00000001,
+    "max_x": 14574.9997278804,
+    "min_y": -8472.725927635,
+    "max_y": 9649.343676497,
+    "min_z": -2271.000015906,
+    "max_z": 3281.764941143,
+    "range_x": 29374.9997278904,
+    "range_y": 18122.069604131997,
+    "range_z": 5552.764957049
+  }
+}

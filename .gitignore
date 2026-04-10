@@ -9,3 +9,4 @@ src/ly-ros.zip
 *.zip
 bfg-*.jar
 ..bfg-report/
+tools/maps/src/RMUC2026_V1.2.0.step

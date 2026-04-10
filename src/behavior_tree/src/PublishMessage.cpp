@@ -15,6 +15,7 @@ namespace BehaviorTree {
         PubPostureControlData();
         PubAimTargetData();
         PubNaviControlData();
+        PubNaviRelativeTarget();
         if(naviCommandRateClock.trigger()) {
             naviCommandRateClock.tick();
             // 导航目标按模式二选一：
@@ -95,8 +96,26 @@ namespace BehaviorTree {
             // 桥接到 gimbal_driver 控制口，恢复 navi->BT->control_vel 老链路。
             pub_gimbal_vel_->publish(msg);
             // 兼容保留：继续发布到 /ly/navi/vel，避免影响外部联调工具。
-            pub_navi_vel_->publish(msg);
+            //pub_navi_vel_->publish(msg);
         }
+    }
+
+    void Application::PubNaviRelativeTarget() {
+        if (!pub_navi_target_rel_) {
+            return;
+        }
+        auto_aim_common::msg::RelativeTarget msg;
+        msg.header.stamp = node_->now();
+        msg.valid = naviRelativeTargetValid;
+        msg.x = naviRelativeTargetX;
+        msg.y = naviRelativeTargetY;
+        msg.z = naviRelativeTargetZ;
+        msg.distance_m = naviRelativeTargetDistance;
+        msg.yaw_error_deg = naviRelativeTargetYawErrorDeg;
+        msg.pitch_error_deg = naviRelativeTargetPitchErrorDeg;
+        msg.armor_type = naviRelativeTargetArmorType;
+        msg.aim_mode = naviRelativeTargetAimMode;
+        pub_navi_target_rel_->publish(msg);
     }
 
     /**

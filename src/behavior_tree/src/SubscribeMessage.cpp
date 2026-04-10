@@ -65,6 +65,15 @@ namespace BehaviorTree{
             app.RecFireCode.FireStatus = (msg->data & 0b11);
         });
 
+        // ly_gimbal_gimbal_yaw
+        GenSub<ly_gimbal_gimbal_yaw>([](Application& app, auto msg) {
+            app.gimbalYawVelRaw = static_cast<std::int16_t>(msg->yaw_vel);
+            app.gimbalYawAngleRaw = static_cast<std::int16_t>(msg->yaw_angle);
+            constexpr float kGimbalScale = 0.01f;
+            app.gimbalYawVelDegPerSec = static_cast<float>(app.gimbalYawVelRaw) * kGimbalScale;
+            app.gimbalYawAngleDeg = static_cast<float>(app.gimbalYawAngleRaw) * kGimbalScale;
+        });
+
         // ly_gimbal_posture
         GenSub<ly_gimbal_posture>([](Application& app, auto msg) {
             app.postureState = msg->data;
@@ -146,6 +155,9 @@ namespace BehaviorTree{
 
         // ly_navi_vel
         GenSub<ly_navi_vel>([](Application& app, auto msg) {
+            app.naviVelocityInput.X = msg->x;
+            app.naviVelocityInput.Y = msg->y;
+            // 兼容旧语义：保留原始转发链路变量
             app.naviVelocity.X = msg->x;
             app.naviVelocity.Y = msg->y;
         });

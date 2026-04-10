@@ -15,7 +15,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/lib/guard.sh"
 
-CONFIG_FILE="${ROOT_DIR}/scripts/config/sentry_feature_test.yaml"
+CONFIG_FILE="${ROOT_DIR}/scripts/feature_test/config/sentry_feature_test.yaml"
 LOCK_FILE="/tmp/sentry_feature_test.lock"
 LOG_DIR="/tmp/ros2_feature_test_logs"
 DRY_RUN=0
@@ -48,7 +48,7 @@ Examples:
   ./scripts/feature_test/run_feature_test.sh --dry-run
 
   # 指定配置
-  ./scripts/feature_test/run_feature_test.sh --config ./scripts/config/sentry_feature_test.yaml
+  ./scripts/feature_test/run_feature_test.sh --config ./scripts/feature_test/config/sentry_feature_test.yaml
 EOF
 }
 

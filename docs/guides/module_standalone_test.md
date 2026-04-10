@@ -68,7 +68,7 @@ ros2 run detector mapper_node \
 ./scripts/feature_test/run_feature_test.sh
 ```
 
-- 配置文件：`scripts/config/sentry_feature_test.yaml`
+- 配置文件：`scripts/feature_test/config/sentry_feature_test.yaml`
 - 当前 Phase 1 支持：
   - 云台：`armor`、`scan`
   - 底盘：`velocity`
@@ -145,6 +145,12 @@ ros2 launch detector auto_aim.launch.py \
 
 ```bash
 ros2 launch detector buff.launch.py
+```
+
+纯打符（不启 BT、不跑巡逻；由桥接节点直连 `/ly/buff/target -> /ly/control/*`）：
+
+```bash
+./scripts/launch/buff_test.sh
 ```
 
 前哨链路：

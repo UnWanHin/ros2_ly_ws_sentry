@@ -24,6 +24,30 @@
     "NaviSetting": {
         "UseXY": true
     },
+    "AimTargetPriority": [1, 3, 4, 6, 2],
+    "Chase": {
+        "Enable": false,
+        "FollowAimTarget": true,
+        "UseRelativeTargetTopic": false,
+        "EnableInAutoAim": true,
+        "EnableInRotateScan": true,
+        "EnableInOutpostMode": false,
+        "EnableInBuffMode": false,
+        "StopWhenNoTarget": false,
+        "LostTargetHoldMs": 200,
+        "PreferredDistanceCm": 100,
+        "DistanceDeadbandCm": 60,
+        "MinValidDistanceCm": 80,
+        "MaxValidDistanceCm": 1200,
+        "DistanceKp": 0.06,
+        "MaxForwardSpeed": 35,
+        "MaxBackwardSpeed": 25,
+        "UseYawStrafe": true,
+        "YawKp": 0.40,
+        "YawDeadbandDeg": 3,
+        "MaxStrafeSpeed": 22,
+        "InvertStrafeDirection": false
+    },
     "Posture": {
         "Enable": true,
         "SwitchCooldownSec": 5,

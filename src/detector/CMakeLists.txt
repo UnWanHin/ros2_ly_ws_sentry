@@ -123,6 +123,12 @@ install(PROGRAMS
   RENAME fire_flip_test
 )
 
+install(PROGRAMS
+  script/buff_test_bridge.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME buff_test_bridge
+)
+
 install(DIRECTORY include/
     DESTINATION include
 )

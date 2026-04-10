@@ -85,6 +85,7 @@ void Application::PublishSafeControl(const char* reason, const bool from_guard_t
         gimbalControlData.FireCode.Rotate = 0;
         gimbalControlData.FireCode.AimMode = 0;
         postureCommand = 0;
+        naviVelocityInput = VelocityType{0, 0};
         naviVelocity = VelocityType{0, 0};
 
         if (pub_gimbal_control_) {

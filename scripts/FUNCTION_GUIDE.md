@@ -206,19 +206,19 @@ scripts/
 ### 6. 按 JSON 巡逻点自动发 `/ly/navi/goal`
 
 ```bash
-./scripts/debug.sh navi-patrol
+./scripts/debug.sh navi_goal
 ```
 
 指定计划名：
 
 ```bash
-./scripts/debug.sh navi-patrol --plan test_site_sequence
+./scripts/debug.sh navi_goal --plan test_site_sequence
 ```
 
 蓝方映射：
 
 ```bash
-./scripts/debug.sh navi-patrol --team blue
+./scripts/debug.sh navi_goal --team blue
 ```
 
 适合：
@@ -267,13 +267,13 @@ scripts/
 ### 8. 直接发 rotate 档位
 
 ```bash
-./scripts/debug.sh rotate-level-test both
+./scripts/debug.sh rotate_level both
 ```
 
 只发不看回读：
 
 ```bash
-./scripts/debug.sh rotate-level-test tx
+./scripts/debug.sh rotate_level tx
 ```
 
 适合：
@@ -296,14 +296,14 @@ scripts/
 ### 9. 比赛风格自瞄主链
 
 ```bash
-./scripts/debug.sh competition-autoaim
+./scripts/debug.sh armor_test
 ```
 
 也可以切模式：
 
 ```bash
-./scripts/debug.sh competition-autoaim --mode league
-./scripts/debug.sh competition-autoaim --mode regional
+./scripts/debug.sh armor_test --mode league
+./scripts/debug.sh armor_test --mode regional
 ```
 
 适合：
@@ -311,35 +311,17 @@ scripts/
 - 快速拉起比赛风格 autoaim 链路
 - 看 `predictor + behavior_tree` 主链联调
 
-### 10. 一键装甲板自瞄测试
+### 10. 自瞄入口简化说明
+
+`autoaim-test` / `autoaim-debug` 入口已下线，统一改用：
 
 ```bash
-./scripts/debug.sh autoaim-test
+./scripts/debug.sh armor_test
 ```
 
-在线模式：
+如需测单项功能（底盘、导航、前哨、打符等），走 standalone 菜单：
 
-```bash
-./scripts/debug.sh autoaim-test --online
-```
-
-适合：
-
-- 快速测试装甲板辅瞄
-- 看 standalone autoaim 行为
-
-### 11. 自瞄调试链
-
-```bash
-./scripts/debug.sh autoaim-debug --online
-```
-
-适合：
-
-- 分开看 detector / tracker / predictor / mapper
-- 做更细的感知和火控联调
-
-### 12. standalone 菜单
+### 11. standalone 菜单
 
 ```bash
 ./scripts/debug.sh standalone
@@ -362,32 +344,21 @@ scripts/
 
 ## 旋转 / 底盘相关
 
-### 13. 小陀螺基础测试
+### 13. Rotate_level（小陀螺）
 
 ```bash
-./scripts/debug.sh chassis-gyro
+./scripts/debug.sh rotate_level both
 ```
 
 适合：
 
 - 基础 Rotate 链路测试
-- 看底盘旋转相关行为
+- 查 rotate 指令与回读是否一致
 
-### 14. 旋转 + 平移
-
-```bash
-./scripts/debug.sh chassis-spin-translate
-```
-
-适合：
-
-- 测底盘一边转一边平移
-- 看导航/运动和上层控制是否冲突
-
-### 15. 旋转 + 正弦平移
+### 14. Move_Rotate（旋转 + 正弦平移）
 
 ```bash
-./scripts/debug.sh chassis-spin-sine-translate
+./scripts/debug.sh move_rotate
 ```
 
 适合：
@@ -397,7 +368,7 @@ scripts/
 
 说明：
 
-- 这两个脚本都走 `feature_test/standalone/modes/`
+- 走 `feature_test/standalone/modes/chassis_spin_sine_translate_mode.sh`
 - 更偏功能测试，不是正式比赛入口
 
 ### 16. 弹道/锁敌日志过滤
@@ -431,15 +402,24 @@ scripts/
 - 标定射表
 - 人工微调落点
 
-### 18. 射表直连 autoaim 验证
+### 18. 打符射表标定
 
 ```bash
-./scripts/debug.sh shooting-table-autoaim
+./scripts/debug.sh buff-shooting-table-calib --calib-mode periodic --csv-strategy latest
 ```
 
 适合：
 
-- 看射表参数接入后，autoaim 的直连效果
+- 采集打符开火时刻的预测特征（角度/距离/高度/旋转角）
+- 离线拟合 `buff_config` 的静态和周期补偿参数
+- 不接管比赛控制接口，只做标定插件采样
+
+常用离线拟合：
+
+```bash
+./scripts/launch/buff_shooting_table_calib.sh --fit-static-latest
+./scripts/launch/buff_shooting_table_calib.sh --fit-periodic-latest
+```
 
 ---
 
@@ -509,7 +489,7 @@ scripts/
 自动巡逻发：
 
 ```bash
-./scripts/debug.sh navi-patrol
+./scripts/debug.sh navi_goal
 ```
 
 让 BT 自己发：
@@ -531,7 +511,7 @@ scripts/
 用：
 
 ```bash
-./scripts/debug.sh rotate-level-test both
+./scripts/debug.sh rotate_level both
 ```
 
 ### 如果你想拉完整比赛主链
@@ -555,7 +535,7 @@ scripts/
 用：
 
 ```bash
-./scripts/debug.sh competition-autoaim
+./scripts/debug.sh armor_test
 ```
 
 ### 如果你想做离车检查
@@ -585,7 +565,7 @@ scripts/
 自动发导航点：
 
 ```bash
-./scripts/debug.sh navi-patrol
+./scripts/debug.sh navi_goal
 ```
 
 BT 导航调试：
@@ -609,7 +589,7 @@ BT 导航调试：
 比赛风格 autoaim：
 
 ```bash
-./scripts/debug.sh competition-autoaim
+./scripts/debug.sh armor_test
 ```
 
 开发机自检：

@@ -12,7 +12,11 @@
 namespace ly_auto_aim::inline predictor{
 
 const int N_X = 12;
-const int N_Y = 7;
+// 10D observation:
+// [0] armor_pitch [1] armor_yaw [2] dist [3] tangent
+// [4] yaw_left [5] yaw_right [6] yaw_center
+// [7] pitch_top [8] pitch_bottom [9] pitch_center
+const int N_Y = 10;
 using VectorX = Eigen::Matrix<double, N_X, 1>;
 using VectorY = Eigen::Matrix<double, N_Y, 1>;
 using MatrixXX = Eigen::Matrix<double, N_X, N_X>;
@@ -60,8 +64,6 @@ struct stateTransFunc{
         this->dt = dt;
     }
 };
-//measure: ax,ay,az,tangent,angle_left,angle_right
-//new measure: armor_pitch, armor_yaw, dist, tangent, armor_left, armor_right
 struct measureFunc{
     template<typename T>
     void operator()(const T s[N_X], T m[N_Y]){
@@ -107,6 +109,13 @@ struct measureFunc{
             m[4] = angle[this->total_id1];
             m[5] = angle[(this->total_id2 + 1)%4];
         }
+
+        const T center_dist = ceres::sqrt(x * x + y * y);
+        const T z_top = (s[8] > s[9]) ? s[8] : s[9];
+        const T z_bottom = (s[8] > s[9]) ? s[9] : s[8];
+        m[7] = ceres::atan2(z_top, center_dist);
+        m[8] = ceres::atan2(z_bottom, center_dist);
+        m[9] = ceres::atan2((s[8] + s[9]) * T(0.5), center_dist);
     }
     int id;
     int total_id1 = -1;
@@ -170,11 +179,17 @@ private:
     void loadTuningParams();
     MatrixXX buildProcessNoise(double dt) const;
     void refreshNoiseCovariances(double dt);
+    void fitBoundaryErrorAndUpdateR(const VectorY& residual);
     bool whole_car_stable = true;
     bool armor_stable = false;
     int id1 = -1;
     int id2 = -1;
     MatrixYY base_measurement_noise_ = MatrixYY::Identity();
+    double yaw_boundary_var_ema_ = 0.02;
+    double pitch_boundary_var_ema_ = 0.02;
+    double boundary_fit_alpha_ = 0.12;
+    double boundary_scale_min_ = 0.5;
+    double boundary_scale_max_ = 6.0;
     // double q_ax_jerk_base_ = 215;
     // double q_ay_jerk_base_ = 96.0;
     // double q_omega_accel_base_ = 9;

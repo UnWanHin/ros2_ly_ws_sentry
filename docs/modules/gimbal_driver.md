@@ -90,7 +90,7 @@ main()
 | `HealthEnemyData` | `PubHealthEnemyData()` | `/ly/enemy/hp`, `/ly/enemy/base_hp` |
 | `RFIDAndBuffData` | `PubRFIDAndBuffData()` | `/ly/me/rfid`, `/ly/team/buff` |
 | `PositionData` | `PubPositionData()` | `/ly/position/data`, `/ly/me/uwb_pos`, `/ly/bullet/speed` |
-| `ExtendData` | `PubExtendData()` | `/ly/me/uwb_yaw`, `/ly/gimbal/posture`（`Reserve_16` 高 8 位） |
+| `ExtendData` | `PubExtendData()` | `/ly/me/uwb_yaw`, `/ly/gimbal/gimbal_yaw`（`Reserve_32_1`: low16=`yaw_vel`, high16=`yaw_angle`）, `/ly/gimbal/posture`（`Reserve_16` 高 8 位） |
 
 #### 「寫入」路徑：`GenSubs()` → `Device.Write()`
 
@@ -123,7 +123,7 @@ main()
 | `HealthMyselfData` / `HealthEnemyData` | 我方/敵方各機器人血量 |
 | `RFIDAndBuffData` | RFID狀態 + 能量機關增益（防禦、攻擊、回血等） |
 | `PositionData` | UWB定位數據（友/敵機器人X、Y座標）+ 子彈速度 |
-| `ExtendData` | UWB yaw 角（自身朝向）+ `Reserve_16` 姿態回讀（高 8 位） |
+| `ExtendData` | UWB yaw 角（自身朝向）+ `Reserve_32_1`（low16 云台 yaw 角速度、high16 云台 yaw 当前角）+ `Reserve_16` 姿態回讀（高 8 位） |
 | `FireCodeType` | 位域：`FireStatus`（開火狀態）、`Rotate`（旋轉速度0-3）、`AimMode`（瞄準模式） |
 
 ---
