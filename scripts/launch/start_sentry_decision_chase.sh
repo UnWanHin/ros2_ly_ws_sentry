@@ -203,6 +203,9 @@ if (( USE_NOGATE == 1 )); then
 else
   LAUNCH_ARGS=("debug_bypass_is_start:=false" "${LAUNCH_ARGS[@]}")
 fi
+if ! has_launch_arg_key "publish_navi_goal"; then
+  LAUNCH_ARGS=("publish_navi_goal:=false" "${LAUNCH_ARGS[@]}")
+fi
 
 if [[ "${CHASE_SOURCE}" == "tf" ]]; then
   LAUNCH_ARGS=("map_frame:=${MAP_FRAME}" "${LAUNCH_ARGS[@]}")

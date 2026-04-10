@@ -235,7 +235,8 @@ namespace BehaviorTree {
 
         gimbalControlData.FireCode.Rotate = rotate_gear;
         if (config.AimDebugSettings.StopRotate) {
-            gimbalControlData.FireCode.Rotate = 3;
+            // StopRotate=true means disable chassis spin output.
+            gimbalControlData.FireCode.Rotate = 0;
         }
 
         static auto last_rotate_log = std::chrono::steady_clock::time_point{};

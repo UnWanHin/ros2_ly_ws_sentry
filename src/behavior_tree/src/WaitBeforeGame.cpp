@@ -54,7 +54,7 @@ namespace BehaviorTree {
 
             SET_POSITION(Home, team);
 
-            if(naviCommandRateClock.trigger()) {
+            if(publishNaviGoal_ && naviCommandRateClock.trigger()) {
                 naviCommandRateClock.tick();
                 if(config.NaviSettings.UseXY) PubNaviGoalPos();
                 else PubNaviGoal();

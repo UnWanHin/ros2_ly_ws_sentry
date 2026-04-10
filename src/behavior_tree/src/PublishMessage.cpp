@@ -16,7 +16,7 @@ namespace BehaviorTree {
         PubAimTargetData();
         PubNaviControlData();
         PubNaviRelativeTarget();
-        if(naviCommandRateClock.trigger()) {
+        if(publishNaviGoal_ && naviCommandRateClock.trigger()) {
             naviCommandRateClock.tick();
             // 导航目标按模式二选一：
             // UseXY=true 走 /ly/navi/goal_pos；否则走 /ly/navi/goal。

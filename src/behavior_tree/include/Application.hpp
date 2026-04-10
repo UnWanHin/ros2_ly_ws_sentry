@@ -199,6 +199,7 @@ private:
     CompetitionProfile competitionProfile_{CompetitionProfile::Regional};
     std::string competitionProfileOverride_{};
     bool debugBypassGameStart_{false};
+    bool publishNaviGoal_{true};
     int waitForGameStartTimeoutSec_{0};
     int leagueRefereeStaleTimeoutMs_{0};
     bool leagueRecoveryActive_{false};
