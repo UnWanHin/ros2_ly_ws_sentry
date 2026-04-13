@@ -48,7 +48,7 @@
 #include "auto_aim_common/msg/relative_target.hpp"
 #include "gimbal_driver/msg/game_data.hpp"
 #include "gimbal_driver/msg/gimbal_angles.hpp"
-#include "gimbal_driver/msg/gimbal_yaw.hpp"
+#include "gimbal_driver/msg/d_vel.hpp"
 #include "gimbal_driver/msg/health.hpp"
 #include "gimbal_driver/msg/uwb_pos.hpp"
 #include "gimbal_driver/msg/vel.hpp"
@@ -69,7 +69,7 @@ namespace BehaviorTree {
     LY_DEF_ROS_TOPIC(ly_gimbal_angles, "/ly/gimbal/angles", gimbal_driver::msg::GimbalAngles);
     LY_DEF_ROS_TOPIC(ly_gimbal_firecode, "/ly/gimbal/firecode", std_msgs::msg::UInt8);
     LY_DEF_ROS_TOPIC(ly_gimbal_vel, "/ly/gimbal/vel", gimbal_driver::msg::Vel);
-    LY_DEF_ROS_TOPIC(ly_gimbal_gimbal_yaw, "/ly/gimbal/gimbal_yaw", gimbal_driver::msg::GimbalYaw);
+    LY_DEF_ROS_TOPIC(ly_gimbal_d_vel, "/ly/gimbal/d_vel", gimbal_driver::msg::DVel);
     LY_DEF_ROS_TOPIC(ly_gimbal_posture, "/ly/gimbal/posture", std_msgs::msg::UInt8);
     LY_DEF_ROS_TOPIC(ly_gimbal_capV, "/ly/gimbal/capV", std_msgs::msg::UInt8);
     LY_DEF_ROS_TOPIC(ly_game_eventdata, "/ly/gimbal/eventdata", std_msgs::msg::UInt32);

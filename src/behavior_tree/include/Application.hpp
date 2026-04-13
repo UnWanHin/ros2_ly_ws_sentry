@@ -144,9 +144,9 @@ private:
     std::chrono::steady_clock::time_point gameStartTime{std::chrono::steady_clock::now()};
     std::chrono::steady_clock::time_point lastFoundEnemyTime{std::chrono::steady_clock::now()}; 
     GimbalAnglesType gimbalAngles{0, 0}; 
-    std::int16_t gimbalYawVelRaw{0};   // from /ly/gimbal/gimbal_yaw, unit 0.01 deg/s
+    std::int16_t gimbalYawVelRaw{0};   // from /ly/gimbal/d_vel.x (new protocol raw int16)
     float gimbalYawVelDegPerSec{0.0f};
-    std::int16_t gimbalYawAngleRaw{0}; // from /ly/gimbal/gimbal_yaw, unit 0.01 deg
+    std::int16_t gimbalYawAngleRaw{0}; // from /ly/gimbal/d_vel.y (new protocol raw int16)
     float gimbalYawAngleDeg{0.0f};
     std::atomic<bool> hasReceivedGimbalAngles_{false};
     std::chrono::steady_clock::time_point lastGimbalAnglesRxTime{};

@@ -65,13 +65,12 @@ namespace BehaviorTree{
             app.RecFireCode.FireStatus = (msg->data & 0b11);
         });
 
-        // ly_gimbal_gimbal_yaw
-        GenSub<ly_gimbal_gimbal_yaw>([](Application& app, auto msg) {
-            app.gimbalYawVelRaw = static_cast<std::int16_t>(msg->yaw_vel);
-            app.gimbalYawAngleRaw = static_cast<std::int16_t>(msg->yaw_angle);
-            constexpr float kGimbalScale = 0.01f;
-            app.gimbalYawVelDegPerSec = static_cast<float>(app.gimbalYawVelRaw) * kGimbalScale;
-            app.gimbalYawAngleDeg = static_cast<float>(app.gimbalYawAngleRaw) * kGimbalScale;
+        // ly_gimbal_d_vel
+        GenSub<ly_gimbal_d_vel>([](Application& app, auto msg) {
+            app.gimbalYawVelRaw = static_cast<std::int16_t>(msg->x);
+            app.gimbalYawAngleRaw = static_cast<std::int16_t>(msg->y);
+            app.gimbalYawVelDegPerSec = static_cast<float>(app.gimbalYawVelRaw);
+            app.gimbalYawAngleDeg = static_cast<float>(app.gimbalYawAngleRaw);
         });
 
         // ly_gimbal_posture
