@@ -393,6 +393,10 @@ namespace LangYa
     };
     struct NaviSetting {
         bool UseXY{true};
+        // UseXY=true 时：
+        // true  -> 使用 /ly/navi/target_rel + navi_tf_bridge 转 map 后发布 /ly/navi/goal_pos
+        // false -> behavior_tree 直接发布地图绝对坐标到 /ly/navi/goal_pos（不走 tf bridge）
+        bool UseTfGoalBridge{true};
     };
 
     struct LeagueStrategySetting {

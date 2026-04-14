@@ -321,6 +321,7 @@ private:
     rclcpp::Publisher<gimbal_driver::msg::Vel>::SharedPtr pub_navi_vel_;
     rclcpp::Publisher<auto_aim_common::msg::RelativeTarget>::SharedPtr pub_navi_target_rel_;
     rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr pub_navi_goal_;
+    rclcpp::Publisher<std_msgs::msg::UInt16MultiArray>::SharedPtr pub_navi_goal_pos_raw_;
     rclcpp::Publisher<std_msgs::msg::UInt16MultiArray>::SharedPtr pub_navi_goal_pos_;
     rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr pub_navi_speed_level_;
     rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr pub_navi_lower_head_;

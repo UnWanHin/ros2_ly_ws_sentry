@@ -22,7 +22,8 @@
         "Protected": false
     },
     "NaviSetting": {
-        "UseXY": true
+        "UseXY": true,
+        "UseTfGoalBridge": true
     },
     "AimTargetPriority": [1, 3, 4, 6, 2],
     "Chase": {

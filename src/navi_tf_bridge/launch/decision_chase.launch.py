@@ -7,10 +7,16 @@ from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, OpaqueFunction, SetLaunchConfiguration
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+
+try:
+    import yaml
+except Exception:
+    yaml = None
 
 
 def _resolve_bt_config_path(behavior_tree_share: str, configured_path: str) -> str:
@@ -31,10 +37,40 @@ def _normalize_bool(raw: str) -> str:
     return ""
 
 
+def _bool_default(value) -> str:
+    return "true" if bool(value) else "false"
+
+
+def _load_bridge_defaults(param_file: str) -> dict:
+    if yaml is None:
+        return {}
+    if not param_file or not os.path.exists(param_file):
+        return {}
+    try:
+        with open(param_file, encoding="utf-8") as fh:
+            root = yaml.safe_load(fh) or {}
+        node_cfg = root.get("target_rel_to_goal_pos_node", {})
+        ros_params = node_cfg.get("ros__parameters", {})
+        if isinstance(ros_params, dict):
+            return ros_params
+    except Exception as ex:
+        print(f"[decision_chase] failed to load bridge defaults from '{param_file}': {ex}")
+    return {}
+
+
+def _guess_workspace_root_from_share(share_dir: str) -> str:
+    path = Path(share_dir).resolve()
+    for parent in [path, *path.parents]:
+        if parent.name == "install":
+            return str(parent.parent)
+    return str(path.parent)
+
+
 def _resolve_bridge_chase_params(context, behavior_tree_share: str):
     resolved_preferred_distance_cm = "100"
     resolved_distance_deadband_cm = "50"
     resolved_stop_when_no_target = "true"
+    resolved_enable_tf_goal_bridge = "true"
 
     bt_config_file_value = LaunchConfiguration("bt_config_file").perform(context).strip()
     bt_config_path = _resolve_bt_config_path(behavior_tree_share, bt_config_file_value)
@@ -52,6 +88,11 @@ def _resolve_bridge_chase_params(context, behavior_tree_share: str):
                 )
                 resolved_stop_when_no_target = (
                     "true" if bool(chase_cfg.get("StopWhenNoTarget", True)) else "false"
+                )
+            navi_cfg = config_root.get("NaviSetting", {})
+            if isinstance(navi_cfg, dict):
+                resolved_enable_tf_goal_bridge = (
+                    "true" if bool(navi_cfg.get("UseTfGoalBridge", True)) else "false"
                 )
         except Exception as ex:
             print(
@@ -71,6 +112,10 @@ def _resolve_bridge_chase_params(context, behavior_tree_share: str):
     if stop_override:
         resolved_stop_when_no_target = stop_override
 
+    tf_bridge_override = _normalize_bool(LaunchConfiguration("enable_tf_goal_bridge").perform(context))
+    if tf_bridge_override:
+        resolved_enable_tf_goal_bridge = tf_bridge_override
+
     allow_reverse_goal = _normalize_bool(LaunchConfiguration("allow_reverse_goal").perform(context))
     if not allow_reverse_goal:
         allow_reverse_goal = "false"
@@ -85,12 +130,14 @@ def _resolve_bridge_chase_params(context, behavior_tree_share: str):
         SetLaunchConfiguration(
             "resolved_bridge_stop_when_no_target", resolved_stop_when_no_target
         ),
+        SetLaunchConfiguration("resolved_enable_tf_goal_bridge", resolved_enable_tf_goal_bridge),
         SetLaunchConfiguration("resolved_bridge_allow_reverse_goal", allow_reverse_goal),
     ]
 
 
 def generate_launch_description():
     behavior_tree_share = get_package_share_directory("behavior_tree")
+    bridge_share = get_package_share_directory("navi_tf_bridge")
     detector_share = get_package_share_directory("detector")
     predictor_share = get_package_share_directory("predictor")
     outpost_share = get_package_share_directory("outpost_hitter")
@@ -105,6 +152,18 @@ def generate_launch_description():
     default_predictor_config_file = os.path.join(predictor_share, "config", "predictor_config.yaml")
     default_outpost_config_file = os.path.join(outpost_share, "config", "outpost_config.yaml")
     default_buff_config_file = os.path.join(buff_share, "config", "buff_config.yaml")
+    default_bridge_param_file = os.path.join(
+        bridge_share, "config", "tf_config.yaml"
+    )
+    workspace_root = _guess_workspace_root_from_share(bridge_share)
+    default_area_header_file = os.path.join(
+        workspace_root, "src", "behavior_tree", "module", "Area.hpp"
+    )
+    default_debug_pair_file = os.path.join(
+        workspace_root, "src", "navi_tf_bridge", "config", "tf_point_pairs.yaml"
+    )
+    bridge_defaults = _load_bridge_defaults(default_bridge_param_file)
+    get_bridge_default = lambda key, fallback: bridge_defaults.get(key, fallback)
 
     launch_args = [
         DeclareLaunchArgument("mode", default_value="league"),
@@ -131,16 +190,47 @@ def generate_launch_description():
         DeclareLaunchArgument("use_outpost", default_value="false"),
         DeclareLaunchArgument("use_buff", default_value="false"),
         DeclareLaunchArgument("use_behavior_tree", default_value="true"),
-        DeclareLaunchArgument("input_topic", default_value="/ly/navi/target_rel"),
-        DeclareLaunchArgument("output_goal_pos_topic", default_value="/ly/navi/goal_pos"),
-        DeclareLaunchArgument("output_target_map_topic", default_value="/ly/navi/target_map"),
-        DeclareLaunchArgument("map_frame", default_value="map"),
-        DeclareLaunchArgument("base_frame", default_value="base_link"),
-        DeclareLaunchArgument("fallback_base_frame", default_value="baselink"),
-        DeclareLaunchArgument("use_msg_frame_id", default_value="true"),
-        DeclareLaunchArgument("publish_target_map", default_value="true"),
-        DeclareLaunchArgument("invert_y_axis", default_value="false"),
-        DeclareLaunchArgument("y_axis_max_cm", default_value="1500"),
+        DeclareLaunchArgument(
+            "input_topic",
+            default_value=str(get_bridge_default("input_topic", "/ly/navi/target_rel")),
+        ),
+        DeclareLaunchArgument(
+            "output_goal_pos_topic",
+            default_value=str(get_bridge_default("output_goal_pos_topic", "/ly/navi/goal_pos")),
+        ),
+        DeclareLaunchArgument(
+            "input_goal_pos_raw_topic",
+            default_value=str(get_bridge_default("input_goal_pos_raw_topic", "/ly/navi/goal_pos_raw")),
+        ),
+        DeclareLaunchArgument(
+            "output_target_map_topic",
+            default_value=str(get_bridge_default("output_target_map_topic", "/ly/navi/target_map")),
+        ),
+        DeclareLaunchArgument(
+            "map_frame", default_value=str(get_bridge_default("map_frame", "map"))
+        ),
+        DeclareLaunchArgument(
+            "base_frame", default_value=str(get_bridge_default("base_frame", "base_link"))
+        ),
+        DeclareLaunchArgument(
+            "fallback_base_frame",
+            default_value=str(get_bridge_default("fallback_base_frame", "baselink")),
+        ),
+        DeclareLaunchArgument(
+            "use_msg_frame_id",
+            default_value=_bool_default(get_bridge_default("use_msg_frame_id", True)),
+        ),
+        DeclareLaunchArgument(
+            "publish_target_map",
+            default_value=_bool_default(get_bridge_default("publish_target_map", True)),
+        ),
+        DeclareLaunchArgument(
+            "invert_y_axis",
+            default_value=_bool_default(get_bridge_default("invert_y_axis", False)),
+        ),
+        DeclareLaunchArgument(
+            "y_axis_max_cm", default_value=str(int(get_bridge_default("y_axis_max_cm", 1500)))
+        ),
         DeclareLaunchArgument(
             "preferred_distance_cm",
             default_value="",
@@ -157,15 +247,58 @@ def generate_launch_description():
             description="Optional bridge override. Empty means load Chase.StopWhenNoTarget from bt_config_file.",
         ),
         DeclareLaunchArgument(
+            "enable_tf_goal_bridge",
+            default_value="",
+            description="Optional override. Empty means load NaviSetting.UseTfGoalBridge from bt_config_file.",
+        ),
+        DeclareLaunchArgument(
             "allow_reverse_goal",
-            default_value="false",
+            default_value=_bool_default(get_bridge_default("allow_reverse_goal", False)),
             description="Whether the bridge may output a reverse chase goal when already too close to the target.",
+        ),
+        DeclareLaunchArgument(
+            "enable_goal_pos_raw_bridge",
+            default_value=_bool_default(get_bridge_default("enable_goal_pos_raw_bridge", True)),
+        ),
+        DeclareLaunchArgument(
+            "goal_pos_raw_frame",
+            default_value=str(get_bridge_default("goal_pos_raw_frame", "map")),
+        ),
+        DeclareLaunchArgument(
+            "debug_export_point_pairs",
+            default_value=_bool_default(get_bridge_default("debug_export_point_pairs", True)),
+        ),
+        DeclareLaunchArgument(
+            "debug_points_reference_frame",
+            default_value=str(get_bridge_default("debug_points_reference_frame", "map")),
+        ),
+        DeclareLaunchArgument(
+            "debug_area_header_file",
+            default_value=str(
+                get_bridge_default("debug_area_header_file", default_area_header_file)
+                or default_area_header_file
+            ),
+        ),
+        DeclareLaunchArgument(
+            "debug_point_pairs_output_file",
+            default_value=str(
+                get_bridge_default("debug_point_pairs_output_file", default_debug_pair_file)
+                or default_debug_pair_file
+            ),
         ),
         DeclareLaunchArgument("resolved_bridge_preferred_distance_cm", default_value="100"),
         DeclareLaunchArgument("resolved_bridge_distance_deadband_cm", default_value="50"),
         DeclareLaunchArgument("resolved_bridge_stop_when_no_target", default_value="true"),
+        DeclareLaunchArgument("resolved_enable_tf_goal_bridge", default_value="true"),
         DeclareLaunchArgument("resolved_bridge_allow_reverse_goal", default_value="false"),
         OpaqueFunction(function=_resolve_bridge_chase_params, args=[behavior_tree_share]),
+        LogInfo(msg=["[decision_chase] bridge param file: ", default_bridge_param_file]),
+        LogInfo(
+            msg=[
+                "[decision_chase] debug point pairs -> ",
+                LaunchConfiguration("debug_point_pairs_output_file"),
+            ]
+        ),
         LogInfo(
             msg=[
                 "[decision_chase] bridge preferred_distance_cm: ",
@@ -182,6 +315,12 @@ def generate_launch_description():
             msg=[
                 "[decision_chase] bridge stop_when_no_target: ",
                 LaunchConfiguration("resolved_bridge_stop_when_no_target"),
+            ]
+        ),
+        LogInfo(
+            msg=[
+                "[decision_chase] enable_tf_goal_bridge: ",
+                LaunchConfiguration("resolved_enable_tf_goal_bridge"),
             ]
         ),
         LogInfo(
@@ -225,9 +364,12 @@ def generate_launch_description():
         executable="target_rel_to_goal_pos_node",
         name="target_rel_to_goal_pos_node",
         output=LaunchConfiguration("output"),
+        condition=IfCondition(LaunchConfiguration("resolved_enable_tf_goal_bridge")),
         parameters=[
+            default_bridge_param_file,
             {
                 "input_topic": LaunchConfiguration("input_topic"),
+                "input_goal_pos_raw_topic": LaunchConfiguration("input_goal_pos_raw_topic"),
                 "output_goal_pos_topic": LaunchConfiguration("output_goal_pos_topic"),
                 "output_target_map_topic": LaunchConfiguration("output_target_map_topic"),
                 "map_frame": LaunchConfiguration("map_frame"),
@@ -256,6 +398,20 @@ def generate_launch_description():
                 ),
                 "allow_reverse_goal": ParameterValue(
                     LaunchConfiguration("resolved_bridge_allow_reverse_goal"), value_type=bool
+                ),
+                "enable_goal_pos_raw_bridge": ParameterValue(
+                    LaunchConfiguration("enable_goal_pos_raw_bridge"), value_type=bool
+                ),
+                "goal_pos_raw_frame": LaunchConfiguration("goal_pos_raw_frame"),
+                "debug_export_point_pairs": ParameterValue(
+                    LaunchConfiguration("debug_export_point_pairs"), value_type=bool
+                ),
+                "debug_points_reference_frame": LaunchConfiguration(
+                    "debug_points_reference_frame"
+                ),
+                "debug_area_header_file": LaunchConfiguration("debug_area_header_file"),
+                "debug_point_pairs_output_file": LaunchConfiguration(
+                    "debug_point_pairs_output_file"
                 ),
             }
         ],

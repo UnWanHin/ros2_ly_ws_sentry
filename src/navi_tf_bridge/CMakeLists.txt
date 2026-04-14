@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclpy REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(auto_aim_common REQUIRED)
@@ -31,7 +32,17 @@ install(TARGETS target_rel_to_goal_pos_node
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  script/manual_goal_input_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME manual_goal_input_node
+)
+
 install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
+install(DIRECTORY config
   DESTINATION share/${PROJECT_NAME}
 )
 

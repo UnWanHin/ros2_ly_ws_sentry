@@ -1,0 +1,29 @@
+target_rel_to_goal_pos_node:
+  ros__parameters:
+    input_topic: /ly/navi/target_rel
+    input_goal_pos_raw_topic: /ly/navi/goal_pos_raw
+    output_goal_pos_topic: /ly/navi/goal_pos
+    output_target_map_topic: /ly/navi/target_map
+
+    # TF frame settings
+    map_frame: map
+    base_frame: base_link
+    fallback_base_frame: baselink
+    use_msg_frame_id: true
+
+    publish_target_map: true
+    invert_y_axis: false
+    y_axis_max_cm: 1500
+
+    preferred_distance_cm: 100
+    distance_deadband_cm: 50
+    stop_when_no_target: true
+    allow_reverse_goal: false
+    enable_goal_pos_raw_bridge: true
+    goal_pos_raw_frame: map
+
+    # Debug export (for comparing Area.hpp map points with TF-converted points)
+    debug_export_point_pairs: true
+    debug_points_reference_frame: map
+    debug_area_header_file: ""
+    debug_point_pairs_output_file: ""

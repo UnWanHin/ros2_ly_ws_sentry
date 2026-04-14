@@ -15,12 +15,22 @@ namespace BehaviorTree {
         PubPostureControlData();
         PubAimTargetData();
         PubNaviControlData();
-        PubNaviRelativeTarget();
+        const bool enable_relative_target_topic =
+            config.ChaseSettings.Enable &&
+            config.ChaseSettings.UseRelativeTargetTopic;
+        if (enable_relative_target_topic) {
+            PubNaviRelativeTarget();
+        }
         if(publishNaviGoal_ && naviCommandRateClock.trigger()) {
             naviCommandRateClock.tick();
+            const bool use_tf_goal_bridge =
+                config.NaviSettings.UseXY &&
+                config.NaviSettings.UseTfGoalBridge &&
+                enable_relative_target_topic;
             // 导航目标按模式二选一：
             // UseXY=true 走 /ly/navi/goal_pos；否则走 /ly/navi/goal。
-            if(config.NaviSettings.UseXY) PubNaviGoalPos();
+            // 追击+relative_topic+tf bridge 场景下，由 bridge 独占 /ly/navi/goal_pos。
+            if(config.NaviSettings.UseXY && !use_tf_goal_bridge) PubNaviGoalPos();
             else PubNaviGoal();
         }
     }
@@ -142,6 +152,11 @@ namespace BehaviorTree {
             static_cast<uint16_t>(naviGoalPosition.y)
         };
         msg.data = data;
+        if (config.NaviSettings.UseTfGoalBridge && pub_navi_goal_pos_raw_) {
+            // 统一由 navi_tf_bridge 输出 /ly/navi/goal_pos，BT 仅发布 raw 点位输入。
+            pub_navi_goal_pos_raw_->publish(msg);
+            return;
+        }
         pub_navi_goal_pos_->publish(msg);
     }
 }

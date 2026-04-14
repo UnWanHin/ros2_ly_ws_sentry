@@ -172,6 +172,7 @@ namespace LangYa {
     }
     void from_json(const json& j, NaviSetting& ns) {
         ns.UseXY = j.value("UseXY", ns.UseXY);
+        ns.UseTfGoalBridge = j.value("UseTfGoalBridge", ns.UseTfGoalBridge);
     }
 
     void from_json(const json& j, LeagueStrategySetting& ls) {
@@ -342,6 +343,7 @@ namespace BehaviorTree {
         LoggerPtr->Debug("Protected: {}", config.GameStrategySettings.Protected);
         LoggerPtr->Debug("------ NaviSetting ------");
         LoggerPtr->Debug("UseXY: {}", config.NaviSettings.UseXY);
+        LoggerPtr->Debug("UseTfGoalBridge: {}", config.NaviSettings.UseTfGoalBridge);
         LoggerPtr->Debug("------ LeagueStrategy ------");
         LoggerPtr->Debug("EnableRouteCompat: {}", config.LeagueStrategySettings.EnableRouteCompat);
         LoggerPtr->Debug("UseHealthRecovery: {}", config.LeagueStrategySettings.UseHealthRecovery);

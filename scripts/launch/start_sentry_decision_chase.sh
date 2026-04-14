@@ -12,11 +12,11 @@ USE_NOGATE=1
 OFFLINE_MODE=0
 MODE_ARG="league"
 CHASE_SOURCE="tf"
-BASE_FRAME="base_link"
-FALLBACK_BASE_FRAME="baselink"
-MAP_FRAME="map"
-PUBLISH_TARGET_MAP=1
-USE_MSG_FRAME_ID=1
+BASE_FRAME=""
+FALLBACK_BASE_FRAME=""
+MAP_FRAME=""
+PUBLISH_TARGET_MAP=""
+USE_MSG_FRAME_ID=""
 LAUNCH_ARGS=()
 DEFAULT_BASE_CONFIG_FILE="${ROOT_DIR}/config/base_config.yaml"
 DEFAULT_DETECTOR_CONFIG_FILE="${ROOT_DIR}/src/detector/config/detector_config.yaml"
@@ -47,9 +47,9 @@ Options:
   --nogate | --with-gate
   --online | --offline
   --mode league|regional|showcase
-  --base-frame <frame>              (default: base_link)
-  --fallback-base-frame <frame>     (default: baselink)
-  --map-frame <frame>               (default: map)
+  --base-frame <frame>              (default from navi_tf_bridge config)
+  --fallback-base-frame <frame>     (default from navi_tf_bridge config)
+  --map-frame <frame>               (default from navi_tf_bridge config)
   --publish-target-map | --no-publish-target-map
   --use-msg-frame-id | --ignore-msg-frame-id
   --help
@@ -121,19 +121,19 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --publish-target-map)
-      PUBLISH_TARGET_MAP=1
+      PUBLISH_TARGET_MAP="true"
       shift
       ;;
     --no-publish-target-map)
-      PUBLISH_TARGET_MAP=0
+      PUBLISH_TARGET_MAP="false"
       shift
       ;;
     --use-msg-frame-id)
-      USE_MSG_FRAME_ID=1
+      USE_MSG_FRAME_ID="true"
       shift
       ;;
     --ignore-msg-frame-id)
-      USE_MSG_FRAME_ID=0
+      USE_MSG_FRAME_ID="false"
       shift
       ;;
     --help|-h)
@@ -208,18 +208,20 @@ if ! has_launch_arg_key "publish_navi_goal"; then
 fi
 
 if [[ "${CHASE_SOURCE}" == "tf" ]]; then
-  LAUNCH_ARGS=("map_frame:=${MAP_FRAME}" "${LAUNCH_ARGS[@]}")
-  LAUNCH_ARGS=("base_frame:=${BASE_FRAME}" "${LAUNCH_ARGS[@]}")
-  LAUNCH_ARGS=("fallback_base_frame:=${FALLBACK_BASE_FRAME}" "${LAUNCH_ARGS[@]}")
-  if (( PUBLISH_TARGET_MAP == 1 )); then
-    LAUNCH_ARGS=("publish_target_map:=true" "${LAUNCH_ARGS[@]}")
-  else
-    LAUNCH_ARGS=("publish_target_map:=false" "${LAUNCH_ARGS[@]}")
+  if [[ -n "${MAP_FRAME}" ]] && ! has_launch_arg_key "map_frame"; then
+    LAUNCH_ARGS=("map_frame:=${MAP_FRAME}" "${LAUNCH_ARGS[@]}")
   fi
-  if (( USE_MSG_FRAME_ID == 1 )); then
-    LAUNCH_ARGS=("use_msg_frame_id:=true" "${LAUNCH_ARGS[@]}")
-  else
-    LAUNCH_ARGS=("use_msg_frame_id:=false" "${LAUNCH_ARGS[@]}")
+  if [[ -n "${BASE_FRAME}" ]] && ! has_launch_arg_key "base_frame"; then
+    LAUNCH_ARGS=("base_frame:=${BASE_FRAME}" "${LAUNCH_ARGS[@]}")
+  fi
+  if [[ -n "${FALLBACK_BASE_FRAME}" ]] && ! has_launch_arg_key "fallback_base_frame"; then
+    LAUNCH_ARGS=("fallback_base_frame:=${FALLBACK_BASE_FRAME}" "${LAUNCH_ARGS[@]}")
+  fi
+  if [[ -n "${PUBLISH_TARGET_MAP}" ]] && ! has_launch_arg_key "publish_target_map"; then
+    LAUNCH_ARGS=("publish_target_map:=${PUBLISH_TARGET_MAP}" "${LAUNCH_ARGS[@]}")
+  fi
+  if [[ -n "${USE_MSG_FRAME_ID}" ]] && ! has_launch_arg_key "use_msg_frame_id"; then
+    LAUNCH_ARGS=("use_msg_frame_id:=${USE_MSG_FRAME_ID}" "${LAUNCH_ARGS[@]}")
   fi
   exec ros2 launch navi_tf_bridge decision_chase.launch.py "${LAUNCH_ARGS[@]}"
 fi

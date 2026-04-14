@@ -56,7 +56,12 @@ namespace BehaviorTree {
 
             if(publishNaviGoal_ && naviCommandRateClock.trigger()) {
                 naviCommandRateClock.tick();
-                if(config.NaviSettings.UseXY) PubNaviGoalPos();
+                const bool use_tf_goal_bridge =
+                    config.NaviSettings.UseXY &&
+                    config.NaviSettings.UseTfGoalBridge &&
+                    config.ChaseSettings.Enable &&
+                    config.ChaseSettings.UseRelativeTargetTopic;
+                if(config.NaviSettings.UseXY && !use_tf_goal_bridge) PubNaviGoalPos();
                 else PubNaviGoal();
             }
 
