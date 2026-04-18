@@ -493,6 +493,59 @@ namespace LangYa
         int ScoreHysteresis{2};       // 姿态切换分差迟滞
     };
 
+    struct StrategyAutonomySetting {
+        std::vector<std::string> Candidates{"HitHero", "HitSentry", "Protected"};
+        double HitHeroBias{0.0};
+        double HitSentryBias{0.0};
+        double ProtectedBias{0.0};
+        double LowResourceProtectedBonus{2.0};
+        double LowResourceOffensePenalty{1.0};
+        double SentryWindowBonus{1.5};
+        double NoOutpostSentryPenalty{1.0};
+        double TimePressureProtectedBonus{0.8};
+        double CurrentStrategyBonus{0.4};
+    };
+
+    struct NaviGoalOption {
+        std::uint8_t GoalId{LangYa::MidShoot.ID};
+        std::string Team{"my"}; // my / enemy
+        double Bias{0.0};
+        bool Enable{true};
+    };
+
+    struct NaviGoalAutonomySetting {
+        bool UseCustomCandidates{false};
+        std::vector<NaviGoalOption> HitHeroCandidates{};
+        std::vector<NaviGoalOption> HitSentryCandidates{};
+        std::vector<NaviGoalOption> ProtectCandidates{};
+        double DistanceWeight{1.0};
+        double EnemyTeamBonus{0.25};
+        double HeroProximityWeight{0.35};
+        double CurrentGoalBonus{0.30};
+        double LowEnergyOwnSideBonus{0.8};
+        double LowEnergyEnemyPenalty{1.0};
+        double LowOutpostOwnSideBonus{0.4};
+        double GoalBiasWeight{1.0};
+    };
+
+    struct AimTargetAutonomySetting {
+        double PriorityWeight{1.0};
+        double DistanceWeight{0.8};
+        double LowHealthWeight{0.6};
+        double CurrentTargetBonus{0.3};
+        double HeroBonus{0.2};
+        double SentryBonus{0.1};
+    };
+
+    struct DecisionAutonomySetting {
+        bool Enable{false};
+        std::vector<std::string> EnabledModules{"strategy_mode", "navi_goal", "aim_target"};
+        std::vector<std::string> HardRuleModules{"recovery", "aim_mode", "fire_safety"};
+        StrategyAutonomySetting Strategy{};
+        NaviGoalAutonomySetting NaviGoal{};
+        AimTargetAutonomySetting AimTarget{};
+    };
+
     // Main
     struct Config {
         AimDebug AimDebugSettings{};
@@ -509,6 +562,8 @@ namespace LangYa
             static_cast<int>(ArmorType::Sentry),
             static_cast<int>(ArmorType::Engineer)
         };
+        std::vector<int> AimTargetIgnore{};
+        DecisionAutonomySetting DecisionAutonomySettings{};
         ChaseSetting ChaseSettings{};
         PostureSetting PostureSettings{};
         int ScanCounter{1};  /// 扫描模式计数器，一定值后Yaw动一次

@@ -26,6 +26,46 @@
         "UseTfGoalBridge": false
     },
     "AimTargetPriority": [1, 3, 4, 6, 2],
+    "AimTargetIgnore": [],
+    "DecisionAutonomy": {
+        "Enable": false,
+        "EnabledModules": ["strategy_mode", "navi_goal", "aim_target"],
+        "HardRuleModules": ["recovery", "aim_mode", "fire_safety"],
+        "Strategy": {
+            "Candidates": ["HitHero", "HitSentry", "Protected"],
+            "HitHeroBias": 0.0,
+            "HitSentryBias": 0.0,
+            "ProtectedBias": 0.0,
+            "LowResourceProtectedBonus": 2.0,
+            "LowResourceOffensePenalty": 1.0,
+            "SentryWindowBonus": 1.5,
+            "NoOutpostSentryPenalty": 1.0,
+            "TimePressureProtectedBonus": 0.8,
+            "CurrentStrategyBonus": 0.4
+        },
+        "NaviGoal": {
+            "UseCustomCandidates": false,
+            "DistanceWeight": 1.0,
+            "EnemyTeamBonus": 0.25,
+            "HeroProximityWeight": 0.35,
+            "CurrentGoalBonus": 0.30,
+            "LowEnergyOwnSideBonus": 0.8,
+            "LowEnergyEnemyPenalty": 1.0,
+            "LowOutpostOwnSideBonus": 0.4,
+            "GoalBiasWeight": 1.0,
+            "HitHeroCandidates": [],
+            "HitSentryCandidates": [],
+            "ProtectCandidates": []
+        },
+        "AimTarget": {
+            "PriorityWeight": 1.0,
+            "DistanceWeight": 0.8,
+            "LowHealthWeight": 0.6,
+            "CurrentTargetBonus": 0.3,
+            "HeroBonus": 0.2,
+            "SentryBonus": 0.1
+        }
+    },
     "Chase": {
         "Enable": true,
         "FollowAimTarget": true,

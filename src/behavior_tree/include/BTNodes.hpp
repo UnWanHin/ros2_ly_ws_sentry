@@ -75,58 +75,11 @@ public:
     static BT::PortsList providedPorts() { return {}; }
 
     BT::NodeStatus tick() override {
+        app_->SelectStrategyMode();
         const auto global_board = app_->GetGlobalBlackboard();
-        if (!global_board) {
-            return BT::NodeStatus::FAILURE;
+        if (global_board) {
+            global_board->set("StrategyMode", static_cast<std::uint8_t>(app_->GetStrategyMode()));
         }
-
-        if (app_->GetCompetitionProfile() == CompetitionProfile::League) {
-            app_->SetStrategyMode(StrategyMode::LeagueSimple);
-            global_board->set("StrategyMode", static_cast<std::uint8_t>(StrategyMode::LeagueSimple));
-            return BT::NodeStatus::SUCCESS;
-        }
-        if (app_->IsNaviDebugEnabled()) {
-            app_->SetStrategyMode(StrategyMode::NaviTest);
-            global_board->set("StrategyMode", static_cast<std::uint8_t>(StrategyMode::NaviTest));
-            return BT::NodeStatus::SUCCESS;
-        }
-
-        const int now_time = app_->ElapsedSeconds();
-
-        std::uint16_t self_outpost_health = 0;
-        std::uint16_t enemy_outpost_health = 0;
-        std::uint16_t self_health = 0;
-        std::uint16_t time_left = 0;
-        BuffType team_buff{};
-
-        (void)global_board->get("SelfOutpostHealth", self_outpost_health);
-        (void)global_board->get("EnemyOutpostHealth", enemy_outpost_health);
-        (void)global_board->get("SelfHealth", self_health);
-        (void)global_board->get("TimeLeft", time_left);
-        (void)global_board->get("TeamBuff", team_buff);
-
-        const StrategyMode current_strategy = app_->GetStrategyMode();
-        StrategyMode next_strategy = current_strategy;
-        const bool low_resource = (self_health < 100 || time_left <= 120 ||
-                                   team_buff.RemainingEnergy == 0b10000 ||
-                                   team_buff.RemainingEnergy == 0b00000);
-        const bool sentry_window = (enemy_outpost_health > 0 && self_outpost_health > 100 && now_time < 55);
-
-        // 开局保留 config 给定的初始策略，随后再进入动态切换
-        if (now_time < 10) {
-            next_strategy = current_strategy;
-        } else if (low_resource) {
-            next_strategy = StrategyMode::Protected;
-        } else if (current_strategy == StrategyMode::NaviTest && now_time < 340) {
-            next_strategy = StrategyMode::NaviTest;
-        } else if (sentry_window) {
-            next_strategy = StrategyMode::HitSentry;
-        } else {
-            next_strategy = StrategyMode::HitHero;
-        }
-
-        app_->SetStrategyMode(next_strategy);
-        global_board->set("StrategyMode", static_cast<std::uint8_t>(next_strategy));
         return BT::NodeStatus::SUCCESS;
     }
 };

@@ -21,6 +21,7 @@
 #include <boost/filesystem/fstream.hpp>
 #include <deque>
 #include <string>
+#include <string_view>
 #include <atomic>
 #include <thread>
 #include <mutex>
@@ -375,6 +376,7 @@ public:
     void ProcessData();
     bool CheckPositionRecovery();
     void SetPositionRepeat();
+    bool TrySetNaviGoalByAutonomy(StrategyMode strategy_mode, UnitTeam my_team, UnitTeam enemy_team);
     void SetPositionProtect();
     void SetPositionNaviTest();
     void SetPositionHitSentry();
@@ -399,7 +401,10 @@ public:
     std::uint8_t ResolveGoalId(std::uint8_t base_goal_id, UnitTeam team, bool apply_team_offset = true) const noexcept;
     void SetAimTarget();
     void SetAimTargetNormal();
+    bool TrySetAimTargetByAutonomy();
     void SetAimMode();
+    void SelectStrategyMode();
+    bool IsDecisionAutonomyModuleEnabled(std::string_view module) const;
     void CheckDebug();
     void UpdatePostureCommand(bool has_target);
     SentryPosture SelectDesiredPosture(bool has_target) const;

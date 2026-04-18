@@ -5,7 +5,9 @@
 #include "../include/Application.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <limits>
 #include <optional>
 
 using namespace LangYa;
@@ -78,9 +80,87 @@ namespace BehaviorTree {
         }
     }
 
+    bool IsIgnoredArmorType(const std::vector<int>& ignore_list, const ArmorType armor_type) {
+        return std::find(ignore_list.begin(),
+                         ignore_list.end(),
+                         static_cast<int>(armor_type)) != ignore_list.end();
+    }
+
+    bool IsIgnoredUnitType(const std::vector<int>& ignore_list, const UnitType unit_type) {
+        const auto armor_type = ArmorTypeFromUnitType(unit_type);
+        return armor_type.has_value() && IsIgnoredArmorType(ignore_list, *armor_type);
+    }
+
     int ClampToInt8(const int value) {
         return std::clamp(value, -128, 127);
     }
+
+    std::string NormalizeDecisionModule(std::string_view module) {
+        std::string normalized(module);
+        std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+            [](unsigned char c) {
+                if (c == '-' || c == ' ') {
+                    return '_';
+                }
+                return static_cast<char>(std::tolower(c));
+            });
+        return normalized;
+    }
+
+    bool HasAutonomyToken(const std::vector<std::string>& tokens, std::string_view expected) {
+        const auto normalized_expected = NormalizeDecisionModule(expected);
+        return std::find(tokens.begin(), tokens.end(), normalized_expected) != tokens.end();
+    }
+
+    std::optional<StrategyMode> StrategyModeFromAutonomyToken(const std::string& token) {
+        if (token == "hithero" || token == "hit_hero" || token == "hero") {
+            return StrategyMode::HitHero;
+        }
+        if (token == "hitsentry" || token == "hit_sentry" || token == "sentry") {
+            return StrategyMode::HitSentry;
+        }
+        if (token == "protected" || token == "protect") {
+            return StrategyMode::Protected;
+        }
+        if (token == "navitest" || token == "navi_test") {
+            return StrategyMode::NaviTest;
+        }
+        if (token == "leaguesimple" || token == "league_simple") {
+            return StrategyMode::LeagueSimple;
+        }
+        return std::nullopt;
+    }
+
+    Area::Point<std::uint16_t> GoalPointByBaseId(const std::uint8_t base_goal_id, const UnitTeam goal_team) {
+        switch (base_goal_id) {
+            case LangYa::Home.ID: return BehaviorTree::Area::Home(goal_team);
+            case LangYa::Base.ID: return BehaviorTree::Area::Base(goal_team);
+            case LangYa::Recovery.ID: return BehaviorTree::Area::Recovery(goal_team);
+            case LangYa::BuffShoot.ID: return BehaviorTree::Area::BuffShoot(goal_team);
+            case LangYa::LeftHighLand.ID: return BehaviorTree::Area::LeftHighLand(goal_team);
+            case LangYa::CastleLeft.ID: return BehaviorTree::Area::CastleLeft(goal_team);
+            case LangYa::Castle.ID: return BehaviorTree::Area::Castle(goal_team);
+            case LangYa::CastleRight1.ID: return BehaviorTree::Area::CastleRight1(goal_team);
+            case LangYa::CastleRight2.ID: return BehaviorTree::Area::CastleRight2(goal_team);
+            case LangYa::FlyRoad.ID: return BehaviorTree::Area::FlyRoad(goal_team);
+            case LangYa::OutpostArea.ID: return BehaviorTree::Area::OutpostArea(goal_team);
+            case LangYa::MidShoot.ID: return BehaviorTree::Area::MidShoot(goal_team);
+            case LangYa::LeftShoot.ID: return BehaviorTree::Area::LeftShoot(goal_team);
+            case LangYa::OutpostShoot.ID: return BehaviorTree::Area::OutpostShoot(goal_team);
+            case LangYa::BuffAround1.ID: return BehaviorTree::Area::BuffAround1(goal_team);
+            case LangYa::BuffAround2.ID: return BehaviorTree::Area::BuffAround2(goal_team);
+            case LangYa::RightShoot.ID: return BehaviorTree::Area::RightShoot(goal_team);
+            case LangYa::HoleRoad.ID: return BehaviorTree::Area::HoleRoad(goal_team);
+            case LangYa::OccupyArea.ID: return BehaviorTree::Area::OccupyArea(goal_team);
+            default: return BehaviorTree::Area::Home(goal_team);
+        }
+    }
+
+    struct RuntimeNaviGoalCandidate {
+        std::uint8_t BaseGoalId{LangYa::Home.ID};
+        UnitTeam Team{UnitTeam::Red};
+        double Bias{0.0};
+    };
     }  // namespace
 
      /**
@@ -598,6 +678,144 @@ namespace BehaviorTree {
         }
     }
 
+    bool Application::IsDecisionAutonomyModuleEnabled(std::string_view module) const {
+        const auto& autonomy = config.DecisionAutonomySettings;
+        if (!autonomy.Enable) {
+            return false;
+        }
+        const auto normalized_module = NormalizeDecisionModule(module);
+        if (HasAutonomyToken(autonomy.HardRuleModules, normalized_module)) {
+            return false;
+        }
+        if (HasAutonomyToken(autonomy.EnabledModules, "all")) {
+            return true;
+        }
+        return HasAutonomyToken(autonomy.EnabledModules, normalized_module);
+    }
+
+    void Application::SelectStrategyMode() {
+        if (GetCompetitionProfile() == CompetitionProfile::League) {
+            SetStrategyMode(StrategyMode::LeagueSimple);
+            return;
+        }
+        if (IsNaviDebugEnabled()) {
+            SetStrategyMode(StrategyMode::NaviTest);
+            return;
+        }
+
+        const int now_time = ElapsedSeconds();
+        std::uint16_t self_outpost_health = selfOutpostHealth;
+        std::uint16_t enemy_outpost_health = enemyOutpostHealth;
+        std::uint16_t self_health = myselfHealth;
+        std::uint16_t time_left = timeLeft;
+        BuffType team_buff = teamBuff;
+        if (GlobalBlackboard_) {
+            (void)GlobalBlackboard_->get("SelfOutpostHealth", self_outpost_health);
+            (void)GlobalBlackboard_->get("EnemyOutpostHealth", enemy_outpost_health);
+            (void)GlobalBlackboard_->get("SelfHealth", self_health);
+            (void)GlobalBlackboard_->get("TimeLeft", time_left);
+            (void)GlobalBlackboard_->get("TeamBuff", team_buff);
+        }
+
+        const StrategyMode current_strategy = GetStrategyMode();
+        StrategyMode next_strategy = current_strategy;
+        const bool low_resource = (self_health < 100 || time_left <= 120 ||
+                                   team_buff.RemainingEnergy == 0b10000 ||
+                                   team_buff.RemainingEnergy == 0b00000);
+        const bool sentry_window =
+            (enemy_outpost_health > 0 && self_outpost_health > 100 && now_time < 55);
+
+        // 开局保持初始策略，避免频繁抖动。
+        if (now_time < 10) {
+            SetStrategyMode(next_strategy);
+            return;
+        }
+        // NaviTest 保持与旧逻辑一致，直到脚本窗口结束。
+        if (current_strategy == StrategyMode::NaviTest && now_time < 340) {
+            SetStrategyMode(next_strategy);
+            return;
+        }
+
+        if (IsDecisionAutonomyModuleEnabled("strategy_mode")) {
+            const auto& strategy_autonomy = config.DecisionAutonomySettings.Strategy;
+            std::vector<StrategyMode> candidates;
+            candidates.reserve(strategy_autonomy.Candidates.size());
+            for (const auto& candidate : strategy_autonomy.Candidates) {
+                const auto mode = StrategyModeFromAutonomyToken(candidate);
+                if (!mode.has_value()) {
+                    continue;
+                }
+                if (std::find(candidates.begin(), candidates.end(), *mode) == candidates.end()) {
+                    candidates.push_back(*mode);
+                }
+            }
+            if (candidates.empty()) {
+                candidates = {StrategyMode::HitHero, StrategyMode::HitSentry, StrategyMode::Protected};
+            }
+
+            double best_score = -std::numeric_limits<double>::infinity();
+            std::optional<StrategyMode> best_mode;
+            for (const auto candidate : candidates) {
+                double score = 0.0;
+                switch (candidate) {
+                    case StrategyMode::HitHero:
+                        score += strategy_autonomy.HitHeroBias;
+                        break;
+                    case StrategyMode::HitSentry:
+                        score += strategy_autonomy.HitSentryBias;
+                        if (sentry_window) {
+                            score += strategy_autonomy.SentryWindowBonus;
+                        }
+                        if (enemy_outpost_health <= 0 || !sentry_window) {
+                            score -= strategy_autonomy.NoOutpostSentryPenalty;
+                        }
+                        break;
+                    case StrategyMode::Protected:
+                        score += strategy_autonomy.ProtectedBias;
+                        if (low_resource) {
+                            score += strategy_autonomy.LowResourceProtectedBonus;
+                        }
+                        if (time_left <= 120) {
+                            score += strategy_autonomy.TimePressureProtectedBonus;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                if (low_resource && candidate != StrategyMode::Protected) {
+                    score -= strategy_autonomy.LowResourceOffensePenalty;
+                }
+                if (candidate == current_strategy) {
+                    score += strategy_autonomy.CurrentStrategyBonus;
+                }
+                if (score > best_score) {
+                    best_score = score;
+                    best_mode = candidate;
+                }
+            }
+            if (best_mode.has_value()) {
+                next_strategy = *best_mode;
+            }
+        } else {
+            if (low_resource) {
+                next_strategy = StrategyMode::Protected;
+            } else if (sentry_window) {
+                next_strategy = StrategyMode::HitSentry;
+            } else {
+                next_strategy = StrategyMode::HitHero;
+            }
+        }
+
+        SetStrategyMode(next_strategy);
+        if (next_strategy != current_strategy) {
+            LoggerPtr->Info(
+                "StrategyMode switch: {} -> {} (autonomy={})",
+                StrategyModeToString(current_strategy),
+                StrategyModeToString(next_strategy),
+                IsDecisionAutonomyModuleEnabled("strategy_mode") ? 1 : 0);
+        }
+    }
+
     void Application::SetAimMode() {
         // int now_time = 420 - timeLeft;
         int now_time = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - gameStartTime).count();
@@ -683,21 +901,27 @@ namespace BehaviorTree {
     void Application::SetAimTarget() {
         UnitTeam MyTeam = team, EnemyTeam = team == UnitTeam::Blue ? UnitTeam::Red : UnitTeam::Blue;
         std::uint16_t nowx = friendRobots[UnitType::Sentry].position_.X, nowy = friendRobots[UnitType::Sentry].position_.Y;
+        const auto is_ignored_armor = [this](const ArmorType armor_type) -> bool {
+            return IsIgnoredArmorType(config.AimTargetIgnore, armor_type);
+        };
         if(aimMode == AimMode::Buff) { // 打符，修改为默认值
-            if(BehaviorTree::Area::BuffShoot.near(nowx, nowy, 100, MyTeam)) {
+            if(BehaviorTree::Area::BuffShoot.near(nowx, nowy, 100, MyTeam) &&
+               !is_ignored_armor(ArmorType::Hero)) {
                 targetArmor.Type = ArmorType::Hero;
             } else {
                 SetAimTargetNormal();
             }
         }else if(aimMode == AimMode::Outpost) { // 打前哨站
-            if(BehaviorTree::Area::OutpostShoot.near(nowx, nowy, 100, MyTeam)) {
+            if(BehaviorTree::Area::OutpostShoot.near(nowx, nowy, 100, MyTeam) &&
+               !is_ignored_armor(ArmorType::Outpost)) {
                 targetArmor.Type = ArmorType::Outpost;
             } else {
                 SetAimTargetNormal();
             }
         }else { // 普通模式
             if(naviCommandGoal == LangYa::HoleRoad(EnemyTeam)) { // 英雄点位1
-                if(BehaviorTree::Area::HoleRoad.near(nowx, nowy, 100, MyTeam)) {
+                if(BehaviorTree::Area::HoleRoad.near(nowx, nowy, 100, MyTeam) &&
+                   !is_ignored_armor(ArmorType::Hero)) {
                     targetArmor.Type = ArmorType::Hero;
                     targetArmor.Distance = enemyRobots[UnitType::Hero].distance_;
                 } else {
@@ -711,21 +935,119 @@ namespace BehaviorTree {
 
     }
 
+    bool Application::TrySetAimTargetByAutonomy() {
+        if (!IsDecisionAutonomyModuleEnabled("aim_target")) {
+            return false;
+        }
+
+        struct AimCandidate {
+            ArmorType Armor{ArmorType::UnKnown};
+            UnitType Unit{UnitType::Unknown};
+            float Distance{0.0f};
+            std::uint16_t Health{0U};
+        };
+
+        std::vector<AimCandidate> candidates;
+        candidates.reserve(hitableTargets.size());
+        std::uint16_t max_health = 1U;
+        for (const auto unit_type : hitableTargets) {
+            if (IsIgnoredUnitType(config.AimTargetIgnore, unit_type)) {
+                continue;
+            }
+            const auto armor_type = ArmorTypeFromUnitType(unit_type);
+            if (!armor_type.has_value()) {
+                continue;
+            }
+            const auto& robot = enemyRobots[unit_type];
+            candidates.push_back(AimCandidate{
+                .Armor = *armor_type,
+                .Unit = unit_type,
+                .Distance = robot.distance_,
+                .Health = robot.currentHealth_
+            });
+            max_health = std::max(max_health, robot.currentHealth_);
+        }
+        if (candidates.empty()) {
+            return false;
+        }
+
+        const auto& autonomy = config.DecisionAutonomySettings.AimTarget;
+        const auto get_priority_rank = [this](const ArmorType armor_type) {
+            const int armor_id = static_cast<int>(armor_type);
+            const auto it = std::find(config.AimTargetPriority.begin(), config.AimTargetPriority.end(), armor_id);
+            if (it == config.AimTargetPriority.end()) {
+                return static_cast<int>(config.AimTargetPriority.size());
+            }
+            return static_cast<int>(std::distance(config.AimTargetPriority.begin(), it));
+        };
+
+        double best_score = -std::numeric_limits<double>::infinity();
+        std::optional<AimCandidate> best_candidate;
+        for (const auto& candidate : candidates) {
+            const int rank = get_priority_rank(candidate.Armor);
+            const double priority_score = config.AimTargetPriority.empty()
+                ? 0.0
+                : static_cast<double>(config.AimTargetPriority.size() - rank) /
+                    static_cast<double>(config.AimTargetPriority.size());
+            const double distance_score = (std::isfinite(candidate.Distance) && candidate.Distance > 0.0f)
+                ? 1.0 / (0.1 + static_cast<double>(candidate.Distance))
+                : 0.0;
+            const double health_score = 1.0 -
+                static_cast<double>(candidate.Health) / static_cast<double>(std::max<std::uint16_t>(1U, max_health));
+
+            double score = 0.0;
+            score += autonomy.PriorityWeight * priority_score;
+            score += autonomy.DistanceWeight * distance_score;
+            score += autonomy.LowHealthWeight * health_score;
+            if (candidate.Armor == targetArmor.Type) {
+                score += autonomy.CurrentTargetBonus;
+            }
+            if (candidate.Armor == ArmorType::Hero) {
+                score += autonomy.HeroBonus;
+            } else if (candidate.Armor == ArmorType::Sentry) {
+                score += autonomy.SentryBonus;
+            }
+
+            if (score > best_score) {
+                best_score = score;
+                best_candidate = candidate;
+            }
+        }
+
+        if (!best_candidate.has_value()) {
+            return false;
+        }
+        targetArmor.Type = best_candidate->Armor;
+        targetArmor.Distance = best_candidate->Distance;
+        return true;
+    }
+
     void Application::SetAimTargetNormal() {
         auto set_target = [&](const ArmorType armor_type, const UnitType unit_type) {
             targetArmor.Type = armor_type;
             targetArmor.Distance = enemyRobots[unit_type].distance_;
         };
+        const auto is_armor_ignored = [this](const ArmorType armor_type) -> bool {
+            return IsIgnoredArmorType(config.AimTargetIgnore, armor_type);
+        };
         const auto has_target = [&](const UnitType unit_type) -> bool {
-            return std::find(hitableTargets.begin(), hitableTargets.end(), unit_type) != hitableTargets.end();
+            return !IsIgnoredUnitType(config.AimTargetIgnore, unit_type) &&
+                   std::find(hitableTargets.begin(), hitableTargets.end(), unit_type) != hitableTargets.end();
         };
         const bool infantry1_find = has_target(UnitType::Infantry1);
         const bool infantry2_find = has_target(UnitType::Infantry2);
+
+        if (TrySetAimTargetByAutonomy()) {
+            return;
+        }
 
         if (!hitableTargets.empty()) {
             for (const auto armor_id : config.AimTargetPriority) {
                 const auto armor_type = ArmorTypeFromPriorityId(armor_id);
                 if (!armor_type.has_value()) {
+                    continue;
+                }
+                if (is_armor_ignored(*armor_type)) {
                     continue;
                 }
                 if ((*armor_type == ArmorType::Infantry1 || *armor_type == ArmorType::Infantry2) &&
@@ -763,22 +1085,35 @@ namespace BehaviorTree {
             }
 
             // 配置优先级没有命中时，回退到最近目标
-            const auto nearest_it = std::min_element(
-                hitableTargets.begin(),
-                hitableTargets.end(),
-                [this](const UnitType lhs, const UnitType rhs) {
-                    return enemyRobots[lhs].distance_ < enemyRobots[rhs].distance_;
-                });
-            if (nearest_it != hitableTargets.end()) {
-                const auto armor_type = ArmorTypeFromUnitType(*nearest_it);
+            std::optional<UnitType> nearest_unit;
+            for (const auto unit_type : hitableTargets) {
+                if (IsIgnoredUnitType(config.AimTargetIgnore, unit_type)) {
+                    continue;
+                }
+                if (!nearest_unit.has_value() ||
+                    enemyRobots[unit_type].distance_ < enemyRobots[*nearest_unit].distance_) {
+                    nearest_unit = unit_type;
+                }
+            }
+            if (nearest_unit.has_value()) {
+                const auto armor_type = ArmorTypeFromUnitType(*nearest_unit);
                 if (armor_type.has_value()) {
-                    set_target(*armor_type, *nearest_it);
+                    set_target(*armor_type, *nearest_unit);
                     return;
                 }
             }
         }
 
-        targetArmor.Type = ArmorType::Hero;
+        for (const auto armor_id : config.AimTargetPriority) {
+            const auto armor_type = ArmorTypeFromPriorityId(armor_id);
+            if (!armor_type.has_value() || is_armor_ignored(*armor_type)) {
+                continue;
+            }
+            targetArmor.Type = *armor_type;
+            targetArmor.Distance = 30;
+            return;
+        }
+        targetArmor.Type = ArmorType::UnKnown;
         targetArmor.Distance = 30;
     }
 
@@ -1434,6 +1769,178 @@ namespace BehaviorTree {
         return false;
     }
 
+    bool Application::TrySetNaviGoalByAutonomy(
+        const StrategyMode strategy_mode,
+        const UnitTeam my_team,
+        const UnitTeam enemy_team) {
+        const auto& autonomy = config.DecisionAutonomySettings;
+        const auto& enabled_modules = autonomy.EnabledModules;
+        const bool has_specific_filter =
+            HasAutonomyToken(enabled_modules, "navi_goal_hit_hero") ||
+            HasAutonomyToken(enabled_modules, "navi_goal_hit_sentry") ||
+            HasAutonomyToken(enabled_modules, "navi_goal_protect");
+        const char* specific_module = nullptr;
+        switch (strategy_mode) {
+            case StrategyMode::HitHero:
+                specific_module = "navi_goal_hit_hero";
+                break;
+            case StrategyMode::HitSentry:
+                specific_module = "navi_goal_hit_sentry";
+                break;
+            case StrategyMode::Protected:
+                specific_module = "navi_goal_protect";
+                break;
+            default:
+                return false;
+        }
+        const bool base_enabled = IsDecisionAutonomyModuleEnabled("navi_goal");
+        const bool specific_enabled = IsDecisionAutonomyModuleEnabled(specific_module);
+        if (!base_enabled && !specific_enabled) {
+            return false;
+        }
+        if (has_specific_filter && !specific_enabled && !HasAutonomyToken(enabled_modules, "all")) {
+            return false;
+        }
+
+        const auto& navi_autonomy = autonomy.NaviGoal;
+        std::vector<NaviGoalOption> options;
+        if (navi_autonomy.UseCustomCandidates) {
+            switch (strategy_mode) {
+                case StrategyMode::HitHero:
+                    options = navi_autonomy.HitHeroCandidates;
+                    break;
+                case StrategyMode::HitSentry:
+                    options = navi_autonomy.HitSentryCandidates;
+                    break;
+                case StrategyMode::Protected:
+                    options = navi_autonomy.ProtectCandidates;
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (options.empty()) {
+            if (strategy_mode == StrategyMode::HitHero || strategy_mode == StrategyMode::HitSentry) {
+                options = {
+                    NaviGoalOption{LangYa::MidShoot.ID, "my", 0.0, true},
+                    NaviGoalOption{LangYa::BuffAround1.ID, "my", 0.0, true},
+                    NaviGoalOption{LangYa::BuffAround2.ID, "my", 0.0, true},
+                    NaviGoalOption{LangYa::RightShoot.ID, "my", 0.0, true},
+                    NaviGoalOption{LangYa::MidShoot.ID, "enemy", 0.0, true},
+                    NaviGoalOption{LangYa::BuffAround1.ID, "enemy", 0.0, true},
+                    NaviGoalOption{LangYa::BuffAround2.ID, "enemy", 0.0, true},
+                    NaviGoalOption{LangYa::RightShoot.ID, "enemy", 0.0, true},
+                    NaviGoalOption{LangYa::LeftShoot.ID, "enemy", 0.0, true}
+                };
+            } else if (strategy_mode == StrategyMode::Protected) {
+                options = {
+                    NaviGoalOption{LangYa::CastleLeft.ID, "my", 0.0, true},
+                    NaviGoalOption{LangYa::CastleRight1.ID, "my", 0.0, true},
+                    NaviGoalOption{LangYa::CastleRight2.ID, "my", 0.0, true},
+                    NaviGoalOption{LangYa::BuffShoot.ID, "my", 0.2, true}
+                };
+            }
+        }
+        if (options.empty()) {
+            return false;
+        }
+
+        std::vector<RuntimeNaviGoalCandidate> candidates;
+        candidates.reserve(options.size());
+        for (const auto& option : options) {
+            if (!option.Enable) {
+                continue;
+            }
+            if (!IsValidBaseGoalId(option.GoalId)) {
+                continue;
+            }
+            candidates.push_back(RuntimeNaviGoalCandidate{
+                .BaseGoalId = option.GoalId,
+                .Team = NormalizeDecisionModule(option.Team) == "enemy" ? enemy_team : my_team,
+                .Bias = option.Bias
+            });
+        }
+        if (candidates.empty()) {
+            return false;
+        }
+
+        const int self_x = static_cast<int>(friendRobots[UnitType::Sentry].position_.X);
+        const int self_y = static_cast<int>(friendRobots[UnitType::Sentry].position_.Y);
+        const bool self_pos_valid = self_x >= 0 && self_y >= 0;
+        const int hero_x = static_cast<int>(enemyRobots[UnitType::Hero].position_.X);
+        const int hero_y = static_cast<int>(enemyRobots[UnitType::Hero].position_.Y);
+        const bool hero_pos_valid = hero_x >= 0 && hero_y >= 0;
+        const bool low_energy =
+            (teamBuff.RemainingEnergy == 0b10000 || teamBuff.RemainingEnergy == 0b00000);
+        const bool low_outpost = selfOutpostHealth <= 200;
+
+        double best_score = -std::numeric_limits<double>::infinity();
+        std::optional<RuntimeNaviGoalCandidate> best_candidate;
+        for (const auto& candidate : candidates) {
+            const auto goal_point = GoalPointByBaseId(candidate.BaseGoalId, candidate.Team);
+            double score = navi_autonomy.GoalBiasWeight * candidate.Bias;
+            if (self_pos_valid) {
+                const double dx = static_cast<double>(goal_point.x) - static_cast<double>(self_x);
+                const double dy = static_cast<double>(goal_point.y) - static_cast<double>(self_y);
+                const double distance = std::sqrt(dx * dx + dy * dy);
+                score -= navi_autonomy.DistanceWeight * (distance * 0.001);
+            }
+            if (candidate.Team == enemy_team) {
+                score += navi_autonomy.EnemyTeamBonus;
+            }
+            if (naviCommandGoal == ResolveGoalId(candidate.BaseGoalId, candidate.Team, true)) {
+                score += navi_autonomy.CurrentGoalBonus;
+            }
+            if (low_energy) {
+                if (candidate.Team == my_team) {
+                    score += navi_autonomy.LowEnergyOwnSideBonus;
+                } else {
+                    score -= navi_autonomy.LowEnergyEnemyPenalty;
+                }
+            }
+            if (low_outpost && candidate.Team == my_team) {
+                score += navi_autonomy.LowOutpostOwnSideBonus;
+            }
+            if (hero_pos_valid) {
+                const double hdx = static_cast<double>(goal_point.x) - static_cast<double>(hero_x);
+                const double hdy = static_cast<double>(goal_point.y) - static_cast<double>(hero_y);
+                const double hero_distance = std::sqrt(hdx * hdx + hdy * hdy);
+                score += navi_autonomy.HeroProximityWeight / (1.0 + hero_distance * 0.01);
+            }
+
+            if (score > best_score) {
+                best_score = score;
+                best_candidate = candidate;
+            }
+        }
+        if (!best_candidate.has_value()) {
+            return false;
+        }
+
+        SetPositionByBaseGoal(best_candidate->BaseGoalId, best_candidate->Team, true);
+
+        int hold_sec = 10;
+        if (strategy_mode == StrategyMode::Protected) {
+            hold_sec = (best_candidate->BaseGoalId == LangYa::BuffShoot.ID &&
+                        best_candidate->Team == my_team)
+                ? 30
+                : 10;
+        } else if (best_candidate->Team == enemy_team &&
+                   (best_candidate->BaseGoalId == LangYa::MidShoot.ID ||
+                    best_candidate->BaseGoalId == LangYa::LeftShoot.ID)) {
+            hold_sec = 8;
+        }
+        naviCommandIntervalClock.reset(Seconds{hold_sec});
+        LoggerPtr->Info(
+            "DecisionAutonomy[navi_goal]: strategy={} pick_goal={} team={} score={:.3f} hold={}s",
+            StrategyModeToString(strategy_mode),
+            static_cast<int>(naviCommandGoal),
+            best_candidate->Team == my_team ? "my" : "enemy",
+            best_score,
+            hold_sec);
+        return true;
+    }
+
     void Application::SetPositionProtect() {
         UnitTeam MyTeam = team, EnemyTeam = team == UnitTeam::Blue ? UnitTeam::Red : UnitTeam::Blue;
         int now_time = 420 - timeLeft;
@@ -1460,8 +1967,8 @@ namespace BehaviorTree {
             naviCommandIntervalClock.reset(Seconds(2));
             // speedLevel = 1; // 正常
         }else { //普通模式
-            Random random;
-            
+            if (!TrySetNaviGoalByAutonomy(StrategyMode::Protected, MyTeam, EnemyTeam)) {
+                Random random;
                 int random_number = random.Get(0, 6);
                 if (random_number == 0) SET_POSITION(CastleLeft, MyTeam);
                 else if (random_number == 1) SET_POSITION(CastleRight1, MyTeam);
@@ -1469,6 +1976,7 @@ namespace BehaviorTree {
                 else SET_POSITION(BuffShoot, MyTeam);
                 if(naviCommandGoal == BuffShoot(MyTeam)) naviCommandIntervalClock.reset(Seconds{30});
                 else naviCommandIntervalClock.reset(Seconds(10));
+            }
             // 时间超过5分钟 或 底盘能量低于5%
             if(now_time > 300 || 
                  
@@ -1548,7 +2056,8 @@ namespace BehaviorTree {
             naviCommandIntervalClock.reset(Seconds(2));
             // speedLevel = 1;
         }else { //普通模式
-            Random random;
+            if (!TrySetNaviGoalByAutonomy(StrategyMode::HitSentry, MyTeam, EnemyTeam)) {
+                Random random;
 
                 // if(!hitableTargets.empty()) { // 视野里存在目标
                 //     bool low_health_enemy = false;
@@ -1572,26 +2081,25 @@ namespace BehaviorTree {
                     LoggerPtr->Debug("Infantry2 in Highland");
                 }
                 
-
-
-                    if(selfOutpostHealth > 100 && now_time < 55 ) {
-                        int random_number = random.Get(0, 8);
-                        if(random_number == 0) SET_POSITION(MidShoot, MyTeam);
-                        else if(random_number == 1) SET_POSITION(BuffAround1, MyTeam);
-                        else if(random_number == 2) SET_POSITION(BuffAround2, MyTeam);
-                        else if(random_number == 3) SET_POSITION(RightShoot, MyTeam);
-                        else if(random_number == 4) SET_POSITION(MidShoot, EnemyTeam);
-                        else if(random_number == 5) SET_POSITION(BuffAround1, EnemyTeam);
-                        else if(random_number == 6) SET_POSITION(BuffAround2, EnemyTeam);
-                        else if(random_number == 7) SET_POSITION(RightShoot, EnemyTeam);
-                        else if(random_number == 8) SET_POSITION(LeftShoot, EnemyTeam);
-                        if(naviCommandGoal == MidShoot(EnemyTeam) || naviCommandGoal == LeftShoot(EnemyTeam))
-                            naviCommandIntervalClock.reset(Seconds(8));
-                        else naviCommandIntervalClock.reset(Seconds(10));
-                    }else {
-                        SET_POSITION(FlyRoad, EnemyTeam);
-                        naviCommandIntervalClock.reset(Seconds(10));
-                    }
+                if(selfOutpostHealth > 100 && now_time < 55 ) {
+                    int random_number = random.Get(0, 8);
+                    if(random_number == 0) SET_POSITION(MidShoot, MyTeam);
+                    else if(random_number == 1) SET_POSITION(BuffAround1, MyTeam);
+                    else if(random_number == 2) SET_POSITION(BuffAround2, MyTeam);
+                    else if(random_number == 3) SET_POSITION(RightShoot, MyTeam);
+                    else if(random_number == 4) SET_POSITION(MidShoot, EnemyTeam);
+                    else if(random_number == 5) SET_POSITION(BuffAround1, EnemyTeam);
+                    else if(random_number == 6) SET_POSITION(BuffAround2, EnemyTeam);
+                    else if(random_number == 7) SET_POSITION(RightShoot, EnemyTeam);
+                    else if(random_number == 8) SET_POSITION(LeftShoot, EnemyTeam);
+                    if(naviCommandGoal == MidShoot(EnemyTeam) || naviCommandGoal == LeftShoot(EnemyTeam))
+                        naviCommandIntervalClock.reset(Seconds(8));
+                    else naviCommandIntervalClock.reset(Seconds(10));
+                }else {
+                    SET_POSITION(FlyRoad, EnemyTeam);
+                    naviCommandIntervalClock.reset(Seconds(10));
+                }
+            }
                     
              // 底盘能量低于5%
             if(teamBuff.RemainingEnergy == 0b10000 || teamBuff.RemainingEnergy == 0b00000) {
@@ -1640,56 +2148,60 @@ namespace BehaviorTree {
             // speedLevel = 1;
         }else { //普通模式
             Random random;
-            // 判断英雄是否处于高地
-            bool hero_in_central = false;
-            std::int16_t hero_x = enemyRobots[UnitType::Hero].position_.X, hero_y = enemyRobots[UnitType::Hero].position_.Y;
-            hero_in_central = Area::CentralHighLandRed.isPointInside(hero_x, hero_y) || Area::CentralHighLandBlue.isPointInside(hero_x, hero_y);
+            const bool selected_by_autonomy =
+                TrySetNaviGoalByAutonomy(StrategyMode::HitHero, MyTeam, EnemyTeam);
+            if (!selected_by_autonomy) {
+                // 判断英雄是否处于高地
+                bool hero_in_central = false;
+                std::int16_t hero_x = enemyRobots[UnitType::Hero].position_.X, hero_y = enemyRobots[UnitType::Hero].position_.Y;
+                hero_in_central = Area::CentralHighLandRed.isPointInside(hero_x, hero_y) || Area::CentralHighLandBlue.isPointInside(hero_x, hero_y);
 
-            if(hero_in_central) {
-                LoggerPtr->Debug("!!!Hero in highland!!!");
-                SET_POSITION(BuffAround1, MyTeam);
-            }else {
-                if(selfOutpostHealth > 200) {
-                    int redpx = 982, redpy = 1124;
-                    int dx = redpx - enemyRobots[UnitType::Hero].position_.X, dy = redpy - enemyRobots[UnitType::Hero].position_.Y;
-                    int len = std::sqrt(dx * dx + dy * dy);
-                    if(len < 100) {
-                        SET_POSITION(HoleRoad, EnemyTeam);
-                        naviCommandIntervalClock.reset(Seconds(2));
-                    }else {
-                        int random_number = random.Get(0, 8);
-                        if(random_number == 0) SET_POSITION(MidShoot, MyTeam);
-                        else if(random_number == 1) SET_POSITION(BuffAround1, MyTeam);
-                        else if(random_number == 2) SET_POSITION(BuffAround2, MyTeam);
-                        else if(random_number == 3) SET_POSITION(RightShoot, MyTeam);
-                        else if(random_number == 4) SET_POSITION(MidShoot, EnemyTeam);
-                        else if(random_number == 5) SET_POSITION(BuffAround1, EnemyTeam);
-                        else if(random_number == 6) SET_POSITION(BuffAround2, EnemyTeam);
-                        else if(random_number == 7) SET_POSITION(RightShoot, EnemyTeam);
-                        else if(random_number == 8) SET_POSITION(LeftShoot, EnemyTeam);
-                        if(naviCommandGoal == MidShoot(EnemyTeam) || naviCommandGoal == LeftShoot(EnemyTeam))
-                            naviCommandIntervalClock.reset(Seconds(8));
-                        else naviCommandIntervalClock.reset(Seconds(10));
-                    }
+                if(hero_in_central) {
+                    LoggerPtr->Debug("!!!Hero in highland!!!");
+                    SET_POSITION(BuffAround1, MyTeam);
                 }else {
-                    if(selfBaseHealth > 2000){
-                        SET_POSITION(HoleRoad, EnemyTeam);
-                        naviCommandIntervalClock.reset(Seconds(2));
-                    }
-                    else {
-                        int random_number = random.Get(0, 8);
-                        if(random_number == 0) SET_POSITION(MidShoot, MyTeam);
-                        else if(random_number == 1) SET_POSITION(BuffAround1, MyTeam);
-                        else if(random_number == 2) SET_POSITION(BuffAround2, MyTeam);
-                        else if(random_number == 3) SET_POSITION(RightShoot, MyTeam);
-                        else if(random_number == 4) SET_POSITION(MidShoot, EnemyTeam);
-                        else if(random_number == 5) SET_POSITION(BuffAround1, EnemyTeam);
-                        else if(random_number == 6) SET_POSITION(BuffAround2, EnemyTeam);
-                        else if(random_number == 7) SET_POSITION(RightShoot, EnemyTeam);
-                        else if(random_number == 8) SET_POSITION(LeftShoot, EnemyTeam);
-                        if(naviCommandGoal == MidShoot(EnemyTeam) || naviCommandGoal == LeftShoot(EnemyTeam))
-                            naviCommandIntervalClock.reset(Seconds(8));
-                        else naviCommandIntervalClock.reset(Seconds(10));
+                    if(selfOutpostHealth > 200) {
+                        int redpx = 982, redpy = 1124;
+                        int dx = redpx - enemyRobots[UnitType::Hero].position_.X, dy = redpy - enemyRobots[UnitType::Hero].position_.Y;
+                        int len = std::sqrt(dx * dx + dy * dy);
+                        if(len < 100) {
+                            SET_POSITION(HoleRoad, EnemyTeam);
+                            naviCommandIntervalClock.reset(Seconds(2));
+                        }else {
+                            int random_number = random.Get(0, 8);
+                            if(random_number == 0) SET_POSITION(MidShoot, MyTeam);
+                            else if(random_number == 1) SET_POSITION(BuffAround1, MyTeam);
+                            else if(random_number == 2) SET_POSITION(BuffAround2, MyTeam);
+                            else if(random_number == 3) SET_POSITION(RightShoot, MyTeam);
+                            else if(random_number == 4) SET_POSITION(MidShoot, EnemyTeam);
+                            else if(random_number == 5) SET_POSITION(BuffAround1, EnemyTeam);
+                            else if(random_number == 6) SET_POSITION(BuffAround2, EnemyTeam);
+                            else if(random_number == 7) SET_POSITION(RightShoot, EnemyTeam);
+                            else if(random_number == 8) SET_POSITION(LeftShoot, EnemyTeam);
+                            if(naviCommandGoal == MidShoot(EnemyTeam) || naviCommandGoal == LeftShoot(EnemyTeam))
+                                naviCommandIntervalClock.reset(Seconds(8));
+                            else naviCommandIntervalClock.reset(Seconds(10));
+                        }
+                    }else {
+                        if(selfBaseHealth > 2000){
+                            SET_POSITION(HoleRoad, EnemyTeam);
+                            naviCommandIntervalClock.reset(Seconds(2));
+                        }
+                        else {
+                            int random_number = random.Get(0, 8);
+                            if(random_number == 0) SET_POSITION(MidShoot, MyTeam);
+                            else if(random_number == 1) SET_POSITION(BuffAround1, MyTeam);
+                            else if(random_number == 2) SET_POSITION(BuffAround2, MyTeam);
+                            else if(random_number == 3) SET_POSITION(RightShoot, MyTeam);
+                            else if(random_number == 4) SET_POSITION(MidShoot, EnemyTeam);
+                            else if(random_number == 5) SET_POSITION(BuffAround1, EnemyTeam);
+                            else if(random_number == 6) SET_POSITION(BuffAround2, EnemyTeam);
+                            else if(random_number == 7) SET_POSITION(RightShoot, EnemyTeam);
+                            else if(random_number == 8) SET_POSITION(LeftShoot, EnemyTeam);
+                            if(naviCommandGoal == MidShoot(EnemyTeam) || naviCommandGoal == LeftShoot(EnemyTeam))
+                                naviCommandIntervalClock.reset(Seconds(8));
+                            else naviCommandIntervalClock.reset(Seconds(10));
+                        }
                     }
                 }
             }

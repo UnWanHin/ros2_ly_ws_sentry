@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sentry BT Framework"
+  short_description: "Behavior tree decision chain mapping and safe edits"
+  default_prompt: "Analyze and modify the ROS2 sentry behavior_tree decision framework with evidence-first chain tracing, config/launch verification, and minimal-risk topic-stable changes."

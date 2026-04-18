@@ -16,6 +16,16 @@ std::string NormalizeProfile(std::string value) {
     return value;
 }
 
+std::string NormalizeAutonomyToken(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        if (c == '-' || c == ' ') {
+            return '_';
+        }
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
 BehaviorTree::CompetitionProfile ParseCompetitionProfile(const std::string& value) {
     const auto normalized = NormalizeProfile(value);
     if (normalized == "league") {
@@ -268,6 +278,77 @@ namespace LangYa {
         ps.ScoreHysteresis = j.value("ScoreHysteresis", ps.ScoreHysteresis);
     }
 
+    void from_json(const json& j, StrategyAutonomySetting& sa) {
+        if (j.contains("Candidates")) {
+            j.at("Candidates").get_to(sa.Candidates);
+        }
+        sa.HitHeroBias = j.value("HitHeroBias", sa.HitHeroBias);
+        sa.HitSentryBias = j.value("HitSentryBias", sa.HitSentryBias);
+        sa.ProtectedBias = j.value("ProtectedBias", sa.ProtectedBias);
+        sa.LowResourceProtectedBonus = j.value("LowResourceProtectedBonus", sa.LowResourceProtectedBonus);
+        sa.LowResourceOffensePenalty = j.value("LowResourceOffensePenalty", sa.LowResourceOffensePenalty);
+        sa.SentryWindowBonus = j.value("SentryWindowBonus", sa.SentryWindowBonus);
+        sa.NoOutpostSentryPenalty = j.value("NoOutpostSentryPenalty", sa.NoOutpostSentryPenalty);
+        sa.TimePressureProtectedBonus = j.value("TimePressureProtectedBonus", sa.TimePressureProtectedBonus);
+        sa.CurrentStrategyBonus = j.value("CurrentStrategyBonus", sa.CurrentStrategyBonus);
+    }
+
+    void from_json(const json& j, NaviGoalOption& option) {
+        option.GoalId = j.value("GoalId", option.GoalId);
+        option.Team = j.value("Team", option.Team);
+        option.Bias = j.value("Bias", option.Bias);
+        option.Enable = j.value("Enable", option.Enable);
+    }
+
+    void from_json(const json& j, NaviGoalAutonomySetting& na) {
+        na.UseCustomCandidates = j.value("UseCustomCandidates", na.UseCustomCandidates);
+        if (j.contains("HitHeroCandidates")) {
+            j.at("HitHeroCandidates").get_to(na.HitHeroCandidates);
+        }
+        if (j.contains("HitSentryCandidates")) {
+            j.at("HitSentryCandidates").get_to(na.HitSentryCandidates);
+        }
+        if (j.contains("ProtectCandidates")) {
+            j.at("ProtectCandidates").get_to(na.ProtectCandidates);
+        }
+        na.DistanceWeight = j.value("DistanceWeight", na.DistanceWeight);
+        na.EnemyTeamBonus = j.value("EnemyTeamBonus", na.EnemyTeamBonus);
+        na.HeroProximityWeight = j.value("HeroProximityWeight", na.HeroProximityWeight);
+        na.CurrentGoalBonus = j.value("CurrentGoalBonus", na.CurrentGoalBonus);
+        na.LowEnergyOwnSideBonus = j.value("LowEnergyOwnSideBonus", na.LowEnergyOwnSideBonus);
+        na.LowEnergyEnemyPenalty = j.value("LowEnergyEnemyPenalty", na.LowEnergyEnemyPenalty);
+        na.LowOutpostOwnSideBonus = j.value("LowOutpostOwnSideBonus", na.LowOutpostOwnSideBonus);
+        na.GoalBiasWeight = j.value("GoalBiasWeight", na.GoalBiasWeight);
+    }
+
+    void from_json(const json& j, AimTargetAutonomySetting& aa) {
+        aa.PriorityWeight = j.value("PriorityWeight", aa.PriorityWeight);
+        aa.DistanceWeight = j.value("DistanceWeight", aa.DistanceWeight);
+        aa.LowHealthWeight = j.value("LowHealthWeight", aa.LowHealthWeight);
+        aa.CurrentTargetBonus = j.value("CurrentTargetBonus", aa.CurrentTargetBonus);
+        aa.HeroBonus = j.value("HeroBonus", aa.HeroBonus);
+        aa.SentryBonus = j.value("SentryBonus", aa.SentryBonus);
+    }
+
+    void from_json(const json& j, DecisionAutonomySetting& da) {
+        da.Enable = j.value("Enable", da.Enable);
+        if (j.contains("EnabledModules")) {
+            j.at("EnabledModules").get_to(da.EnabledModules);
+        }
+        if (j.contains("HardRuleModules")) {
+            j.at("HardRuleModules").get_to(da.HardRuleModules);
+        }
+        if (j.contains("Strategy")) {
+            j.at("Strategy").get_to(da.Strategy);
+        }
+        if (j.contains("NaviGoal")) {
+            j.at("NaviGoal").get_to(da.NaviGoal);
+        }
+        if (j.contains("AimTarget")) {
+            j.at("AimTarget").get_to(da.AimTarget);
+        }
+    }
+
     void from_json(const json& j, Config& c) {
         if (j.contains("AimDebug")) {
             j.at("AimDebug").get_to(c.AimDebugSettings);
@@ -293,6 +374,12 @@ namespace LangYa {
         }
         if (j.contains("AimTargetPriority")) {
             j.at("AimTargetPriority").get_to(c.AimTargetPriority);
+        }
+        if (j.contains("AimTargetIgnore")) {
+            j.at("AimTargetIgnore").get_to(c.AimTargetIgnore);
+        }
+        if (j.contains("DecisionAutonomy")) {
+            j.at("DecisionAutonomy").get_to(c.DecisionAutonomySettings);
         }
         if (j.contains("Chase")) {
             j.at("Chase").get_to(c.ChaseSettings);
@@ -375,6 +462,37 @@ namespace BehaviorTree {
         for (const auto armor_id : config.AimTargetPriority) {
             LoggerPtr->Debug("ArmorTypeId: {}", armor_id);
         }
+        LoggerPtr->Debug("------ AimTargetIgnore ------");
+        for (const auto armor_id : config.AimTargetIgnore) {
+            LoggerPtr->Debug("ArmorTypeId: {}", armor_id);
+        }
+        LoggerPtr->Debug("------ DecisionAutonomy ------");
+        LoggerPtr->Debug("Enable: {}", config.DecisionAutonomySettings.Enable);
+        LoggerPtr->Debug("EnabledModules:");
+        for (const auto& module : config.DecisionAutonomySettings.EnabledModules) {
+            LoggerPtr->Debug("  {}", module);
+        }
+        LoggerPtr->Debug("HardRuleModules:");
+        for (const auto& module : config.DecisionAutonomySettings.HardRuleModules) {
+            LoggerPtr->Debug("  {}", module);
+        }
+        LoggerPtr->Debug(
+            "StrategyBias(Hero/Sentry/Protected): {}/{}/{}",
+            config.DecisionAutonomySettings.Strategy.HitHeroBias,
+            config.DecisionAutonomySettings.Strategy.HitSentryBias,
+            config.DecisionAutonomySettings.Strategy.ProtectedBias);
+        LoggerPtr->Debug(
+            "NaviGoalWeights(distance/enemy_bonus/hero_proximity/current_goal): {}/{}/{}/{}",
+            config.DecisionAutonomySettings.NaviGoal.DistanceWeight,
+            config.DecisionAutonomySettings.NaviGoal.EnemyTeamBonus,
+            config.DecisionAutonomySettings.NaviGoal.HeroProximityWeight,
+            config.DecisionAutonomySettings.NaviGoal.CurrentGoalBonus);
+        LoggerPtr->Debug(
+            "AimTargetWeights(priority/distance/low_health/current_target): {}/{}/{}/{}",
+            config.DecisionAutonomySettings.AimTarget.PriorityWeight,
+            config.DecisionAutonomySettings.AimTarget.DistanceWeight,
+            config.DecisionAutonomySettings.AimTarget.LowHealthWeight,
+            config.DecisionAutonomySettings.AimTarget.CurrentTargetBonus);
         LoggerPtr->Debug("------ Chase ------");
         LoggerPtr->Debug("Enable: {}", config.ChaseSettings.Enable);
         LoggerPtr->Debug("FollowAimTarget: {}", config.ChaseSettings.FollowAimTarget);
@@ -594,6 +712,154 @@ namespace BehaviorTree {
             sanitized_aim_target_priority = default_aim_target_priority;
         }
         config.AimTargetPriority = std::move(sanitized_aim_target_priority);
+
+        const auto is_valid_armor_ignore = [](const int armor_id) -> bool {
+            switch (static_cast<ArmorType>(armor_id)) {
+                case ArmorType::Hero:
+                case ArmorType::Engineer:
+                case ArmorType::Infantry1:
+                case ArmorType::Infantry2:
+                case ArmorType::Sentry:
+                case ArmorType::Outpost:
+                    return true;
+                default:
+                    return false;
+            }
+        };
+        std::vector<int> sanitized_aim_target_ignore;
+        sanitized_aim_target_ignore.reserve(config.AimTargetIgnore.size());
+        for (const auto armor_id : config.AimTargetIgnore) {
+            if (!is_valid_armor_ignore(armor_id)) {
+                LoggerPtr->Warning("Ignore invalid AimTargetIgnore item={}.", armor_id);
+                continue;
+            }
+            if (std::find(sanitized_aim_target_ignore.begin(),
+                          sanitized_aim_target_ignore.end(),
+                          armor_id) != sanitized_aim_target_ignore.end()) {
+                continue;
+            }
+            sanitized_aim_target_ignore.push_back(armor_id);
+        }
+        config.AimTargetIgnore = std::move(sanitized_aim_target_ignore);
+
+        auto sanitize_module_list = [](const std::vector<std::string>& input_modules) {
+            std::vector<std::string> output_modules;
+            output_modules.reserve(input_modules.size());
+            for (auto module : input_modules) {
+                module = NormalizeAutonomyToken(std::move(module));
+                if (module.empty()) {
+                    continue;
+                }
+                if (std::find(output_modules.begin(), output_modules.end(), module) != output_modules.end()) {
+                    continue;
+                }
+                output_modules.push_back(std::move(module));
+            }
+            return output_modules;
+        };
+        config.DecisionAutonomySettings.EnabledModules =
+            sanitize_module_list(config.DecisionAutonomySettings.EnabledModules);
+        config.DecisionAutonomySettings.HardRuleModules =
+            sanitize_module_list(config.DecisionAutonomySettings.HardRuleModules);
+        if (config.DecisionAutonomySettings.EnabledModules.empty()) {
+            config.DecisionAutonomySettings.EnabledModules = {"strategy_mode", "navi_goal", "aim_target"};
+        }
+
+        auto sanitize_strategy_candidate = [](std::string value) {
+            value = NormalizeAutonomyToken(std::move(value));
+            if (value == "hithero" || value == "hit_hero" || value == "hero") {
+                return std::string("hithero");
+            }
+            if (value == "hitsentry" || value == "hit_sentry" || value == "sentry") {
+                return std::string("hitsentry");
+            }
+            if (value == "protected" || value == "protect") {
+                return std::string("protected");
+            }
+            return std::string{};
+        };
+        std::vector<std::string> sanitized_strategy_candidates;
+        sanitized_strategy_candidates.reserve(config.DecisionAutonomySettings.Strategy.Candidates.size());
+        for (const auto& candidate : config.DecisionAutonomySettings.Strategy.Candidates) {
+            const auto normalized = sanitize_strategy_candidate(candidate);
+            if (normalized.empty()) {
+                continue;
+            }
+            if (std::find(sanitized_strategy_candidates.begin(),
+                          sanitized_strategy_candidates.end(),
+                          normalized) == sanitized_strategy_candidates.end()) {
+                sanitized_strategy_candidates.push_back(normalized);
+            }
+        }
+        if (sanitized_strategy_candidates.empty()) {
+            sanitized_strategy_candidates = {"hithero", "hitsentry", "protected"};
+        }
+        config.DecisionAutonomySettings.Strategy.Candidates = std::move(sanitized_strategy_candidates);
+
+        auto sanitize_goal_options = [this](const std::vector<NaviGoalOption>& options,
+                                            const char* option_name) {
+            std::vector<NaviGoalOption> sanitized_options;
+            sanitized_options.reserve(options.size());
+            for (auto option : options) {
+                if (!option.Enable) {
+                    continue;
+                }
+                if (!IsValidBaseGoal(option.GoalId)) {
+                    LoggerPtr->Warning("Ignore invalid DecisionAutonomy.{}.GoalId={}.",
+                                       option_name, static_cast<int>(option.GoalId));
+                    continue;
+                }
+                option.Team = NormalizeAutonomyToken(std::move(option.Team));
+                if (option.Team != "my" && option.Team != "enemy") {
+                    LoggerPtr->Warning("Ignore invalid DecisionAutonomy.{}.Team='{}'.",
+                                       option_name, option.Team);
+                    continue;
+                }
+                sanitized_options.push_back(std::move(option));
+            }
+            return sanitized_options;
+        };
+        auto& autonomy = config.DecisionAutonomySettings;
+        autonomy.NaviGoal.HitHeroCandidates =
+            sanitize_goal_options(autonomy.NaviGoal.HitHeroCandidates, "NaviGoal.HitHeroCandidates");
+        autonomy.NaviGoal.HitSentryCandidates =
+            sanitize_goal_options(autonomy.NaviGoal.HitSentryCandidates, "NaviGoal.HitSentryCandidates");
+        autonomy.NaviGoal.ProtectCandidates =
+            sanitize_goal_options(autonomy.NaviGoal.ProtectCandidates, "NaviGoal.ProtectCandidates");
+        if (autonomy.NaviGoal.UseCustomCandidates &&
+            autonomy.NaviGoal.HitHeroCandidates.empty() &&
+            autonomy.NaviGoal.HitSentryCandidates.empty() &&
+            autonomy.NaviGoal.ProtectCandidates.empty()) {
+            LoggerPtr->Warning("DecisionAutonomy.NaviGoal.UseCustomCandidates=true but no valid candidates, fallback to built-in candidates.");
+            autonomy.NaviGoal.UseCustomCandidates = false;
+        }
+
+        auto clamp_non_negative = [this](double& value, const char* key_name) {
+            if (value < 0.0) {
+                LoggerPtr->Warning("Invalid {}={}, clamp to 0.", key_name, value);
+                value = 0.0;
+            }
+        };
+        clamp_non_negative(autonomy.Strategy.LowResourceProtectedBonus, "DecisionAutonomy.Strategy.LowResourceProtectedBonus");
+        clamp_non_negative(autonomy.Strategy.LowResourceOffensePenalty, "DecisionAutonomy.Strategy.LowResourceOffensePenalty");
+        clamp_non_negative(autonomy.Strategy.SentryWindowBonus, "DecisionAutonomy.Strategy.SentryWindowBonus");
+        clamp_non_negative(autonomy.Strategy.NoOutpostSentryPenalty, "DecisionAutonomy.Strategy.NoOutpostSentryPenalty");
+        clamp_non_negative(autonomy.Strategy.TimePressureProtectedBonus, "DecisionAutonomy.Strategy.TimePressureProtectedBonus");
+        clamp_non_negative(autonomy.Strategy.CurrentStrategyBonus, "DecisionAutonomy.Strategy.CurrentStrategyBonus");
+        clamp_non_negative(autonomy.NaviGoal.DistanceWeight, "DecisionAutonomy.NaviGoal.DistanceWeight");
+        clamp_non_negative(autonomy.NaviGoal.EnemyTeamBonus, "DecisionAutonomy.NaviGoal.EnemyTeamBonus");
+        clamp_non_negative(autonomy.NaviGoal.HeroProximityWeight, "DecisionAutonomy.NaviGoal.HeroProximityWeight");
+        clamp_non_negative(autonomy.NaviGoal.CurrentGoalBonus, "DecisionAutonomy.NaviGoal.CurrentGoalBonus");
+        clamp_non_negative(autonomy.NaviGoal.LowEnergyOwnSideBonus, "DecisionAutonomy.NaviGoal.LowEnergyOwnSideBonus");
+        clamp_non_negative(autonomy.NaviGoal.LowEnergyEnemyPenalty, "DecisionAutonomy.NaviGoal.LowEnergyEnemyPenalty");
+        clamp_non_negative(autonomy.NaviGoal.LowOutpostOwnSideBonus, "DecisionAutonomy.NaviGoal.LowOutpostOwnSideBonus");
+        clamp_non_negative(autonomy.NaviGoal.GoalBiasWeight, "DecisionAutonomy.NaviGoal.GoalBiasWeight");
+        clamp_non_negative(autonomy.AimTarget.PriorityWeight, "DecisionAutonomy.AimTarget.PriorityWeight");
+        clamp_non_negative(autonomy.AimTarget.DistanceWeight, "DecisionAutonomy.AimTarget.DistanceWeight");
+        clamp_non_negative(autonomy.AimTarget.LowHealthWeight, "DecisionAutonomy.AimTarget.LowHealthWeight");
+        clamp_non_negative(autonomy.AimTarget.CurrentTargetBonus, "DecisionAutonomy.AimTarget.CurrentTargetBonus");
+        clamp_non_negative(autonomy.AimTarget.HeroBonus, "DecisionAutonomy.AimTarget.HeroBonus");
+        clamp_non_negative(autonomy.AimTarget.SentryBonus, "DecisionAutonomy.AimTarget.SentryBonus");
 
         if (config.ChaseSettings.LostTargetHoldMs < 0) {
             LoggerPtr->Warning("Invalid Chase.LostTargetHoldMs={}, fallback to 0.",
