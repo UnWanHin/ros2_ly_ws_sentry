@@ -58,11 +58,32 @@
         <button id="undoBtn">撤銷上一次點選</button>
         <button id="clearBtn">清空當前點位(當前隊伍)</button>
         <button id="exportBtn">匯出 map_plugin.json</button>
+        <button id="eraserBtn" type="button">橡皮模式(E): OFF</button>
+      </div>
+      <div class="row">
+        <label>自定義標籤：
+          <input type="text" id="customLabel" value="Custom" />
+        </label>
+        <label>X(cm)：
+          <input type="number" id="customX" step="1" />
+        </label>
+        <label>Y(cm)：
+          <input type="number" id="customY" step="1" />
+        </label>
+        <label>顏色：
+          <select id="customTeam">
+            <option value="red">紅色</option>
+            <option value="blue">藍色</option>
+          </select>
+        </label>
+        <button id="addCustomBtn" type="button">新增自定義點</button>
       </div>
       <div class="small">
         坐標系固定：左下角為 (0,0)，X 向右，Y 向上；點圖時會自動換算 cm。
       </div>
+      <div class="small">自定義點：輸入 X/Y 會即時預覽；X 或 Y 完成編輯(change)後會新增一個點，舊點不清除。地圖區右鍵也可直接新增自定義點。</div>
       <div class="small" id="pointStats">已標記 0/38，完整點位 0/19</div>
+      <div class="small" id="customStats">自定義點 0</div>
       <div class="small" id="statusText">狀態：待操作</div>
     </div>
 
@@ -79,6 +100,17 @@
         <thead>
           <tr>
             <th>ID</th><th>Name</th><th>Red(x,y)</th><th>Blue(x,y)</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <table id="customPointsTable">
+        <thead>
+          <tr>
+            <th>Custom ID</th><th>Label</th><th>Team</th><th>X(cm)</th><th>Y(cm)</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -106,7 +138,12 @@
 
     const state = {
       points: DEFAULT_POINTS.map(([id, name]) => ({ id, name, red: null, blue: null })),
-      history: []
+      history: [],
+      customPoints: [],
+      nextCustomId: 1,
+      customPreview: null,
+      eraserMode: false,
+      lastAutoCustomSnapshot: ""
     };
 
     const imageInput = document.getElementById("imageInput");
@@ -120,11 +157,18 @@
     const mapHeight = document.getElementById("mapHeight");
     const mapName = document.getElementById("mapName");
     const pointsTableBody = document.querySelector("#pointsTable tbody");
+    const customPointsTableBody = document.querySelector("#customPointsTable tbody");
     const jsonText = document.getElementById("jsonText");
     const pluginFileInput = document.getElementById("pluginFileInput");
     const showTagToggle = document.getElementById("showTagToggle");
     const pointStats = document.getElementById("pointStats");
+    const customStats = document.getElementById("customStats");
     const statusText = document.getElementById("statusText");
+    const customLabel = document.getElementById("customLabel");
+    const customX = document.getElementById("customX");
+    const customY = document.getElementById("customY");
+    const customTeam = document.getElementById("customTeam");
+    const eraserBtn = document.getElementById("eraserBtn");
     const TEAM_STYLE = {
       red: { color: "#ff3b30", prefix: "R" },
       blue: { color: "#007aff", prefix: "B" }
@@ -132,6 +176,10 @@
 
     function setStatus(message) {
       statusText.textContent = `狀態：${message}`;
+    }
+
+    function refreshOverlayCursor() {
+      overlay.style.cursor = state.eraserMode ? "not-allowed" : "crosshair";
     }
 
     function pointOptionLabel(point) {
@@ -158,6 +206,7 @@
     function resizeOverlay() {
       overlay.width = mapImage.clientWidth;
       overlay.height = mapImage.clientHeight;
+      refreshOverlayCursor();
       drawAll();
     }
 
@@ -173,6 +222,72 @@
       const x = (cmX / size.width) * overlay.width;
       const y = overlay.height - (cmY / size.height) * overlay.height;
       return [x, y];
+    }
+
+    function normalizeTeam(team) {
+      return team === "blue" ? "blue" : "red";
+    }
+
+    function buildCustomPointFromInput() {
+      const x = Number(customX.value);
+      const y = Number(customY.value);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return {
+        label: (customLabel.value || "Custom").trim() || "Custom",
+        team: normalizeTeam(customTeam.value),
+        x: Math.round(x),
+        y: Math.round(y)
+      };
+    }
+
+    function updateCustomPreview() {
+      state.customPreview = buildCustomPointFromInput();
+      drawAll();
+    }
+
+    function addCustomPointFromInput() {
+      const input = buildCustomPointFromInput();
+      if (!input) {
+        setStatus("自定義點 x/y 無效");
+        return false;
+      }
+      state.lastAutoCustomSnapshot = `${input.label}|${input.team}|${input.x}|${input.y}`;
+      const point = { customId: state.nextCustomId, ...input };
+      state.nextCustomId += 1;
+      state.customPoints.push(point);
+      state.history.push({ kind: "custom_add", customId: point.customId });
+      setStatus(`已新增自定義點 C${point.customId} (${point.x}, ${point.y})`);
+      drawAll();
+      return true;
+    }
+
+    function addCustomPointByCm(cmX, cmY) {
+      const input = {
+        label: (customLabel.value || "Custom").trim() || "Custom",
+        team: normalizeTeam(customTeam.value),
+        x: Math.round(cmX),
+        y: Math.round(cmY)
+      };
+      customX.value = String(input.x);
+      customY.value = String(input.y);
+      state.customPreview = { ...input };
+      state.lastAutoCustomSnapshot = `${input.label}|${input.team}|${input.x}|${input.y}`;
+      const point = { customId: state.nextCustomId, ...input };
+      state.nextCustomId += 1;
+      state.customPoints.push(point);
+      state.history.push({ kind: "custom_add", customId: point.customId });
+      setStatus(`已用右鍵新增自定義點 C${point.customId} (${point.x}, ${point.y})`);
+      drawAll();
+      return true;
+    }
+
+    function autoAppendCustomPointIfChanged() {
+      const input = buildCustomPointFromInput();
+      if (!input) return;
+      const snapshot = `${input.label}|${input.team}|${input.x}|${input.y}`;
+      if (snapshot === state.lastAutoCustomSnapshot) return;
+      state.lastAutoCustomSnapshot = snapshot;
+      addCustomPointFromInput();
     }
 
     function drawTag(x, y, text, color) {
@@ -219,13 +334,76 @@
       }
     }
 
+    function drawCustomPoint(point) {
+      const [x, y] = toScreen(point.x, point.y);
+      const style = TEAM_STYLE[point.team];
+      ctx.beginPath();
+      ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = style.color;
+      ctx.fill();
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      if (showTagToggle.checked) {
+        drawTag(x, y, `C${point.customId}:${point.label}`, style.color);
+      }
+    }
+
+    function drawCustomPreview() {
+      if (!state.customPreview) return;
+      const [x, y] = toScreen(state.customPreview.x, state.customPreview.y);
+      const style = TEAM_STYLE[state.customPreview.team];
+      ctx.save();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = style.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 10, y);
+      ctx.lineTo(x + 10, y);
+      ctx.moveTo(x, y - 10);
+      ctx.lineTo(x, y + 10);
+      ctx.stroke();
+      ctx.restore();
+      if (showTagToggle.checked) {
+        drawTag(x, y, `預覽:${state.customPreview.label}`, style.color);
+      }
+    }
+
+    function renderCustomStats() {
+      customStats.textContent = `自定義點 ${state.customPoints.length}`;
+    }
+
+    function renderCustomTable() {
+      customPointsTableBody.innerHTML = "";
+      if (!state.customPoints.length) {
+        const empty = document.createElement("tr");
+        empty.innerHTML = "<td colspan='5'>-</td>";
+        customPointsTableBody.appendChild(empty);
+        return;
+      }
+      for (const point of state.customPoints) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>C${point.customId}</td><td>${point.label}</td><td>${point.team === "blue" ? "藍" : "紅"}</td><td>${point.x}</td><td>${point.y}</td>`;
+        customPointsTableBody.appendChild(tr);
+      }
+    }
+
     function drawAll() {
       ctx.clearRect(0, 0, overlay.width, overlay.height);
       for (const p of state.points) {
         drawPoint(p, "red");
         drawPoint(p, "blue");
       }
+      for (const customPoint of state.customPoints) {
+        drawCustomPoint(customPoint);
+      }
+      drawCustomPreview();
       renderTable();
+      renderCustomStats();
+      renderCustomTable();
     }
 
     function renderTable() {
@@ -248,6 +426,73 @@
 
     function findPointById(id) {
       return state.points.find(item => item.id === id);
+    }
+
+    function findNearestPointOnScreen(screenX, screenY, radiusPx = 10) {
+      let best = null;
+      const radiusSq = radiusPx * radiusPx;
+      const updateBest = (candidate) => {
+        if (!best || candidate.distSq < best.distSq) {
+          best = candidate;
+        }
+      };
+
+      for (let i = 0; i < state.customPoints.length; i += 1) {
+        const point = state.customPoints[i];
+        const [x, y] = toScreen(point.x, point.y);
+        const dx = x - screenX;
+        const dy = y - screenY;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= radiusSq) {
+          updateBest({ kind: "custom", index: i, distSq });
+        }
+      }
+
+      for (const point of state.points) {
+        for (const team of ["red", "blue"]) {
+          const value = point[team];
+          if (!value) continue;
+          const [x, y] = toScreen(value[0], value[1]);
+          const dx = x - screenX;
+          const dy = y - screenY;
+          const distSq = dx * dx + dy * dy;
+          if (distSq <= radiusSq) {
+            updateBest({ kind: "preset", id: point.id, team, distSq });
+          }
+        }
+      }
+
+      return best;
+    }
+
+    function erasePointAt(screenX, screenY) {
+      const target = findNearestPointOnScreen(screenX, screenY, 12);
+      if (!target) {
+        setStatus("橡皮模式：滑鼠附近沒有可刪除的點");
+        return;
+      }
+      if (target.kind === "custom") {
+        const removed = state.customPoints.splice(target.index, 1)[0];
+        if (removed) {
+          state.history.push({ kind: "custom_remove", point: removed, index: target.index });
+          setStatus(`橡皮模式：已刪除自定義點 C${removed.customId}`);
+        }
+      } else {
+        const point = findPointById(target.id);
+        if (!point || !point[target.team]) return;
+        const prev = [...point[target.team]];
+        state.history.push({ kind: "preset", id: target.id, team: target.team, prev });
+        point[target.team] = null;
+        setStatus(`橡皮模式：已刪除 ${target.team === "red" ? "紅" : "藍"}方 ID=${target.id}`);
+      }
+      drawAll();
+    }
+
+    function setEraserMode(enabled) {
+      state.eraserMode = enabled;
+      eraserBtn.textContent = `橡皮模式(E): ${enabled ? "ON" : "OFF"}`;
+      refreshOverlayCursor();
+      setStatus(enabled ? "橡皮模式 ON（點擊可刪點，按 E 關閉）" : "橡皮模式 OFF");
     }
 
     function exportPluginJson() {
@@ -286,6 +531,10 @@
         point.red = null;
         point.blue = null;
       }
+      state.customPoints = [];
+      state.nextCustomId = 1;
+      state.customPreview = null;
+      state.lastAutoCustomSnapshot = "";
       if (Array.isArray(payload.points)) {
         for (const item of payload.points) {
           const p = findPointById(Number(item.id));
@@ -387,18 +636,33 @@
       hoverText.style.display = "none";
     });
 
+    overlay.addEventListener("contextmenu", event => {
+      event.preventDefault();
+      if (!overlay.width || !overlay.height) return;
+      if (state.eraserMode) return;
+      const rect = overlay.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const [cmX, cmY] = toCm(x, y);
+      addCustomPointByCm(cmX, cmY);
+    });
+
     overlay.addEventListener("click", event => {
       if (!overlay.width || !overlay.height) return;
+      const rect = overlay.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      if (state.eraserMode) {
+        erasePointAt(x, y);
+        return;
+      }
       const id = Number(pointSelect.value);
       const team = teamSelect.value;
       const target = findPointById(id);
       if (!target) return;
-      const rect = overlay.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
       const value = toCm(x, y);
       const prev = target[team] ? [...target[team]] : null;
-      state.history.push({ id, team, prev });
+      state.history.push({ kind: "preset", id, team, prev });
       target[team] = value;
       setStatus(`已標記 ${team === "red" ? "紅" : "藍"}方 ID=${id} (${value[0]}, ${value[1]})`);
       drawAll();
@@ -407,6 +671,20 @@
     document.getElementById("undoBtn").addEventListener("click", () => {
       const last = state.history.pop();
       if (!last) return;
+      if (last.kind === "custom_add") {
+        const index = state.customPoints.findIndex(item => item.customId === last.customId);
+        if (index >= 0) state.customPoints.splice(index, 1);
+        setStatus(`已撤銷自定義點 C${last.customId}`);
+        drawAll();
+        return;
+      }
+      if (last.kind === "custom_remove") {
+        const index = Math.max(0, Math.min(last.index, state.customPoints.length));
+        state.customPoints.splice(index, 0, last.point);
+        setStatus(`已還原自定義點 C${last.point.customId}`);
+        drawAll();
+        return;
+      }
       const point = findPointById(last.id);
       if (!point) return;
       point[last.team] = last.prev;
@@ -419,6 +697,8 @@
       const team = teamSelect.value;
       const point = findPointById(id);
       if (!point) return;
+      const prev = point[team] ? [...point[team]] : null;
+      state.history.push({ kind: "preset", id, team, prev });
       point[team] = null;
       setStatus(`已清空 ${team === "red" ? "紅" : "藍"}方 ID=${id}`);
       drawAll();
@@ -429,6 +709,44 @@
     });
     pointSelect.addEventListener("change", () => drawAll());
     teamSelect.addEventListener("change", () => drawAll());
+    customX.addEventListener("input", updateCustomPreview);
+    customY.addEventListener("input", updateCustomPreview);
+    customLabel.addEventListener("input", updateCustomPreview);
+    customTeam.addEventListener("change", updateCustomPreview);
+    customX.addEventListener("change", autoAppendCustomPointIfChanged);
+    customY.addEventListener("change", autoAppendCustomPointIfChanged);
+    customX.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      addCustomPointFromInput();
+    });
+    customY.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      addCustomPointFromInput();
+    });
+    document.getElementById("addCustomBtn").addEventListener("click", addCustomPointFromInput);
+    eraserBtn.addEventListener("click", () => {
+      setEraserMode(!state.eraserMode);
+    });
+    document.addEventListener("keydown", event => {
+      if (!event.key || event.repeat) return;
+      const target = event.target;
+      const editing = target && (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT"
+      );
+      if (editing) return;
+      if (event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        setEraserMode(!state.eraserMode);
+      }
+      if (event.key === "Escape" && state.eraserMode) {
+        event.preventDefault();
+        setEraserMode(false);
+      }
+    });
 
     document.getElementById("exportBtn").addEventListener("click", exportPluginJson);
     document.getElementById("importBtn").addEventListener("click", () => {
@@ -481,7 +799,11 @@
     } else if (pluginUri) {
       importFromUri(pluginUri);
     }
+    refreshOverlayCursor();
+    updateCustomPreview();
     renderTable();
+    renderCustomStats();
+    renderCustomTable();
   </script>
 </body>
 </html>

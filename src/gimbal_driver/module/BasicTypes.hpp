@@ -82,8 +82,8 @@ namespace LangYa
         static constexpr auto TypeID = 0;
 
         GimbalAnglesType GimbalAngles;
-        VelocityType Velocity;
-        FireCodeType FireCode;
+        VelocityType Velocity; //16
+        FireCodeType FireCode; //8
         std::uint8_t CapV;
     };
 
