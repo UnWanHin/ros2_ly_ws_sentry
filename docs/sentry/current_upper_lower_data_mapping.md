@@ -211,12 +211,17 @@ struct GameData
 | bit | 字段 |
 |---|---|
 | 0~2 | `SelfSupplyStatus` |
-| 3~5 | `SelfBuffStatus` |
-| 6~11 | `SelfHighlandStatus` |
-| 12~18 | `SelfBaseShield` |
-| 19~27 | `LastDratTime` |
-| 28~29 | `DartTarget` |
-| 30~31 | `GainPointstatus` |
+| 3~4 | `SelfSmallEnergyStatus` |
+| 5~6 | `SelfLargeEnergyStatus` |
+| 7~8 | `SelfCentralHighlandStatus` |
+| 9~10 | `SelfTrapezoidHighlandStatus` |
+| 11~19 | `EnemyLastDartHitTime` |
+| 20~22 | `EnemyLastDartHitTarget` |
+| 23~24 | `CenterGainPointStatus` |
+| 25~26 | `SelfFortressGainPointStatus` |
+| 27~28 | `SelfOutpostGainPointStatus` |
+| 29 | `SelfBaseGainPointStatus` |
+| 30~31 | `Reserved` |
 
 ### 5.2.3 字段映射
 
@@ -412,9 +417,10 @@ struct ExtendData {
 | `UWBAngleYaw` | 直接读 `uint16` | `/ly/me/uwb_yaw` | 自身朝向角 |
 | `Reserve_16` bit8~15（高8位） | 按 `uint8` 姿态值解析 | `/ly/gimbal/posture` | 仅 `1/2/3` 才发布 |
 | `Reserve_16` bit0~7（低8位） | 当前未解析 | 无 | 预留 |
-| `Reserve_32_1` low16（byte0~1） | 按 `int16` 解析，缩放 `0.01deg/s` | `/ly/gimbal/gimbal_yaw` | `yaw_vel`：yaw 角速度 |
-| `Reserve_32_1` high16（byte2~3） | 按 `int16` 解析，缩放 `0.01deg` | `/ly/gimbal/gimbal_yaw` | `yaw_angle`：当前 yaw 角，推荐区间 `[-180,180)` |
-| `Reserve_32_2` | 当前未解析 | 无 | 本仓库当前未发现解析/发布逻辑 |
+| `Reserve_32_1` low16（byte0~1） | 当前未解析 | 无 | 预留 |
+| `Reserve_32_1` high16（byte2~3） | 按 `int16` 原始值解析 | `/ly/gimbal/d_vel` | 写入 `msg.y` |
+| `Reserve_32_2` low16（byte0~1） | 按 `int16` 原始值解析 | `/ly/gimbal/d_vel` | 写入 `msg.x` |
+| `Reserve_32_2` high16（byte2~3） | 当前未解析 | 无 | 预留 |
 
 ### 5.7.2 姿态回读规则
 
@@ -476,8 +482,8 @@ struct ExtendData {
 | `5` | 自身 UWB 坐标 | `PositionData.Friend.X/Y` | `/ly/me/uwb_pos` |
 | `5` | 弹速 | `PositionData.BulletSpeed` | `/ly/bullet/speed` |
 | `6` | 自身朝向 | `ExtendData.UWBAngleYaw` | `/ly/me/uwb_yaw` |
-| `6` | 云台 yaw 角速度 | `ExtendData.Reserve_32_1` low16（`int16`, `0.01deg/s`） | `/ly/gimbal/gimbal_yaw` |
-| `6` | 云台 yaw 当前角 | `ExtendData.Reserve_32_1` high16（`int16`, `0.01deg`） | `/ly/gimbal/gimbal_yaw` |
+| `6` | 扩展回读 `d_vel.x` | `ExtendData.Reserve_32_2` low16（`int16` 原始值） | `/ly/gimbal/d_vel` |
+| `6` | 扩展回读 `d_vel.y` | `ExtendData.Reserve_32_1` high16（`int16` 原始值） | `/ly/gimbal/d_vel` |
 | `6` | 姿态回读 | `ExtendData.Reserve_16` 高 8 位 | `/ly/gimbal/posture` |
 
 ---
@@ -490,7 +496,7 @@ struct ExtendData {
 |---|---|---|
 | `RFIDAndBuffData.BuffStatus` | `reserve` | 未发布 |
 | `ExtendData` | `Reserve_16` 剩余位（除 posture 编码） | 未解析 |
-| `ExtendData` | `Reserve_32_2` | 未解析 |
+| `ExtendData` | `Reserve_32_1` low16、`Reserve_32_2` high16 | 未解析 |
 | `ExtEventDataType` | 各 bit 子字段 | 仅整体透传，未单独拆 topic |
 
 ---
@@ -498,12 +504,12 @@ struct ExtendData {
 ## 8. 代码定位
 
 - 串口结构：`src/gimbal_driver/module/BasicTypes.hpp`
-- 上位机下发订阅：`src/gimbal_driver/main.cpp:163`
-- 上位机上行解析分发：`src/gimbal_driver/main.cpp:406`
-- `TypeID=0`：`src/gimbal_driver/main.cpp:201`
-- `TypeID=1`：`src/gimbal_driver/main.cpp:231`
-- `TypeID=2`：`src/gimbal_driver/main.cpp:351`
-- `TypeID=3`：`src/gimbal_driver/main.cpp:371`
-- `TypeID=4`：`src/gimbal_driver/main.cpp:299`
-- `TypeID=5`：`src/gimbal_driver/main.cpp:319`
-- `TypeID=6`：`src/gimbal_driver/main.cpp:391`
+- 下发订阅入口：`src/gimbal_driver/main.cpp` 的 `GenSubs()`
+- 上行解析分发入口：`src/gimbal_driver/main.cpp` 的 `LoopRead()`
+- `TypeID=0`：`PubGimbalData()`
+- `TypeID=1`：`PubGameData()`
+- `TypeID=2`：`PubHealthMyselfData()`
+- `TypeID=3`：`PubHealthEnemyData()`
+- `TypeID=4`：`PubRFIDAndBuffData()`
+- `TypeID=5`：`PubPositionData()`
+- `TypeID=6`：`PubExtendData()`

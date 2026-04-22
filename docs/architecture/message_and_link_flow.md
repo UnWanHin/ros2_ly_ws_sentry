@@ -3,7 +3,7 @@
 ## 📋 文檔說明
 
 本文檔梳理現有系統的消息通訊鏈路，從數據獲取到發送下位機的完整流程。
-**注意**: 本文檔僅記錄現有架構，不包含決策模塊（behavior_tree）的內容。
+**注意**: 当前實際主鏈路包含 `behavior_tree`，若不啟動決策節點需使用橋接節點把 `Target` 類消息轉成 `/ly/control/*`。
 
 ---
 
@@ -39,8 +39,11 @@
    ↓ 預測與彈道解算
    ↓ 發布: /ly/predictor/target
    ↓
-[gimbal_driver] ← 訂閱: /ly/predictor/target
-   ↓ 發送控制指令
+[behavior_tree] ← 訂閱: /ly/predictor/target
+   ↓ 發布: /ly/control/angles + /ly/control/firecode (+ /ly/control/vel,/ly/control/posture)
+   ↓
+[gimbal_driver] ← 訂閱: /ly/control/*
+   ↓ 串口下發主控制幀
    ↓
 下位機 (串口通訊)
 ```
@@ -203,24 +206,29 @@ if(control_result.valid){
 
 ---
 
-#### 5. 發送下位機 - gimbal_driver
+#### 5. 決策與下發 - behavior_tree + gimbal_driver
 
-**文件**: [`src/gimbal_driver/main.cpp`](../../src/gimbal_driver/main.cpp)
+**文件**:
+- [`src/behavior_tree/src/SubscribeMessage.cpp`](../../src/behavior_tree/src/SubscribeMessage.cpp)
+- [`src/behavior_tree/src/PublishMessage.cpp`](../../src/behavior_tree/src/PublishMessage.cpp)
+- [`src/gimbal_driver/main.cpp`](../../src/gimbal_driver/main.cpp)
 
-**訂閱的 Topic**:
+**behavior_tree 訂閱**:
 - `/ly/predictor/target` - 預測目標 (自瞄模式)
 - `/ly/outpost/target` - 前哨目標 (前哨模式)
 - `/ly/buff/target` - 能量機關目標 (buff 模式)
 
-**輸出**:
-- 串口通訊發送到下位機
-- 控制雲台運動和射擊
+**behavior_tree 發布**:
+- `/ly/control/angles`
+- `/ly/control/firecode`
+- `/ly/control/vel`
+- `/ly/control/posture`
 
-**關鍵功能**:
-- 接收上層控制指令
-- 通過串口發送給下位機
-- 控制雲台 yaw/pitch 角度
-- 控制射擊
+**gimbal_driver 訂閱**:
+- `/ly/control/*`
+
+**輸出**:
+- 串口通訊發送到下位機主控制幀 `GimbalControlData`
 
 ---
 
@@ -242,8 +250,11 @@ if(control_result.valid){
    ↓ 前哨站預測與解算
    ↓ 發布: /ly/outpost/target
    ↓
-[gimbal_driver] ← 訂閱: /ly/outpost/target
-   ↓ 發送控制指令
+[behavior_tree] ← 訂閱: /ly/outpost/target
+   ↓ 發布: /ly/control/*
+   ↓
+[gimbal_driver] ← 訂閱: /ly/control/*
+   ↓ 串口下發主控制幀
    ↓
 下位機 (串口通訊)
 ```
@@ -315,8 +326,11 @@ node.Publisher<ly_outpost_target>()->publish(target_msg);
    ↓ 能量機關檢測與預測
    ↓ 發布: /ly/buff/target
    ↓
-[gimbal_driver] ← 訂閱: /ly/buff/target
-   ↓ 發送控制指令
+[behavior_tree] ← 訂閱: /ly/buff/target
+   ↓ 發布: /ly/control/*
+   ↓
+[gimbal_driver] ← 訂閱: /ly/control/*
+   ↓ 串口下發主控制幀
    ↓
 下位機 (串口通訊)
 ```
@@ -343,6 +357,7 @@ node.Publisher<ly_outpost_target>()->publish(target_msg);
 - `/ly/ra/angle_image` - 帶角度的圖像
 - `/ly/ra/enable` - 能量機關使能開關
 - `/ly/aa/enable` - 自瞄使能 (用於互斥)
+- `/ly/bullet/speed` - 彈速回讀（動態彈道參數）
 
 **發布的 Topic**:
 - `/ly/buff/target` - 能量機關目標

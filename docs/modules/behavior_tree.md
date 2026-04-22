@@ -236,7 +236,7 @@ void TreeTick() {
 | `/ly/gimbal/vel` | `naviVelocity` | 底盤速度反饋 |
 | `/ly/predictor/target` | `autoAimData`, `isFindTargetAtomic` | 普通瞄準角度；当前已恢复为老链路语义：消息一到就锁，`autoaim` 侧直接视为可跟随且可开火 |
 | `/ly/outpost/target` | `outpostAimData`, `isFindTargetAtomic` | 前哨瞄準角度；当前同样按老链路语义视为可开火 |
-| `ly/buff/target` | `buffAimData`, `isFindTargetAtomic` | 打符瞄準角度 |
+| `/ly/buff/target` | `buffAimData`, `isFindTargetAtomic` | 打符瞄準角度 |
 | `/ly/gimbal/capV` | `capV` | 電容電壓 |
 
 安全降級（兼容默認行為）：
@@ -379,7 +379,7 @@ SET_POSITION(BuffShoot, MyTeam);  // 設置導航目標為打符點位
 來自 `gimbal_driver`（遊戲狀態、血量、雲台角、子彈速度等）  
 來自 `predictor`（`/ly/predictor/target`）  
 來自 `outpost_hitter`（`/ly/outpost/target`）  
-來自 `buff_hitter`（`ly/buff/target`）
+來自 `buff_hitter`（`/ly/buff/target`）
 
 ### 發布（共10+個）
 控制類：`/ly/control/angles`, `/ly/control/firecode`, `/ly/control/vel`, `/ly/control/posture`  

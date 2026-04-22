@@ -41,14 +41,14 @@ main()
 ├── rclcpp::init()
 ├── app.Init("/path/config.json")    // 讀取配置，初始化 BuffDetector 和 BuffCalculator
 └── app.Run(argc, argv)              // 主循環
-    ├── GenSubs()                    // 訂閱 /ly/ra/enable 和 /ly/ra/angle_image
+    ├── GenSubs()                    // 訂閱 /ly/ra/enable、/ly/aa/enable、/ly/ra/angle_image、/ly/bullet/speed
     └── while(rclcpp::ok()):
         ├── rclcpp::spin_some()
         ├── if(aa_enable) continue   // 普通瞄準開啟時跳過打符
         ├── if(!Enable) sleep(5s)    // 打符未啟用時等待
         ├── buff_detector().buffDetect(image)   // 識別能量機關
         ├── buff_calculator().calculate(...)    // 計算打擊角度
-        └── PubData() → ly/buff/target
+        └── PubData() → /ly/buff/target
 ```
 
 **優先級控制**：如果 `aa_enable=true`（普通瞄準開啟），打符被禁用（越級保護）。
@@ -65,7 +65,7 @@ main()
 
 | Topic | 消息類型 | 說明 |
 |-------|----------|------|
-| `ly/buff/target` | `Target.msg` | 打符瞄準角度（`status=true` 時 `behavior_tree` 才會使用） |
+| `/ly/buff/target` | `Target.msg` | 打符瞄準角度（`status=true` 時 `behavior_tree` 才會使用） |
 
 ---
 
@@ -161,7 +161,7 @@ Application::Run() 主循環
 └── Timer::call()
          │
          ▼
-ly/buff/target (Target.msg: yaw, pitch, status)  → behavior_tree
+/ly/buff/target (Target.msg: yaw, pitch, status)  → behavior_tree
 ```
 
 ---
@@ -171,4 +171,4 @@ ly/buff/target (Target.msg: yaw, pitch, status)  → behavior_tree
 - **配置文件路徑**：`app.Init("/home/hustlyrm/workspace/src/buff_hitter/config/config.json")` 是**硬編碼路徑**，需要改為相對路徑或使用 `ament_index_cpp::get_package_share_directory()`
 - **`aa_enable` 回調**：接收的是 `const std_msgs::msg::Bool&`（沒有 `->` 箭頭），這是 ROS1 的值傳遞語法，ROS2 建議使用 `ConstSharedPtr`，但目前這樣也可以工作
 - **`gimbal_driver::msg::GimbalAngles`** 字段：代碼中使用 `.pitch` 和 `.yaw`（小寫），確認與 `gimbal_driver/msg/GimbalAngles.msg` 的字段名一致
-- **彈速**：`bullet_speed = 22.9`（常量，Application 成員），應改為訂閱 `/ly/bullet/speed`
+- **彈速**：当前已订阅 `/ly/bullet/speed`，并支持 `dynamic_bullet_speed_enable/min_bullet_speed/bullet_speed_alpha/default_bullet_speed` 参数

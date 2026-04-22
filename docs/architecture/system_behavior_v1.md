@@ -1,244 +1,45 @@
-# 系統行為說明
+# 系统行为说明（v1 归档，2026-04-22 校正）
 
-> Legacy：本文件為早期版本分析，僅作對照參考。請優先閱讀 `system_behavior.md`。
+> 本文件保留 `v1` 名称用于历史索引，但内容已按当前代码路径校正。
 
-## ❓ 問題：現在 launch 後會自動打嗎？
+## 1. 现在 launch 后会自动打吗
 
-### 📋 簡短回答
+结论取决于是否有“控制端”把目标消息转换成 `/ly/control/*`：
 
-**不會自動射擊！** 
+1. 只有感知链（如仅启动 `detector` 相关 launch）: 不会自动打。
+2. 启动 `behavior_tree`: 会按决策逻辑下发角度和火控。
+3. 不启 `behavior_tree` 但启桥接节点（`mapper_node`/脚本）: 可做测试直连开火。
 
-現在的系統只會：
-1. ✅ 檢測裝甲板
-2. ✅ 追蹤目標
-3. ✅ 計算射擊角度
-4. ✅ **發送角度給下位機**
-5. ❌ **不會發送射擊指令**
+## 2. 当前真实链路
 
----
+### 2.1 自瞄
 
-## 🔍 詳細分析
+`detector -> tracker_solver -> predictor -> /ly/predictor/target -> behavior_tree -> /ly/control/* -> gimbal_driver -> 下位机`
 
-### 當前系統行為
+### 2.2 前哨
 
-#### 1. 自瞄模式 (auto_aim.launch.py)
+`detector -> /ly/outpost/armors -> outpost_hitter -> /ly/outpost/target -> behavior_tree -> /ly/control/* -> gimbal_driver -> 下位机`
 
-**數據流**:
-```
-detector → tracker_solver → predictor → gimbal_driver
-```
+### 2.3 打符
 
-**predictor 發布的消息** ([`src/predictor/predictor_node.cpp:153`](../../src/predictor/predictor_node.cpp:153)):
-```cpp
-if(control_result.valid){
-    node.Publisher<ly_predictor_target>()->publish(target_msg);
-}
-```
+`detector(/ly/ra/angle_image) -> buff_hitter -> /ly/buff/target -> behavior_tree -> /ly/control/* -> gimbal_driver -> 下位机`
 
-**Target 消息內容** ([`src/auto_aim_common/msg/Target.msg`](../../src/auto_aim_common/msg/Target.msg)):
-```
-bool status      # 是否有效目標
-float32 yaw      # 目標 yaw 角
-float32 pitch    # 目標 pitch 角
-```
+## 3. 关键接口对照
 
-**關鍵點**: 
-- ✅ 發送了 **角度** (`yaw`, `pitch`)
-- ❌ **沒有發送射擊指令**
+- `gimbal_driver` 订阅：`/ly/control/angles`、`/ly/control/firecode`、`/ly/control/vel`、`/ly/control/posture`
+- `behavior_tree` 订阅：`/ly/predictor/target`、`/ly/outpost/target`、`/ly/buff/target`
+- `behavior_tree` 发布：`/ly/control/*`（控制下发）
 
----
-
-#### 2. gimbal_driver 的行為
-
-**訂閱的 Topic** ([`src/gimbal_driver/main.cpp:84-88`](../../src/gimbal_driver/main.cpp:84)):
-```cpp
-GenSub<ly_control_angles>([](GimbalControlData& g, const gimbal_driver::msg::GimbalAngles& m) {
-    g.GimbalAngles.Yaw = static_cast<float>(m.yaw);
-    g.GimbalAngles.Pitch = static_cast<float>(m.pitch);
-});
-```
-
-**問題**: 
-- ❌ gimbal_driver 訂閱的是 `/ly/control/angles`
-- ❌ predictor 發布的是 `/ly/predictor/target`
-- ❌ **兩個 topic 不匹配！**
-
----
-
-## 🚨 當前系統的問題
-
-### 問題 1: Topic 不匹配
-
-**predictor 發布**:
-- `/ly/predictor/target` (類型: `auto_aim_common::msg::Target`)
-
-**gimbal_driver 訂閱**:
-- `/ly/control/angles` (類型: `gimbal_driver::msg::GimbalAngles`)
-
-**結果**: 
-- ❌ gimbal_driver **收不到** predictor 的角度指令
-- ❌ 雲台**不會轉動**到目標位置
-
----
-
-### 問題 2: 缺少射擊控制
-
-**gimbal_driver 訂閱的射擊 Topic** ([`src/gimbal_driver/main.cpp:90-93`](../../src/gimbal_driver/main.cpp:90)):
-```cpp
-GenSub<ly_control_firecode>([](GimbalControlData& g, const std_msgs::msg::UInt8& m) {
-    *reinterpret_cast<std::uint8_t*>(&g.FireCode) = m.data;
-});
-```
-
-**問題**:
-- ❌ predictor **不發布** `/ly/control/firecode`
-- ❌ 沒有任何節點發布射擊指令
-- ❌ **不會射擊**
-
----
-
-## 🔧 需要的修復
-
-### 方案 1: 添加中間轉換節點（推薦）
-
-創建一個決策節點，負責：
-1. 訂閱 `/ly/predictor/target`
-2. 判斷是否應該射擊
-3. 發布 `/ly/control/angles` (角度)
-4. 發布 `/ly/control/firecode` (射擊)
-
-**優點**:
-- ✅ 保持現有代碼不變
-- ✅ 可以添加複雜的決策邏輯
-- ✅ 符合你的架構設計
-
----
-
-### 方案 2: 修改 gimbal_driver 直接訂閱
-
-修改 gimbal_driver 訂閱 `/ly/predictor/target`：
-
-```cpp
-// 添加訂閱
-GenSub<ly_predictor_target>([](GimbalControlData& g, const auto_aim_common::msg::Target& m) {
-    if(m.status) {  // 只有有效目標才控制
-        g.GimbalAngles.Yaw = m.yaw;
-        g.GimbalAngles.Pitch = m.pitch;
-        // 這裡還需要決定是否射擊
-    }
-});
-```
-
-**缺點**:
-- ❌ 沒有決策邏輯
-- ❌ 會"看到就打"（如果添加自動射擊）
-- ❌ 不符合你的架構設計
-
----
-
-## 📊 當前系統總結
-
-### 現在 launch 後會發生什麼？
-
-#### 自瞄模式
-```
-1. ✅ 相機拍攝畫面
-2. ✅ detector 檢測裝甲板 → 發布 /ly/detector/armors
-3. ✅ tracker_solver 追蹤 → 發布 /ly/tracker/results
-4. ✅ predictor 預測 → 發布 /ly/predictor/target
-5. ❌ gimbal_driver 收不到 (topic 不匹配)
-6. ❌ 雲台不動
-7. ❌ 不射擊
-```
-
-#### 前哨模式
-```
-1. ✅ detector 檢測前哨 → 發布 /ly/outpost/armors
-2. ✅ outpost_hitter 計算 → 發布 /ly/outpost/target
-3. ❌ gimbal_driver 收不到 (topic 不匹配)
-4. ❌ 雲台不動
-5. ❌ 不射擊
-```
-
-#### 能量機關模式
-```
-1. ✅ buff_hitter 檢測 → 發布 /ly/buff/target
-2. ❌ gimbal_driver 收不到 (topic 不匹配)
-3. ❌ 雲台不動
-4. ❌ 不射擊
-```
-
----
-
-## 🎯 結論
-
-### 當前狀態
-
-**不會自動射擊，也不會自動瞄準！**
-
-原因：
-1. ❌ Topic 不匹配 - gimbal_driver 收不到控制指令
-2. ❌ 沒有射擊邏輯 - 沒有節點發布 `/ly/control/firecode`
-3. ❌ 缺少決策模塊 - 沒有節點決定何時射擊
-
----
-
-## 🚀 下一步建議
-
-### 你需要創建決策模塊
-
-決策模塊應該：
-
-1. **訂閱**:
-   - `/ly/predictor/target` (自瞄目標)
-   - `/ly/outpost/target` (前哨目標)
-   - `/ly/buff/target` (能量機關目標)
-   - `/ly/game/is_start` (比賽狀態)
-   - `/ly/me/ammo_left` (剩餘彈藥)
-   - 其他遊戲狀態...
-
-2. **發布**:
-   - `/ly/control/angles` (控制雲台角度)
-   - `/ly/control/firecode` (控制射擊)
-   - `/ly/aa/enable` (控制自瞄使能)
-   - `/ly/ra/enable` (控制能量機關使能)
-   - `/ly/outpost/enable` (控制前哨使能)
-
-3. **決策邏輯**:
-   - 根據遊戲狀態選擇模式
-   - 根據目標有效性決定是否射擊
-   - 根據彈藥量控制射擊頻率
-   - 根據血量決定進攻/防守策略
-
----
-
-## 📝 測試建議
-
-### 測試當前系統
+## 4. 快速自检
 
 ```bash
-# 1. 啟動自瞄模式
-ros2 launch detector auto_aim.launch.py
-
-# 2. 在另一個終端監聽 topic
-ros2 topic echo /ly/predictor/target
-ros2 topic echo /ly/control/angles
-
-# 3. 觀察
-# - /ly/predictor/target 應該有數據 (如果檢測到目標)
-# - /ly/control/angles 應該沒有數據 (因為沒有節點發布)
+ros2 topic info /ly/predictor/target -v
+ros2 topic info /ly/control/angles -v
+ros2 topic info /ly/control/firecode -v
 ```
 
-### 手動測試控制
+预期：
 
-```bash
-# 手動發送角度指令測試 gimbal_driver
-ros2 topic pub /ly/control/angles gimbal_driver/msg/GimbalAngles "{yaw: 10.0, pitch: 5.0}"
-
-# 手動發送射擊指令
-ros2 topic pub /ly/control/firecode std_msgs/msg/UInt8 "{data: 1}"
-```
-
----
-
-**總結**: 現在的系統是"半成品"，只有感知和計算，沒有執行。你需要添加決策模塊來連接感知和執行。
+1. `/ly/predictor/target`：`predictor` 发布，`behavior_tree` 订阅。
+2. `/ly/control/angles`：`behavior_tree`（或测试桥接）发布，`gimbal_driver` 订阅。
+3. `/ly/control/firecode`：`behavior_tree`（或测试桥接）发布，`gimbal_driver` 订阅。

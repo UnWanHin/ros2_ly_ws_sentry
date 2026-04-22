@@ -132,7 +132,7 @@ auto_aim_common/
 
 ### `Target.msg` — 最終瞄準指令
 
-**Topic**：`/ly/predictor/target`（普通瞄準）、`/ly/outpost/target`（前哨站）、`ly/buff/target`（打符）  
+**Topic**：`/ly/predictor/target`（普通瞄準）、`/ly/outpost/target`（前哨站）、`/ly/buff/target`（打符）  
 **發布者**：`predictor`、`outpost_hitter`、`buff_hitter`  
 **訂閱者**：`behavior_tree`（彙總後控制雲台）
 

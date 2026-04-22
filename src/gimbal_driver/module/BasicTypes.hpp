@@ -65,23 +65,28 @@ namespace LangYa
         std::uint16_t IsReturnedHome : 1 = 0;
     };
 
-    /// 场地事件数据，共32位
+    /// 场地事件数据（0x0101），按 RM2026 V1.3.0 定义，共32位
     struct ExtEventDataType
     {
-        std::uint32_t SelfSupplyStatus : 3 = 0;
-        std::uint32_t SelfBuffStatus : 3 = 0;
-        std::uint32_t SelfHighlandStatus : 6 = 0;
-        std::uint32_t SelfBaseShield : 7 = 0;
-        std::uint32_t LastDratTime : 9 = 0;
-        std::uint32_t DartTarget : 2 = 0;
-        std::uint32_t GainPointstatus : 2 = 0;
+        std::uint32_t SelfSupplyStatus : 3 = 0;            // bit0-2
+        std::uint32_t SelfSmallEnergyStatus : 2 = 0;       // bit3-4
+        std::uint32_t SelfLargeEnergyStatus : 2 = 0;       // bit5-6
+        std::uint32_t SelfCentralHighlandStatus : 2 = 0;   // bit7-8
+        std::uint32_t SelfTrapezoidHighlandStatus : 2 = 0; // bit9-10
+        std::uint32_t EnemyLastDartHitTime : 9 = 0;        // bit11-19
+        std::uint32_t EnemyLastDartHitTarget : 3 = 0;      // bit20-22
+        std::uint32_t CenterGainPointStatus : 2 = 0;       // bit23-24
+        std::uint32_t SelfFortressGainPointStatus : 2 = 0; // bit25-26
+        std::uint32_t SelfOutpostGainPointStatus : 2 = 0;  // bit27-28
+        std::uint32_t SelfBaseGainPointStatus : 1 = 0;     // bit29
+        std::uint32_t Reserved : 2 = 0;                    // bit30-31
     };
 
     struct GimbalData
     {
         static constexpr auto TypeID = 0;
 
-        GimbalAnglesType GimbalAngles;
+        GimbalAnglesType GimbalAngles; //8
         VelocityType Velocity; //16
         FireCodeType FireCode; //8
         std::uint8_t CapV;
@@ -143,8 +148,6 @@ namespace LangYa
         std::uint16_t BaseMyself{};
         std::uint16_t SentryMyself{};
     };
-
-
 
     struct HealthEnemyData {
         static constexpr auto TypeID = 3;

@@ -248,7 +248,7 @@ PredictorNode::publish_timer_callback()  // 10ms
 
 ## 修改注意事項
 
-- **彈速**：`atomic_bullet_speed` 默認 23.0f，但当前 `controller.cpp` 内部仍会强制回写 `23.0f`，因此更像固定弹速模型
+- **彈速**：`atomic_bullet_speed` 默認 23.0f，收到 `/ly/bullet/speed` 后会更新；`controller.cpp` 当前会对弹速做下限与平滑处理，不再强制回写固定 `23.0f`
 - **時間戳清洗**：`predictor->update()` 和 `predict()` 的時間戳都必須先轉 double 秒，否則 ROS2 不同時鐘源會異常
 - **`valid` 判斷**：当前 `status=false` 的主要原因可以通过 `predictor_node` 的节流日志看到，如 `no_predictions_and_stale`、`no_prediction` 等；但这些无效结果不再发给 `behavior_tree`
 - **EKF發散**：當 `v_yaw`（角速度）估計發散時（小陀螺高速旋轉），可能出現瞄準角跳動，需要在 `motion_model.cpp` 調整過程噪聲 Q 矩陣

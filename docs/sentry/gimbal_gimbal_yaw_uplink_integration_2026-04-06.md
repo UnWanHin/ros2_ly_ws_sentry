@@ -1,19 +1,14 @@
-# Gimbal Yaw Uplink Integration (2026-04-06)
+# ExtendData `d_vel` Uplink Integration (2026-04-06, updated 2026-04-22)
+
+> 文件名保留历史命名（`gimbal_yaw`），但当前实现已切换为 `/ly/gimbal/d_vel`。
 
 ## 1. Purpose
 
-Keep `Reserve_32_1` as a 32-bit dual-field payload:
+Keep `TypeID=6 (ExtendData)` frame length unchanged, and map reserve fields to one ROS2 topic:
 
-- low16 keeps **yaw angular velocity** (do not delete old yaw-vel lane)
-- high16 replaces old pitch-vel lane with **current yaw angle**
-
-Both are published through one ROS2 topic:
-
-- `/ly/gimbal/gimbal_yaw`
+- `/ly/gimbal/d_vel`
 
 ## 2. Uplink Frame Contract
-
-`ExtendData` frame length is unchanged:
 
 ```cpp
 struct ExtendData {
@@ -25,65 +20,72 @@ struct ExtendData {
 };
 ```
 
-## 3. Reserve_32_1 Mapping (Little Endian)
+## 3. Reserve Mapping (Little Endian)
 
-- byte0 + byte1: `yaw_vel_raw` (`int16`, unit `0.01 deg/s`)
-- byte2 + byte3: `yaw_angle_raw` (`int16`, unit `0.01 deg`, recommended `[-180.00, 180.00)`)
+- `Reserve_32_1` high16 -> `d_vel_y_raw` (`int16`)
+- `Reserve_32_2` low16  -> `d_vel_x_raw` (`int16`)
+- `Reserve_32_1` low16 and `Reserve_32_2` high16 are currently reserved
 
-Formulas:
+Current upper parsing in `src/gimbal_driver/main.cpp`:
 
-- `yaw_vel_deg_s = yaw_vel_raw * 0.01`
-- `yaw_angle_deg = yaw_angle_raw * 0.01`
-
-Direction/sign is preserved by signed `int16`; positive direction definition is decided by lower firmware.
+```cpp
+const auto reserve_32_1_high16_u = static_cast<std::uint16_t>((reserve_32_1_u32 >> 16) & 0xFFFFu);
+const auto reserve_32_2_low16_u  = static_cast<std::uint16_t>(reserve_32_2_u32 & 0xFFFFu);
+const auto d_vel_y_raw = static_cast<std::int16_t>(reserve_32_1_high16_u);
+const auto d_vel_x_raw = static_cast<std::int16_t>(reserve_32_2_low16_u);
+```
 
 ## 4. ROS Interface
 
-`gimbal_driver/msg/GimbalYaw.msg`:
+Message: `gimbal_driver/msg/DVel.msg`
 
-- `int16 yaw_vel` (0.01 deg/s)
-- `int16 yaw_angle` (0.01 deg)
+```text
+int16 x
+int16 y
+```
 
 Topic:
 
-- `/ly/gimbal/gimbal_yaw` (`gimbal_driver/msg/GimbalYaw`)
+- `/ly/gimbal/d_vel` (`gimbal_driver/msg/DVel`)
+- publish mapping: `x=d_vel_x_raw`, `y=d_vel_y_raw`
 
-## 5. Upper Computer Changes
+## 5. Upper Computer Behavior
 
 ### 5.1 gimbal_driver
 
-- Parse `Reserve_32_1` low16 -> `yaw_vel`
-- Parse `Reserve_32_1` high16 -> `yaw_angle`
-- Publish both fields on `/ly/gimbal/gimbal_yaw`
+- Parse `Reserve_32_1` high16 and `Reserve_32_2` low16
+- Publish `/ly/gimbal/d_vel`
+- Publish posture from `Reserve_16` high8 (`1/2/3` only)
 
 ### 5.2 behavior_tree
 
-- Subscribe `/ly/gimbal/gimbal_yaw`
+- Subscribe `/ly/gimbal/d_vel`
 - Store:
-  - `gimbalYawVelRaw`, `gimbalYawVelDegPerSec`
-  - `gimbalYawAngleRaw`, `gimbalYawAngleDeg`
-- Write to blackboard:
-  - `GimbalYawVelRaw`, `GimbalYawVelDegPerSec`
-  - `GimbalYawAngleRaw`, `GimbalYawAngleDeg`
+  - `gimbalYawVelRaw` from `msg->x`
+  - `gimbalYawAngleRaw` from `msg->y`
+- Current code keeps float mirrors without extra scale:
+  - `gimbalYawVelDegPerSec = static_cast<float>(gimbalYawVelRaw)`
+  - `gimbalYawAngleDeg = static_cast<float>(gimbalYawAngleRaw)`
 
 ## 6. Lower Firmware Packing Guidance
 
-1. `yaw_vel_raw = round(yaw_vel_deg_s * 100)` (`int16`)
-2. `yaw_angle_raw = round(yaw_angle_deg * 100)` (`int16`)
-3. Pack little-endian:
-   - `Reserve_32_1[7:0]   = yaw_vel_raw low8`
-   - `Reserve_32_1[15:8]  = yaw_vel_raw high8`
-   - `Reserve_32_1[23:16] = yaw_angle_raw low8`
-   - `Reserve_32_1[31:24] = yaw_angle_raw high8`
-4. Keep `Reserve_16` high 8 bits posture feedback unchanged.
+```c
+uint32_t reserve_32_1 = 0;
+uint32_t reserve_32_2 = 0;
+
+reserve_32_1 |= ((uint32_t)((uint16_t)d_vel_y_raw) << 16); // high16 used
+reserve_32_2 |= ((uint32_t)((uint16_t)d_vel_x_raw) << 0);  // low16 used
+```
+
+`Reserve_16` high 8 bits posture feedback remains unchanged.
 
 ## 7. Runtime Check
 
 ```bash
-ros2 topic echo /ly/gimbal/gimbal_yaw
+ros2 topic echo /ly/gimbal/d_vel
 ```
 
 Expected fields:
 
-- `yaw_vel`
-- `yaw_angle`
+- `x`
+- `y`

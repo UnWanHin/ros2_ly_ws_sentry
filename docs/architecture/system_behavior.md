@@ -191,8 +191,8 @@ ros2 launch behavior_tree behavior_tree.launch.py
 
 **感知數據**:
 - `/ly/predictor/target` - 自瞄目標
-- `/ly/buff_target` - 能量機關目標
-- `/ly/outpost_target` - 前哨目標
+- `/ly/buff/target` - 能量機關目標
+- `/ly/outpost/target` - 前哨目標
 - `/ly/detector/armors` - 檢測結果
 
 **遊戲狀態**:

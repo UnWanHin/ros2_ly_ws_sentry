@@ -27,6 +27,7 @@ gimbal_driver/
 │   ├── BuffData.msg            # 能量機關增益狀態
 │   ├── PositionData.msg        # 機器人位置（UWB）
 │   ├── UWBPos.msg              # UWB位置
+│   ├── DVel.msg                # TypeID=6 扩展回传原始值
 │   └── Vel.msg                 # 速度指令
 └── module/
     ├── BasicTypes.hpp          # 底層數據結構定義
@@ -90,7 +91,7 @@ main()
 | `HealthEnemyData` | `PubHealthEnemyData()` | `/ly/enemy/hp`, `/ly/enemy/base_hp` |
 | `RFIDAndBuffData` | `PubRFIDAndBuffData()` | `/ly/me/rfid`, `/ly/team/buff` |
 | `PositionData` | `PubPositionData()` | `/ly/position/data`, `/ly/me/uwb_pos`, `/ly/bullet/speed` |
-| `ExtendData` | `PubExtendData()` | `/ly/me/uwb_yaw`, `/ly/gimbal/gimbal_yaw`（`Reserve_32_1`: low16=`yaw_vel`, high16=`yaw_angle`）, `/ly/gimbal/posture`（`Reserve_16` 高 8 位） |
+| `ExtendData` | `PubExtendData()` | `/ly/me/uwb_yaw`, `/ly/gimbal/d_vel`（`x=Reserve_32_2 low16`, `y=Reserve_32_1 high16`，均为原始 `int16`）, `/ly/gimbal/posture`（`Reserve_16` 高 8 位） |
 
 #### 「寫入」路徑：`GenSubs()` → `Device.Write()`
 
@@ -123,7 +124,7 @@ main()
 | `HealthMyselfData` / `HealthEnemyData` | 我方/敵方各機器人血量 |
 | `RFIDAndBuffData` | RFID狀態 + 能量機關增益（防禦、攻擊、回血等） |
 | `PositionData` | UWB定位數據（友/敵機器人X、Y座標）+ 子彈速度 |
-| `ExtendData` | UWB yaw 角（自身朝向）+ `Reserve_32_1`（low16 云台 yaw 角速度、high16 云台 yaw 当前角）+ `Reserve_16` 姿態回讀（高 8 位） |
+| `ExtendData` | UWB yaw 角（自身朝向）+ `Reserve_32_1` 高 16 位与 `Reserve_32_2` 低 16 位组成 `d_vel` 原始值（`int16`）+ `Reserve_16` 姿態回讀（高 8 位） |
 | `FireCodeType` | 位域：`FireStatus`（開火狀態）、`Rotate`（旋轉速度0-3）、`AimMode`（瞄準模式） |
 
 ---
@@ -226,11 +227,13 @@ IODevice<TypedMessage<sizeof(GimbalData)>, GimbalControlData>
 | `/ly/me/hp` | `Health` | 我方各機器人血量 |
 | `/ly/enemy/hp` | `Health` | 敵方各機器人血量 |
 | `/ly/me/ammo_left` | `UInt16` | 剩餘子彈 |
-| `/ly/bullet/speed` | `Float32` | 子彈速度（m/s，当前代码先解析原始值后又固定覆写为 `23.0f`） |
+| `/ly/bullet/speed` | `Float32` | 子彈速度（m/s，当前代码发布 `PositionData.BulletSpeed / 100.0f`） |
 | `/ly/team/buff` | `BuffData` | 能量機關增益狀態 |
 | `/ly/position/data` | `PositionData` | UWB位置數據 |
 | `/ly/me/uwb_pos` | `UInt16MultiArray` | 自身UWB位置[x, y] |
+| `/ly/gimbal/d_vel` | `DVel` | 扩展回读原始值（`x=Reserve_32_2 low16`, `y=Reserve_32_1 high16`） |
 | `/ly/gimbal/posture` | `UInt8` | 姿態回讀（來源 `ExtendData.Reserve_16` 高 8 位；僅 1/2/3 視為有效） |
+| `ly/gimbal/eventdata` | `UInt32` | 場地事件原始值（當前 topic 字符串無前導 `/`） |
 
 ### 訂閱的 Topics
 
@@ -256,5 +259,5 @@ IODevice<TypedMessage<sizeof(GimbalData)>, GimbalControlData>
 - **串口協議調整**：修改 `module/BasicTypes.hpp` 的結構體時一定要注意字節對齊和電控端的協議版本一致
 - **姿態指令協議策略**：姿態併入 `GimbalControlData.Posture`，主包長度變更需與下位機同步升級
 - **新增 Topic**：在 `main.cpp` 增加 `LY_DEF_ROS_TOPIC` 定義和對應的 `Pub*()` 函數，並在 `LoopRead()` 的 switch-case 中處理
-- **`/ly/bullet/speed`**：当前实现先按 `data.BulletSpeed / 100.0f` 解析，再覆写为 `23.0f`；如需使用真实弹速，需同步修改 `gimbal_driver/main.cpp` 与 `predictor/src/controller.cpp`
+- **`/ly/bullet/speed`**：当前实现直接发布 `data.BulletSpeed / 100.0f`；若下游表现为固定弹速，优先检查下游是否又做默认值或平滑策略
 - **虛擬設備**：調試時可設置 YAML 參數 `io_config/use_virtual_device: true` 來使用迴環模式而無需電控硬件

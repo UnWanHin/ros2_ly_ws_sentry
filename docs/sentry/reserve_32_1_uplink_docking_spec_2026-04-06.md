@@ -1,130 +1,75 @@
-# Reserve_32_1 上下位機對接規範（2026-04-06）
+# Reserve_32 上下位机对接规范（2026-04-06，更新于 2026-04-22）
+
+> 文件名保留历史命名，但当前上位机实现是 `Reserve_32_1` 与 `Reserve_32_2` 共同承载 `/ly/gimbal/d_vel`。
 
 ## 1. 目的
 
-本文只描述 `TypeID=6 (ExtendData)` 中 `Reserve_32_1` 的對接方式，供下位機與上位機聯調使用。
+对齐 `TypeID=6 (ExtendData)` 中 reserve 字段的当前真实对接方式，供上下位机联调。
 
-當前約定是：
-
-- `Reserve_32_1` 低 16 位：雲台 yaw 角速度
-- `Reserve_32_1` 高 16 位：雲台 yaw 當前角度
-
-不再承載 pitch 速度。
-
-## 2. 幀結構（不改長度）
+## 2. 幀结构（不改长度）
 
 ```cpp
 struct ExtendData {
     static constexpr auto TypeID = 6;
-    std::uint16_t UWBAngleYaw; // 保持原語義
-    std::uint16_t Reserve_16;  // 高8位仍給 posture
-    std::uint32_t Reserve_32_1; // 本文重點
-    std::uint32_t Reserve_32_2; // 目前保留
+    std::uint16_t UWBAngleYaw;
+    std::uint16_t Reserve_16;   // high8 = posture
+    std::uint32_t Reserve_32_1; // used: high16
+    std::uint32_t Reserve_32_2; // used: low16
 };
 ```
 
-## 3. Reserve_32_1 位分配
+## 3. 当前位分配（Little Endian）
 
-按小端序（little-endian）解析：
+- `Reserve_32_1` high16（byte2~3）: `d_vel_y_raw`（`int16`）
+- `Reserve_32_2` low16（byte0~1）: `d_vel_x_raw`（`int16`）
+- `Reserve_32_1` low16 与 `Reserve_32_2` high16：预留
 
-- byte0~1（低16位）：`yaw_vel_raw`（`int16`，單位 `0.01 deg/s`）
-- byte2~3（高16位）：`yaw_angle_raw`（`int16`，單位 `0.01 deg`）
-
-換算關係：
-
-- `yaw_vel_deg_s = yaw_vel_raw * 0.01`
-- `yaw_angle_deg = yaw_angle_raw * 0.01`
-
-角度推薦區間：
-
-- `yaw_angle_deg` 建議由下位機限制在 `[-180.00, 180.00)`
-
-注意：
-
-- 符號位有效（`int16`），方向正負定義由下位機坐標系決定，但要固定並在下位機文檔說明。
-
-## 4. 下位機打包方法
-
-### 4.1 量化
+## 4. 下位机打包方法
 
 ```c
-int16_t yaw_vel_raw   = (int16_t)lroundf(yaw_vel_deg_s * 100.0f);
-int16_t yaw_angle_raw = (int16_t)lroundf(yaw_angle_deg * 100.0f);
-```
+int16_t d_vel_x_raw = ...;
+int16_t d_vel_y_raw = ...;
 
-### 4.2 組包（小端）
-
-```c
 uint32_t reserve_32_1 = 0;
-reserve_32_1 |= ((uint32_t)((uint16_t)yaw_vel_raw)   << 0);   // low16
-reserve_32_1 |= ((uint32_t)((uint16_t)yaw_angle_raw) << 16);  // high16
+uint32_t reserve_32_2 = 0;
+
+reserve_32_1 |= ((uint32_t)((uint16_t)d_vel_y_raw) << 16); // high16
+reserve_32_2 |= ((uint32_t)((uint16_t)d_vel_x_raw) << 0);  // low16
 ```
 
-等價字節視角：
+## 5. 上位机解析与输出
 
-- `reserve_32_1[7:0]`    = `yaw_vel_raw` low8
-- `reserve_32_1[15:8]`   = `yaw_vel_raw` high8
-- `reserve_32_1[23:16]`  = `yaw_angle_raw` low8
-- `reserve_32_1[31:24]`  = `yaw_angle_raw` high8
-
-## 5. 上位機當前解析與輸出
-
-### 5.1 ROS topic
-
-- Topic: `/ly/gimbal/gimbal_yaw`
-- Msg: `gimbal_driver/msg/GimbalYaw`
+- Topic: `/ly/gimbal/d_vel`
+- Msg: `gimbal_driver/msg/DVel`
 
 ```text
-int16 yaw_vel
-int16 yaw_angle
-float32 yaw_vel_deg_s
-float32 yaw_angle_deg
+int16 x   // from Reserve_32_2 low16
+int16 y   // from Reserve_32_1 high16
 ```
 
-其中：
+`behavior_tree` 订阅后直接保存 raw 值（当前不额外做 `*0.01` 缩放）。
 
-- `yaw_vel / yaw_angle` 是原始量化值（`0.01` 精度）
-- `yaw_vel_deg_s / yaw_angle_deg` 是上位機已換算後的人類可讀值
-
-### 5.2 行為樹側
-
-上位機行為樹收到後會做 `*0.01` 換算，並寫入黑板：
-
-- `GimbalYawVelRaw`
-- `GimbalYawVelDegPerSec`
-- `GimbalYawAngleRaw`
-- `GimbalYawAngleDeg`
-
-## 6. 聯調驗證
-
-### 6.1 查看原始回讀
+## 6. 联调验证
 
 ```bash
-ros2 topic echo /ly/gimbal/gimbal_yaw
+ros2 topic echo /ly/gimbal/d_vel
 ```
 
-示例：
+检查点：
 
-```text
-yaw_vel: 1234
-yaw_angle: -9000
-yaw_vel_deg_s: 12.34
-yaw_angle_deg: -90.0
-```
+1. `x/y` 变化方向与下位机坐标定义一致
+2. 大小端正确（无异常跳变）
+3. `Reserve_16` high8 姿态位仍正常回读到 `/ly/gimbal/posture`
 
-對應：
+## 7. 预留扩展建议
 
-- 角速度 `12.34 deg/s`
-- 角度 `-90.00 deg`
+优先复用：
 
-### 6.2 常見錯誤排查
+1. `Reserve_32_1` low16
+2. `Reserve_32_2` high16
 
-1. 角度/角速度單位錯：發成 rad 或 deg 而不是 `0.01deg`/`0.01deg/s`。
-2. 大小端反了：會出現數值跳變或方向錯誤。
-3. 發了浮點二進制：本協議要求 `int16` 量化值，不是 float 位模式。
-4. 角度不做範圍管理：建議下位機固定在 `[-180,180)`，避免跨界抖動。
+扩展后同步更新：
 
-## 7. 其他字段影響
-
-- `Reserve_16` 高8位 posture 規則不變。
-- `Reserve_32_2` 目前未使用，可留作後續擴展。
+- `src/gimbal_driver/main.cpp`
+- 下游使用方（当前主要是 `behavior_tree`）
+- 本文档与 `docs/sentry/current_upper_lower_data_mapping.md`
