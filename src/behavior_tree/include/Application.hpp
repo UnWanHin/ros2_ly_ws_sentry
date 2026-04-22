@@ -133,7 +133,7 @@ private:
     Robots friendRobots; // 己方机器人的信息
     Robots enemyRobots; // 敌方机器人的信息
     BuffType teamBuff{0}; // 当前的增益情况
-    std::uint32_t rfidStatus{0}; // 当前的RFID识别状态
+    std::uint32_t rfidStatus{0}; // 0x0209 rfid_status（低32位）
     std::uint32_t extEventData{};
     std::array<ArmorData, 10> armorList; // 辅瞄返回的装甲板序列
     bool is_game_begin{false}; // 比赛开始的标志

@@ -122,7 +122,7 @@ main()
 | `GimbalControlData` | 上位機→電控：期望雲台角、開火指令、速度、姿態 |
 | `GameData` | 裁判系統數據：比賽狀態、血量、子彈數、時間 |
 | `HealthMyselfData` / `HealthEnemyData` | 我方/敵方各機器人血量 |
-| `RFIDAndBuffData` | RFID狀態 + 能量機關增益（防禦、攻擊、回血等） |
+| `RFIDAndBuffData` | `0x0209 rfid_status` 低 32 位 + `0x0204` 增益數據（防禦、攻擊、回血等） |
 | `PositionData` | UWB定位數據（友/敵機器人X、Y座標）+ 子彈速度 |
 | `ExtendData` | UWB yaw 角（自身朝向）+ `Reserve_32_1` 高 16 位与 `Reserve_32_2` 低 16 位组成 `d_vel` 原始值（`int16`）+ `Reserve_16` 姿態回讀（高 8 位） |
 | `FireCodeType` | 位域：`FireStatus`（開火狀態）、`Rotate`（旋轉速度0-3）、`AimMode`（瞄準模式） |

@@ -219,9 +219,10 @@ namespace LangYa
         static constexpr auto TypeID = 4;
 
         BuffType BuffStatus;
-        std::uint32_t RFIDStatus; // bit19：己方补给区（RMUL补给区，与兑换区不重叠）
-                                  // bit20：己方补给区（与兑换区不重叠）
+        // 对齐 RM2026 V1.3.0 的 0x0209 rfid_status（低 32 位，bit0-31）
+        std::uint32_t RFIDStatus;
     };
+    static_assert(sizeof(RFIDAndBuffData) == sizeof(GimbalData), "TypeID=4 payload must stay 12B");
 
     struct PositionType{
         uint8_t CarId; /// 兵种id，x表示我方，100+x表示敌方

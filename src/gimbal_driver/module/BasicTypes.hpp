@@ -184,8 +184,10 @@ namespace LangYa
         static constexpr auto TypeID = 4;
 
         BuffType BuffStatus;
+        // 对齐 RM2026 V1.3.0 的 0x0209 rfid_status（低 32 位，bit0-31）
         std::uint32_t RFIDStatus;
     };
+    static_assert(sizeof(RFIDAndBuffData) == sizeof(GimbalData), "TypeID=4 payload must stay 12B");
 
     struct PositionType{
         uint8_t CarId; /// 兵种id
@@ -200,7 +202,6 @@ namespace LangYa
         PositionType Enemy;
         uint16_t BulletSpeed; // 弹速，100倍
     };
-
 
     struct ExtendData {
         static constexpr auto TypeID = 6;
