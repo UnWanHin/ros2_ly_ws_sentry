@@ -203,7 +203,7 @@ namespace LangYa
         static constexpr auto TypeID = 6;
         std::uint16_t UWBAngleYaw; // 2 字节
         std::uint16_t Reserve_16; // 高8位放posture
-        std::uint32_t Reserve_32_1; // 高16位: yaw angle(int16,0.01deg)
+        std::uint32_t Reserve_32_1; // 高16位: yaw angle(int16,0.01deg) //要改成高16位
         std::uint32_t Reserve_32_2; // 低16位: yaw vel 累加換算
     };
 

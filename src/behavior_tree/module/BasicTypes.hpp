@@ -378,6 +378,13 @@ namespace LangYa
         bool ReuseLatchedAnglesOnNoTarget{true};
     };
 
+    // 巡逻扫描配置（单位沿用旧实现：角度步进=deg/tick）
+    struct PatrolScanSetting {
+        int Mode{1}; // 1=原始单向/受击抖扫, 2=左右摆头（围绕中心 ±HalfRangeDeg）
+        float HalfRangeDeg{180.0f};
+        float YawStepPerTick{9.0f};
+    };
+
     // 频率相关
     struct Rate {
         int FireRate{20};
@@ -549,6 +556,7 @@ namespace LangYa
     // Main
     struct Config {
         AimDebug AimDebugSettings{};
+        PatrolScanSetting PatrolScanSettings{};
         Rate RateSettings{};
         GameStrategy GameStrategySettings{};
         NaviSetting NaviSettings{};

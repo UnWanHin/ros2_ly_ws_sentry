@@ -9,6 +9,11 @@
         "HitCar": false,
         "FireRequireTargetStatus": false
     },
+    "PatrolScan": {
+        "Mode": 1,
+        "HalfRangeDeg": 180.0,
+        "YawStepPerTick": 9.0
+    },
     "Rate": {
         "FireRate": 20,
         "TreeTickRate": 100,

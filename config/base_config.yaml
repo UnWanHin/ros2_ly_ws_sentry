@@ -1,8 +1,8 @@
 /**:
   ros__parameters:
     # Camera (shared by detector / calib)
-    "camera_param.camera_sn": "KE0200060396"
-    "camera_param/camera_sn": "KE0200060396"
+    "camera_param.camera_sn": "FGK24050145" #FGK24050145
+    "camera_param/camera_sn": "FGK24050145" #KE0200060396
     "camera_param.ExposureTime": 5000.0
     "camera_param/ExposureTime": 5000.0
     "camera_param.Gain": 16.0

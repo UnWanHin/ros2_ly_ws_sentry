@@ -370,7 +370,15 @@ namespace BehaviorTree {
         naviRelativeTargetPitchErrorDeg = 0.0F;
         naviRelativeTargetArmorType = 0U;
         naviRelativeTargetAimMode = static_cast<std::uint8_t>(aimMode);
+        auto reset_patrol_scan_state = [this]() {
+            patrolScanDirection_ = 1;
+            patrolScanCenterYaw_ = 0.0f;
+            patrolScanOffsetYaw_ = 0.0f;
+            patrolScanCenterInitialized_ = false;
+            patrolScanActiveMode_ = 0;
+        };
         if (find_target) {
+            reset_patrol_scan_state();
             LoggerPtr->Debug("Find Target, AimMode={}", static_cast<int>(aimMode));
             if (!config.AimDebugSettings.StopFire){
                 if(aimMode == AimMode::Buff) { // 打符模式
@@ -402,19 +410,52 @@ namespace BehaviorTree {
             if(aimMode != AimMode::Buff) {
                 if (!config.AimDebugSettings.StopScan && now - lastFoundEnemyTime > std::chrono::milliseconds(2000)) {
                     static auto last_searching_log = std::chrono::steady_clock::time_point{};
+                    const int patrol_mode = config.PatrolScanSettings.Mode;
                     const bool boost_patrol_scan =
                         aimMode == AimMode::RotateScan &&
                         damage_rotate_elapsed_ms >= 0 &&
                         damage_rotate_elapsed_ms <= kDamageScanBoostWindowMs;
-                    const auto yaw_scan_step = boost_patrol_scan
+                    float yaw_scan_step = boost_patrol_scan
                         ? kPatrolScanYawBoostStep
                         : kPatrolScanYawStep;
-                    const int yaw_scan_direction = boost_patrol_scan
-                        ? (((damage_rotate_elapsed_ms / kDamageScanYawPhaseMs) % 2 == 0) ? 1 : -1)
-                        : 1;
+                    int yaw_scan_direction = 1;
+
+                    if (patrol_mode == 2) {
+                        const float mode2_base_step = config.PatrolScanSettings.YawStepPerTick;
+                        const float mode2_boost_extra = kPatrolScanYawBoostStep - kPatrolScanYawStep;
+                        yaw_scan_step = boost_patrol_scan ? (mode2_base_step + mode2_boost_extra) : mode2_base_step;
+
+                        if (!patrolScanCenterInitialized_ || patrolScanActiveMode_ != patrol_mode) {
+                            patrolScanCenterInitialized_ = true;
+                            patrolScanActiveMode_ = patrol_mode;
+                            patrolScanCenterYaw_ = gimbalAngles.Yaw;
+                            patrolScanOffsetYaw_ = 0.0f;
+                            patrolScanDirection_ = 1; // 新一轮巡逻默认先向右
+                        }
+
+                        const float half_range = config.PatrolScanSettings.HalfRangeDeg;
+                        patrolScanOffsetYaw_ += static_cast<float>(patrolScanDirection_) * yaw_scan_step;
+                        if (patrolScanOffsetYaw_ >= half_range) {
+                            patrolScanOffsetYaw_ = half_range;
+                            patrolScanDirection_ = -1;
+                        } else if (patrolScanOffsetYaw_ <= -half_range) {
+                            patrolScanOffsetYaw_ = -half_range;
+                            patrolScanDirection_ = 1;
+                        }
+                        yaw_scan_direction = patrolScanDirection_;
+                    } else {
+                        if (patrolScanActiveMode_ != patrol_mode || patrolScanCenterInitialized_) {
+                            reset_patrol_scan_state();
+                            patrolScanActiveMode_ = patrol_mode;
+                        }
+                        yaw_scan_direction = boost_patrol_scan
+                            ? (((damage_rotate_elapsed_ms / kDamageScanYawPhaseMs) % 2 == 0) ? 1 : -1)
+                            : 1;
+                    }
                     if (now - last_searching_log > std::chrono::seconds(2)) {
                         LoggerPtr->Debug(
-                            "Searching Target... yaw_step={} dir={} (damage_boost={} elapsed_ms={})",
+                            "Searching Target... patrol_mode={} yaw_step={} dir={} (damage_boost={} elapsed_ms={})",
+                            patrol_mode,
                             yaw_scan_step,
                             yaw_scan_direction,
                             boost_patrol_scan ? 1 : 0,
@@ -423,8 +464,11 @@ namespace BehaviorTree {
                         gimbalControlData.FireCode.AimMode = 0;
                     }
                     const auto current_time = std::chrono::steady_clock::now();
+                    const float next_scan_yaw = (patrol_mode == 2 && patrolScanCenterInitialized_)
+                        ? (patrolScanCenterYaw_ + patrolScanOffsetYaw_)
+                        : static_cast<float>(gimbalAngles.Yaw + yaw_scan_direction * yaw_scan_step);
                     nextAngles = GimbalAnglesType{
-                        static_cast<AngleType>(gimbalAngles.Yaw + yaw_scan_direction * yaw_scan_step),
+                        static_cast<AngleType>(next_scan_yaw),
                         AngleType{-0.0f + pitch_wave.Produce(current_time) * 3.0f}
                     };
 
@@ -433,12 +477,14 @@ namespace BehaviorTree {
                     }
                 } else if (config.AimDebugSettings.ReuseLatchedAnglesOnNoTarget &&
                            activeAimData->HasLatchedAngles) {
+                    reset_patrol_scan_state();
                     nextAngles = activeAimData->Angles;
                     LoggerPtr->Debug(
                         "Reuse latched aim angles -> Pitch: {}, Yaw: {}",
                         nextAngles.Pitch,
                         nextAngles.Yaw);
                 } else {
+                    reset_patrol_scan_state();
                     nextAngles = gimbalAngles;
                     LoggerPtr->Debug(
                         "Hold current gimbal angles (latched reuse disabled or unavailable) -> Pitch: {}, Yaw: {}",
@@ -446,6 +492,7 @@ namespace BehaviorTree {
                         gimbalAngles.Yaw);
                 }
             }else { // 打符模式
+                reset_patrol_scan_state();
                 if (now_time < 5) {
                     LoggerPtr->Info("Set Angles, Buff Mode, 10 min!");
                     // Yaw
