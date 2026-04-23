@@ -283,6 +283,7 @@ namespace
                 topic::Msg msg;
                 msg.yaw = static_cast<float>(data.GimbalAngles.Yaw);
                 msg.pitch = static_cast<float>(data.GimbalAngles.Pitch);
+                msg.header.stamp = Node.GetNode()->now();
                 Node.Publisher<topic>()->publish(msg);
             }
             {
@@ -484,6 +485,7 @@ namespace
             {
                 using topic = ly_gimbal_chassis;
                 topic::Msg msg;
+                msg.header.stamp = Node.GetNode()->now();
                 msg.steer_angle = DecodeU8IntU8Dec(steer_angle_u16);
                 msg.angular_velocity = DecodeU8IntU8Dec(angular_vel_u16);
                 msg.velocity_x = DecodeU8IntU8Dec(vel_x_u16);
