@@ -208,9 +208,9 @@ namespace LangYa
         static constexpr auto TypeID = 6;
         std::uint16_t UWBAngleYaw; // 2B
         std::uint16_t Posture;     // 2B
-        // low16: 舵角当前角(8位整数+8位小数), high16: 底盘角速度(8位整数+8位小数)
+        // low16: 舵角当前角(int16, 解析后/10), high16: 底盘角速度(int16, 解析后/100)
         std::uint32_t ChassisPacked1;
-        // low16: 底盘x方向速度(8位整数+8位小数), high16: 底盘y方向速度(8位整数+8位小数)
+        // low16: 底盘x方向速度(int16, 解析后/100), high16: 底盘y方向速度(int16, 解析后/100)
         std::uint32_t ChassisPacked2;
     };
     static_assert(sizeof(ChassisData) == sizeof(GimbalData), "TypeID=6 payload must stay 12B");

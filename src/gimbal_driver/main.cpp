@@ -16,6 +16,7 @@
 #include <chrono>
 #include <thread>
 #include <algorithm>
+#include <bit>
 #include <rclcpp/utilities.hpp>
 #include <rclcpp/executors.hpp>
 
@@ -121,13 +122,12 @@ namespace
             return IsValidPosture(high8) ? high8 : 0u;
         }
 
-        static float DecodeU8IntU8Dec(std::uint16_t raw) noexcept {
-            const auto int_part = static_cast<std::int8_t>((raw >> 8) & 0xFFu);
-            const auto dec_part = static_cast<std::uint8_t>(raw & 0xFFu);
-            const auto dec = static_cast<float>(dec_part) / 100.0f;
-            return int_part >= 0
-                ? static_cast<float>(int_part) + dec
-                : static_cast<float>(int_part) - dec;
+        static std::int16_t DecodeI16(std::uint16_t raw) noexcept {
+            return std::bit_cast<std::int16_t>(raw);
+        }
+
+        static float DecodeI16WithScale(std::uint16_t raw, float divisor) noexcept {
+            return static_cast<float>(DecodeI16(raw)) / divisor;
         }
 
         void ArmPostureTx(std::uint8_t posture) {
@@ -486,10 +486,10 @@ namespace
                 using topic = ly_gimbal_chassis;
                 topic::Msg msg;
                 msg.header.stamp = Node.GetNode()->now();
-                msg.steer_angle = DecodeU8IntU8Dec(steer_angle_u16);
-                msg.angular_velocity = DecodeU8IntU8Dec(angular_vel_u16);
-                msg.velocity_x = DecodeU8IntU8Dec(vel_x_u16);
-                msg.velocity_y = DecodeU8IntU8Dec(vel_y_u16);
+                msg.steer_angle = DecodeI16WithScale(steer_angle_u16, 10.0f);
+                msg.angular_velocity = DecodeI16WithScale(angular_vel_u16, 100.0f);
+                msg.velocity_x = DecodeI16WithScale(vel_x_u16, 100.0f);
+                msg.velocity_y = DecodeI16WithScale(vel_y_u16, 100.0f);
                 Node.Publisher<topic>()->publish(msg);
             }
 
