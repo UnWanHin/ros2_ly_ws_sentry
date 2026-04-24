@@ -1,4 +1,0 @@
-interface:
-  display_name: "ROS2 BT Analyzer"
-  short_description: "ROS2 and BT chain root-cause diagnostics"
-  default_prompt: "Diagnose sentry auto-aim issues across detector, tracker, predictor, behavior_tree, and gimbal links with evidence-first workflow and minimal-change recommendations."
