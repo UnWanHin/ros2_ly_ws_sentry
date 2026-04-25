@@ -253,7 +253,7 @@ namespace LangYa
 
     struct TeamedLocation
     {
-        static constexpr auto LocationCount = 20;
+        static constexpr auto LocationCount = 50;
 
         std::uint8_t ID;
 

@@ -219,7 +219,7 @@ BT 節點實際調用的就是這些函數。
 當前展示模式補充：
 - `src/behavior_tree/Scripts/ConfigJson/showcase_competition.json`
 - `ShowcasePatrol.Goals = [6, 11, 14, 15]` 可直接改成你現場要演示的點位序列
-- `ShowcasePatrol.DisableTeamOffset = true` 時，`/ly/navi/goal` 直接發基礎 ID `0..18`
+- `ShowcasePatrol.DisableTeamOffset = true` 時，`/ly/navi/goal` 直接發基礎 ID `0..18`，否則藍方點位使用 `base_id + 50`
 - `ShowcasePatrol.IgnoreRecovery = true` 時，展示模式可在無裁判輸入時直接巡邏
 
 當前導航調試模式補充：

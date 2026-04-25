@@ -150,7 +150,7 @@
 - `ShowcasePatrol.Goals`：展示巡逻点位 ID 列表
 - `ShowcasePatrol.GoalHoldSec`：每个点停留秒数
 - `ShowcasePatrol.Random`：`true`=随机切点，`false`=按数组顺序轮巡
-- `ShowcasePatrol.DisableTeamOffset`：`true` 时 `/ly/navi/goal` 直接发基础 ID，不再对蓝方加 `+20`
+- `ShowcasePatrol.DisableTeamOffset`：`true` 时 `/ly/navi/goal` 直接发基础 ID，不再对蓝方加 `+50`
 - `ShowcasePatrol.IgnoreRecovery`：`true` 时忽略回血/补弹回补逻辑，适合无裁判系统的展示场景
 
 顺序说明：

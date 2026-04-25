@@ -104,7 +104,7 @@ class NaviGoalPatrolNode(Node):
         if self.plan.disable_team_offset:
             return base_goal
         if self.team == "blue":
-            return clamp_uint8(base_goal + 20)
+            return clamp_uint8(base_goal + 50)
         return base_goal
 
     def _next_index(self, initial: bool) -> int:
