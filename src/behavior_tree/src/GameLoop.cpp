@@ -262,9 +262,9 @@ namespace BehaviorTree {
         static constexpr auto kPatrolScanPitchHalfRangeDeg = 12.0f; //巡航pitch上下半幅
         static constexpr auto kPatrolScanPitchPeriodMs = 500.0f; //巡航pitch完整波形週期
 
-        static constexpr auto kPatrolSwingYawStep = 0.5f * delta_yaw; //雙向巡航每tick度數
+        static constexpr auto kPatrolSwingYawStep = 1.0f * delta_yaw; //雙向巡航每tick度數
         static constexpr auto kPatrolSwingYawBoostStep = 1.1f * delta_yaw; //受擊加速
-        static constexpr auto kPatrolSwingHalfRangeDeg = 50.0f; // mode2: 左右擺頭半幅
+        static constexpr auto kPatrolSwingHalfRangeDeg = 30.0f; // mode2: 左右擺頭半幅
         static constexpr auto kPatrolSwingCenterDriftPerCycleDeg = -70.0f; // mode2: 每完整左右掃一圈，中心點右偏角度
         static constexpr auto kTwoPi = 6.2831853071795864769f;
         static constexpr int kDamageScanBoostWindowMs = 1300;
