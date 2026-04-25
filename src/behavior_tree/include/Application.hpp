@@ -154,6 +154,7 @@ private:
     int patrolScanDirection_{1}; // +1 向右, -1 向左（mode=2 使用）
     float patrolScanCenterYaw_{0.0f};
     float patrolScanOffsetYaw_{0.0f};
+    float patrolScanPhaseRad_{0.0f};
     bool patrolScanCenterInitialized_{false};
     int patrolScanActiveMode_{0}; // 0=无, 1/2=当前扫描模式
     std::atomic<bool> hasReceivedGimbalAngles_{false};

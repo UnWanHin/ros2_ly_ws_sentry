@@ -258,10 +258,12 @@ namespace BehaviorTree {
         static constexpr auto buff_yaw = -50.0f + 360.0f;
         static constexpr auto kPatrolScanYawStep = 9.0f * delta_yaw; //單向巡航每tick度數
         static constexpr auto kPatrolScanYawBoostStep = 10.0f * delta_yaw; //受擊加速
-        static constexpr auto kPatrolSwingYawStep = 9.0f * delta_yaw; //雙向巡航每tick度數
-        static constexpr auto kPatrolSwingYawBoostStep = 10.0f * delta_yaw; //受擊加速
-        static constexpr auto kPatrolSwingHalfRangeDeg = 90.0f; // mode2: 左右擺頭 ±90
-        static constexpr auto kPatrolSwingCenterDriftYawStep = 1.5f * delta_yaw; // mode2: 中心點恆速向右
+
+        static constexpr auto kPatrolSwingYawStep = 0.5f * delta_yaw; //雙向巡航每tick度數
+        static constexpr auto kPatrolSwingYawBoostStep = 1.1f * delta_yaw; //受擊加速
+        static constexpr auto kPatrolSwingHalfRangeDeg = 40.0f; // mode2: 左右擺頭半幅
+        static constexpr auto kPatrolSwingCenterDriftPerCycleDeg = -30.0f; // mode2: 每完整左右掃一圈，中心點右偏角度
+        static constexpr auto kTwoPi = 6.2831853071795864769f;
         static constexpr int kDamageScanBoostWindowMs = 1300;
         static constexpr int kDamageScanYawPhaseMs = 160;
 
@@ -382,6 +384,7 @@ namespace BehaviorTree {
             patrolScanDirection_ = 1;
             patrolScanCenterYaw_ = 0.0f;
             patrolScanOffsetYaw_ = 0.0f;
+            patrolScanPhaseRad_ = 0.0f;
             patrolScanCenterInitialized_ = false;
             patrolScanActiveMode_ = 0;
         };
@@ -436,22 +439,25 @@ namespace BehaviorTree {
                             patrolScanActiveMode_ = patrol_mode;
                             patrolScanCenterYaw_ = gimbalAngles.Yaw;
                             patrolScanOffsetYaw_ = 0.0f;
+                            patrolScanPhaseRad_ = 0.0f;
                             patrolScanDirection_ = 1; // 新一轮巡逻默认先向右
                         }
 
-                        // mode2: 擺頭中心點以固定速度持續向右漂移。
+                        const float half_range = kPatrolSwingHalfRangeDeg;
+                        const float phase_step = yaw_scan_step / std::max(half_range, 1.0f);
+                        const float center_drift_step =
+                            kPatrolSwingCenterDriftPerCycleDeg * phase_step / kTwoPi;
+
+                        // mode2: 讓中心點每完成一個正弦掃描週期固定右偏同樣角度。
                         patrolScanCenterYaw_ = normalize_angle_near(
-                            patrolScanCenterYaw_ + kPatrolSwingCenterDriftYawStep,
+                            patrolScanCenterYaw_ + center_drift_step,
                             gimbalAngles.Yaw);
 
-                        const float half_range = kPatrolSwingHalfRangeDeg;
-                        patrolScanOffsetYaw_ += static_cast<float>(patrolScanDirection_) * yaw_scan_step;
-                        if (patrolScanOffsetYaw_ >= half_range) {
-                            patrolScanOffsetYaw_ = half_range;
-                            patrolScanDirection_ = -1;
-                        } else if (patrolScanOffsetYaw_ <= -half_range) {
-                            patrolScanOffsetYaw_ = -half_range;
-                            patrolScanDirection_ = 1;
+                        patrolScanPhaseRad_ = std::fmod(patrolScanPhaseRad_ + phase_step, kTwoPi);
+                        patrolScanOffsetYaw_ = half_range * std::sin(patrolScanPhaseRad_);
+                        patrolScanDirection_ = (std::cos(patrolScanPhaseRad_) >= 0.0f) ? 1 : -1;
+                        if (patrolScanPhaseRad_ < 0.0f) {
+                            patrolScanPhaseRad_ += kTwoPi;
                         }
                         yaw_scan_direction = patrolScanDirection_;
                     } else {
