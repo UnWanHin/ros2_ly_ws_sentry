@@ -10,7 +10,7 @@
         "FireRequireTargetStatus": false
     },
     "PatrolScan": {
-        "Mode": 2
+        "Mode": 1
     },
     "Rate": {
         "FireRate": 20,
