@@ -3,57 +3,57 @@
     # Camera (shared by detector / calib)
     "camera_param.camera_sn": "FGK24050145" #FGK24050145
     "camera_param/camera_sn": "FGK24050145" #KE0200060396
-    "camera_param.ExposureTime": 5000.0
-    "camera_param/ExposureTime": 5000.0
-    "camera_param.Gain": 16.0
-    "camera_param/Gain": 16.0
-    "camera_param.RedBalanceRatio": 1.2266
-    "camera_param/RedBalanceRatio": 1.2266
+    "camera_param.ExposureTime": 3000.0
+    "camera_param/ExposureTime": 3000.0
+    "camera_param.Gain": 12.0
+    "camera_param/Gain": 12.0
+    "camera_param.RedBalanceRatio": 1.8906
+    "camera_param/RedBalanceRatio": 1.8906
     "camera_param.GreenBalanceRatio": 1.0
     "camera_param/GreenBalanceRatio": 1.0
-    "camera_param.BlueBalanceRatio": 1.3711
-    "camera_param/BlueBalanceRatio": 1.3711
+    "camera_param.BlueBalanceRatio": 1.5703
+    "camera_param/BlueBalanceRatio": 1.5703
 
     # Solver intrinsics / extrinsics (shared by detector / tracker_solver / predictor / outpost_hitter)
     solver_config:
       camera_offset: [0.0, 0.0, 52.6]
       camera_rotation: [0.0, 3.3, 0.0]
       camera_intrinsic_matrix:
-        - 1281.23456
+        - 1533.531924
         - 0.0
-        - 630.293177
+        - 607.391567
         - 0.0
-        - 1280.62617
-        - 508.575495
+        - 1532.734381
+        - 495.417894
         - 0.0
         - 0.0
         - 1.0
       camera_distortion_coefficients:
-        - -0.19702588
-        - 0.10417594
-        - 0.00093009
-        - 0.00060859
-        - 0.09416784
+        - -0.210782
+        - 0.168691
+        - 0.000136
+        - -0.000211
+        - 0.0
 
     # Legacy slash-style aliases kept for compatibility readers
     "solver_config/camera_offset": [0.0, 0.0, 52.6]
     "solver_config/camera_rotation": [0.0, 3.3, 0.0]
     "solver_config/camera_intrinsic_matrix":
-      - 1281.23456
+      - 1533.531924
       - 0.0
-      - 630.293177
+      - 607.391567
       - 0.0
-      - 1280.62617
-      - 508.575495
+      - 1532.734381
+      - 495.417894
       - 0.0
       - 0.0
       - 1.0
     "solver_config/camera_distortion_coefficients":
-      - -0.19702588
-      - 0.10417594
-      - 0.00093009
-      - 0.00060859
-      - 0.09416784
+      - -0.210782
+      - 0.168691
+      - 0.000136
+      - -0.000211
+      - 0.0
 
     # IO / serial base (shared by gimbal_driver and startup wrappers)
     io_config:
