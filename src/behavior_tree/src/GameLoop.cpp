@@ -258,11 +258,14 @@ namespace BehaviorTree {
         static constexpr auto buff_yaw = -50.0f + 360.0f;
         static constexpr auto kPatrolScanYawStep = 9.0f * delta_yaw; //單向巡航每tick度數
         static constexpr auto kPatrolScanYawBoostStep = 10.0f * delta_yaw; //受擊加速
+        static constexpr auto kPatrolScanPitchCenterDeg = 0.0f; //巡航pitch中心
+        static constexpr auto kPatrolScanPitchHalfRangeDeg = 12.0f; //巡航pitch上下半幅
+        static constexpr auto kPatrolScanPitchPeriodMs = 500.0f; //巡航pitch完整波形週期
 
         static constexpr auto kPatrolSwingYawStep = 0.5f * delta_yaw; //雙向巡航每tick度數
         static constexpr auto kPatrolSwingYawBoostStep = 1.1f * delta_yaw; //受擊加速
-        static constexpr auto kPatrolSwingHalfRangeDeg = 40.0f; // mode2: 左右擺頭半幅
-        static constexpr auto kPatrolSwingCenterDriftPerCycleDeg = -30.0f; // mode2: 每完整左右掃一圈，中心點右偏角度
+        static constexpr auto kPatrolSwingHalfRangeDeg = 50.0f; // mode2: 左右擺頭半幅
+        static constexpr auto kPatrolSwingCenterDriftPerCycleDeg = -70.0f; // mode2: 每完整左右掃一圈，中心點右偏角度
         static constexpr auto kTwoPi = 6.2831853071795864769f;
         static constexpr int kDamageScanBoostWindowMs = 1300;
         static constexpr int kDamageScanYawPhaseMs = 160;
@@ -484,9 +487,15 @@ namespace BehaviorTree {
                     const float next_scan_yaw = (patrol_mode == 2 && patrolScanCenterInitialized_)
                         ? normalize_angle_near(patrolScanCenterYaw_ + patrolScanOffsetYaw_, gimbalAngles.Yaw)
                         : static_cast<float>(gimbalAngles.Yaw + yaw_scan_direction * yaw_scan_step);
+                    const auto pitch_elapsed_ms = static_cast<float>(
+                        std::chrono::duration_cast<std::chrono::milliseconds>(
+                            current_time - gameStartTime).count());
+                    const float next_scan_pitch = kPatrolScanPitchCenterDeg +
+                        kPatrolScanPitchHalfRangeDeg *
+                            std::sin(pitch_elapsed_ms * kTwoPi / std::max(kPatrolScanPitchPeriodMs, 1.0f));
                     nextAngles = GimbalAnglesType{
                         static_cast<AngleType>(next_scan_yaw),
-                        AngleType{-0.0f + pitch_wave.Produce(current_time) * 3.0f}
+                        static_cast<AngleType>(next_scan_pitch)
                     };
 
                     if (aimMode == AimMode::Outpost) {

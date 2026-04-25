@@ -31,7 +31,6 @@
 #include "Utils/Logger.hpp"
 
 #include "../module/BasicTypes.hpp"
-#include "../module/SineWave.hpp"
 #include "../module/json.hpp"
 #include "../module/Rate.hpp"
 #include "../module/Counter.hpp"
@@ -109,8 +108,6 @@ public:
 private:
     // [ROS 2] 節點指針
     std::shared_ptr<rclcpp::Node> node_;
-
-    SineWave pitch_wave{5.0f, 0.0f, 500ms, std::chrono::steady_clock::now()};
 
     int buff_shoot_count = 0; // 打符的击打次数
 
