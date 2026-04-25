@@ -334,7 +334,7 @@ namespace LangYa {
             if (LibPtr != nullptr) LibPtr.reset();
         }
 
-        bool Initialize(const std::string& source = "", const std::string& sn = "") noexcept try
+        bool Initialize(const std::string& source = "", const std::string& sn = "", int device_index = 1) noexcept try
         {
             if(!source.empty()) {
                 Mode = CaptureMode::VideoFile;
@@ -367,10 +367,9 @@ namespace LangYa {
                 return false;
             }
 
-	    if (sn.empty()) {
+		    if (sn.empty()) {
 
             // open by index
-            static constexpr auto device_index = 1;
             if (GXOpenDeviceByIndex(device_index, &handle) != GX_STATUS_SUCCESS)
             {
                 roslog::error("Camera::AcquireDevice: cannot open device({}): {}", device_index, GetLibError());

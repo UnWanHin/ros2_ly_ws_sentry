@@ -14,6 +14,97 @@
     "camera_param.BlueBalanceRatio": 1.5703
     "camera_param/BlueBalanceRatio": 1.5703
 
+    # GX camera schema imported from sentry.aim/src/sentry_gx_camera/config/gx_camera.yaml
+    # detector_node reads these keys directly; legacy camera_param/solver_config keys below are kept for other readers.
+    gx_camera_node:
+      device_sn: ""
+      device_index: 1
+      frame_id: "gx_camera"
+      image_topic: "/camera_front/image_raw"
+      camera_info_topic: "/camera_front/camera_info"
+      publish_rate: 100.0
+      use_compressed_image: true
+      jpeg_quality: 20
+      gain: 12.0
+      auto_gain_max: 12.0
+      auto_gain_min: 2.0
+      auto_gain: 0
+      exposure_time: 3000.0
+      auto_exposure_time_max: 10000.0
+      auto_exposure_time_min: 1000.0
+      auto_exposure: 0
+      red_balance_ratio: 1.8906
+      green_balance_ratio: 1.0
+      blue_balance_ratio: 1.5703
+      camera_fx: 1533.531924
+      camera_fy: 1532.734381
+      camera_cx: 607.391567
+      camera_cy: 495.417894
+      dist_k1: -0.210782
+      dist_k2: 0.168691
+      dist_p1: 0.000136
+      dist_p2: -0.000211
+      dist_k3: 0.0
+
+    "gx_camera_node/device_sn": ""
+    "gx_camera_node/device_index": 1
+    "gx_camera_node/frame_id": "gx_camera"
+    "gx_camera_node/image_topic": "/camera_front/image_raw"
+    "gx_camera_node/camera_info_topic": "/camera_front/camera_info"
+    "gx_camera_node/publish_rate": 100.0
+    "gx_camera_node/use_compressed_image": true
+    "gx_camera_node/jpeg_quality": 20
+    "gx_camera_node/gain": 12.0
+    "gx_camera_node/auto_gain_max": 12.0
+    "gx_camera_node/auto_gain_min": 2.0
+    "gx_camera_node/auto_gain": 0
+    "gx_camera_node/exposure_time": 3000.0
+    "gx_camera_node/auto_exposure_time_max": 10000.0
+    "gx_camera_node/auto_exposure_time_min": 1000.0
+    "gx_camera_node/auto_exposure": 0
+    "gx_camera_node/red_balance_ratio": 1.8906
+    "gx_camera_node/green_balance_ratio": 1.0
+    "gx_camera_node/blue_balance_ratio": 1.5703
+    "gx_camera_node/camera_fx": 1533.531924
+    "gx_camera_node/camera_fy": 1532.734381
+    "gx_camera_node/camera_cx": 607.391567
+    "gx_camera_node/camera_cy": 495.417894
+    "gx_camera_node/dist_k1": -0.210782
+    "gx_camera_node/dist_k2": 0.168691
+    "gx_camera_node/dist_p1": 0.000136
+    "gx_camera_node/dist_p2": -0.000211
+    "gx_camera_node/dist_k3": 0.0
+
+    # Extrinsics imported from sentry.aim/src/sentry_tf/config/sentry_tf.yaml
+    # barrel_to_camera is the calibrated gimbal_barrel -> gx_camera static TF in meters/radians.
+    sentry_tf_node:
+      gimbal_topic: "/ly/gimbal/angles"
+      world_frame: "gimbal_world"
+      barrel_frame: "gimbal_barrel"
+      barrel_offset_z: 0.13
+    barrel_to_camera:
+      x: 0.1168
+      y: 0.0746
+      z: 0.1146
+      yaw: -1.3746
+      pitch: -0.0738
+      roll: -1.5913
+      parent_frame: "gimbal_barrel"
+      child_frame: "gx_camera"
+
+    "sentry_tf_node/gimbal_topic": "/ly/gimbal/angles"
+    "sentry_tf_node/world_frame": "gimbal_world"
+    "sentry_tf_node/barrel_frame": "gimbal_barrel"
+    "sentry_tf_node/barrel_offset_z": 0.13
+    "barrel_to_camera/x": 0.1168
+    "barrel_to_camera/y": 0.0746
+    "barrel_to_camera/z": 0.1146
+    "barrel_to_camera/yaw": -1.3746
+    "barrel_to_camera/pitch": -0.0738
+    "barrel_to_camera/roll": -1.5913
+    "barrel_to_camera/parent_frame": "gimbal_barrel"
+    "barrel_to_camera/child_frame": "gx_camera"
+
     # Solver intrinsics / extrinsics (shared by detector / tracker_solver / predictor / outpost_hitter)
     solver_config:
       camera_offset: [0.0, 0.0, 52.6]
@@ -53,6 +144,43 @@
       - 0.168691
       - 0.000136
       - -0.000211
+      - 0.0
+
+    # Auxiliary aim camera intrinsics from sentry.aim/src/sentry_usb_camera/config/usb_camera.yaml
+    # Kept separate from solver_config so the existing main-camera EKF prediction is unchanged.
+    assist_camera_config:
+      camera_intrinsic_matrix:
+        - 691.095288
+        - 0.0
+        - 921.905348
+        - 0.0
+        - 690.254177
+        - 642.770163
+        - 0.0
+        - 0.0
+        - 1.0
+      camera_distortion_coefficients:
+        - -0.015663
+        - -0.012066
+        - -0.002138
+        - 0.001890
+        - 0.0
+
+    "assist_camera_config/camera_intrinsic_matrix":
+      - 691.095288
+      - 0.0
+      - 921.905348
+      - 0.0
+      - 690.254177
+      - 642.770163
+      - 0.0
+      - 0.0
+      - 1.0
+    "assist_camera_config/camera_distortion_coefficients":
+      - -0.015663
+      - -0.012066
+      - -0.002138
+      - 0.001890
       - 0.0
 
     # IO / serial base (shared by gimbal_driver and startup wrappers)

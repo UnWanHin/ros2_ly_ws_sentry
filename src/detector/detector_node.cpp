@@ -50,6 +50,7 @@
 #include "std_msgs/msg/header.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
+#include "sensor_msgs/msg/camera_info.hpp"
 
 // CvBridge (ROS2 版本)
 #include "cv_bridge/cv_bridge.h"
@@ -102,6 +103,13 @@ bool use_video = false;
 bool use_ros_bag = false;
 std::string video_path;
 std::string camera_sn;
+int camera_device_index = 1;
+std::string camera_frame_id = "gx_camera";
+std::string camera_image_topic = "/camera_front/image_raw";
+std::string camera_info_topic = "/camera_front/camera_info";
+double camera_publish_rate = 100.0;
+bool camera_use_compressed_image = true;
+int camera_jpeg_quality = 20;
 bool overlay_predictor_center = false;
 bool overlay_predictor_full = false;
 bool overlay_predictor_text = false;
@@ -125,6 +133,10 @@ ly_auto_aim::ArmorRefinder finder{};
 ly_auto_aim::CarFinder carFinder{};
 ly_auto_aim::CameraIntrinsicsParameterPack cameraIntrinsics{};
 std::unique_ptr<ly_auto_aim::PoseSolver> poseSolver{};
+rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr gx_image_pub;
+rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr gx_compressed_image_pub;
+rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr gx_camera_info_pub;
+sensor_msgs::msg::CameraInfo gx_camera_info_msg;
 
 LangYa::Camera Cam;
 Eigen::Vector3d overlay_camera_offset = Eigen::Vector3d::Zero();
@@ -217,6 +229,22 @@ void LoadParamCompat(const std::initializer_list<const char*>& keys, T& value, c
 }
 
 void LoadSolverIntrinsicsParam() {
+    double fx = 0.0;
+    double fy = 0.0;
+    double cx = 0.0;
+    double cy = 0.0;
+    const bool has_gx_intrinsics =
+        TryReadParam<double>({"gx_camera_node.camera_fx", "gx_camera_node/camera_fx"}, fx) &&
+        TryReadParam<double>({"gx_camera_node.camera_fy", "gx_camera_node/camera_fy"}, fy) &&
+        TryReadParam<double>({"gx_camera_node.camera_cx", "gx_camera_node/camera_cx"}, cx) &&
+        TryReadParam<double>({"gx_camera_node.camera_cy", "gx_camera_node/camera_cy"}, cy);
+
+    if (has_gx_intrinsics) {
+        cameraIntrinsics.FocalLength[0] = static_cast<float>(fx);
+        cameraIntrinsics.FocalLength[1] = static_cast<float>(fy);
+        cameraIntrinsics.PrincipalPoint[0] = static_cast<float>(cx);
+        cameraIntrinsics.PrincipalPoint[1] = static_cast<float>(cy);
+    } else {
     std::vector<double> intrinsic_flat;
     LoadParamCompat<std::vector<double>>(
         {"solver_config.camera_intrinsic_matrix", "solver_config/camera_intrinsic_matrix"},
@@ -231,7 +259,27 @@ void LoadSolverIntrinsicsParam() {
     } else {
         roslog::warn("solver_config camera_intrinsic_matrix size invalid (need 9, got {}). Use builtin defaults.", intrinsic_flat.size());
     }
+    }
 
+    double k1 = 0.0;
+    double k2 = 0.0;
+    double p1 = 0.0;
+    double p2 = 0.0;
+    double k3 = 0.0;
+    const bool has_gx_distortion =
+        TryReadParam<double>({"gx_camera_node.dist_k1", "gx_camera_node/dist_k1"}, k1) &&
+        TryReadParam<double>({"gx_camera_node.dist_k2", "gx_camera_node/dist_k2"}, k2) &&
+        TryReadParam<double>({"gx_camera_node.dist_p1", "gx_camera_node/dist_p1"}, p1) &&
+        TryReadParam<double>({"gx_camera_node.dist_p2", "gx_camera_node/dist_p2"}, p2) &&
+        TryReadParam<double>({"gx_camera_node.dist_k3", "gx_camera_node/dist_k3"}, k3);
+
+    if (has_gx_distortion) {
+        cameraIntrinsics.RadialDistortion[0] = static_cast<float>(k1);
+        cameraIntrinsics.RadialDistortion[1] = static_cast<float>(k2);
+        cameraIntrinsics.TangentialDistortion[0] = static_cast<float>(p1);
+        cameraIntrinsics.TangentialDistortion[1] = static_cast<float>(p2);
+        cameraIntrinsics.RadialDistortion[2] = static_cast<float>(k3);
+    } else {
     std::vector<double> distortion_vec;
     LoadParamCompat<std::vector<double>>(
         {"solver_config.camera_distortion_coefficients", "solver_config/camera_distortion_coefficients"},
@@ -247,9 +295,41 @@ void LoadSolverIntrinsicsParam() {
     } else {
         roslog::warn("solver_config camera_distortion_coefficients size invalid (need 5, got {}). Use builtin defaults.", distortion_vec.size());
     }
+    }
 }
 
 void LoadSolverExtrinsicsParam() {
+    double barrel_x = 0.0;
+    double barrel_y = 0.0;
+    double barrel_z = 0.0;
+    double yaw = 0.0;
+    double pitch = 0.0;
+    double roll = 0.0;
+    double barrel_offset_z = 0.0;
+    const bool has_barrel_to_camera =
+        TryReadParam<double>({"barrel_to_camera.x", "barrel_to_camera/x"}, barrel_x) &&
+        TryReadParam<double>({"barrel_to_camera.y", "barrel_to_camera/y"}, barrel_y) &&
+        TryReadParam<double>({"barrel_to_camera.z", "barrel_to_camera/z"}, barrel_z) &&
+        TryReadParam<double>({"barrel_to_camera.yaw", "barrel_to_camera/yaw"}, yaw) &&
+        TryReadParam<double>({"barrel_to_camera.pitch", "barrel_to_camera/pitch"}, pitch) &&
+        TryReadParam<double>({"barrel_to_camera.roll", "barrel_to_camera/roll"}, roll);
+
+    if (has_barrel_to_camera) {
+        TryReadParam<double>({"sentry_tf_node.barrel_offset_z", "sentry_tf_node/barrel_offset_z"}, barrel_offset_z);
+        overlay_camera_offset = Eigen::Vector3d(barrel_x, barrel_y, barrel_z + barrel_offset_z);
+        const Eigen::Matrix3d barrel_from_cv =
+            Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix() *
+            Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()).toRotationMatrix() *
+            Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX()).toRotationMatrix();
+        Eigen::Matrix3d cv_from_camera;
+        cv_from_camera <<
+            0.0, -1.0, 0.0,
+            0.0, 0.0, -1.0,
+            1.0, 0.0, 0.0;
+        overlay_camera_rotation_matrix = barrel_from_cv * cv_from_camera;
+        return;
+    }
+
     std::vector<double> offset_vec;
     LoadParamCompat<std::vector<double>>(
         {"solver_config.camera_offset", "solver_config/camera_offset"},
@@ -296,7 +376,14 @@ void InitialParam(){
     LoadParamCompat<bool>({"detector_config.use_video", "detector_config/use_video"}, use_video, false);
     LoadParamCompat<bool>({"detector_config.use_ros_bag", "detector_config/use_ros_bag"}, use_ros_bag, false);
     LoadParamCompat<std::string>({"detector_config.video_path", "detector_config/video_path"}, video_path, "");
-    LoadParamCompat<std::string>({"camera_param.camera_sn", "camera_param/camera_sn"}, camera_sn, std::string(""));
+    LoadParamCompat<std::string>({"gx_camera_node.device_sn", "gx_camera_node/device_sn", "camera_param.camera_sn", "camera_param/camera_sn"}, camera_sn, std::string(""));
+    LoadParamCompat<int>({"gx_camera_node.device_index", "gx_camera_node/device_index"}, camera_device_index, 1);
+    LoadParamCompat<std::string>({"gx_camera_node.frame_id", "gx_camera_node/frame_id"}, camera_frame_id, std::string("gx_camera"));
+    LoadParamCompat<std::string>({"gx_camera_node.image_topic", "gx_camera_node/image_topic"}, camera_image_topic, std::string("/camera_front/image_raw"));
+    LoadParamCompat<std::string>({"gx_camera_node.camera_info_topic", "gx_camera_node/camera_info_topic"}, camera_info_topic, std::string("/camera_front/camera_info"));
+    LoadParamCompat<double>({"gx_camera_node.publish_rate", "gx_camera_node/publish_rate"}, camera_publish_rate, 100.0);
+    LoadParamCompat<bool>({"gx_camera_node.use_compressed_image", "gx_camera_node/use_compressed_image"}, camera_use_compressed_image, true);
+    LoadParamCompat<int>({"gx_camera_node.jpeg_quality", "gx_camera_node/jpeg_quality"}, camera_jpeg_quality, 20);
     LoadParamCompat<bool>(
         {"detector_config.overlay_predictor_center", "detector_config/overlay_predictor_center"},
         overlay_predictor_center,
@@ -329,14 +416,50 @@ void InitialParam(){
     overlay_buff_timeout_ms = std::max(0, overlay_buff_timeout_ms);
 }
 
+void ConfigureGxCameraPublishers() {
+    gx_camera_info_msg.header.frame_id = camera_frame_id;
+    gx_camera_info_msg.distortion_model = "plumb_bob";
+    const double fx = cameraIntrinsics.FocalLength[0];
+    const double fy = cameraIntrinsics.FocalLength[1];
+    const double cx = cameraIntrinsics.PrincipalPoint[0];
+    const double cy = cameraIntrinsics.PrincipalPoint[1];
+    const double k1 = cameraIntrinsics.RadialDistortion[0];
+    const double k2 = cameraIntrinsics.RadialDistortion[1];
+    const double p1 = cameraIntrinsics.TangentialDistortion[0];
+    const double p2 = cameraIntrinsics.TangentialDistortion[1];
+    const double k3 = cameraIntrinsics.RadialDistortion[2];
+    gx_camera_info_msg.k = {fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0};
+    gx_camera_info_msg.d = {k1, k2, p1, p2, k3};
+    gx_camera_info_msg.r = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+    gx_camera_info_msg.p = {fx, 0.0, cx, 0.0, 0.0, fy, cy, 0.0, 0.0, 0.0, 1.0, 0.0};
+
+    gx_image_pub = global_node->create_publisher<sensor_msgs::msg::Image>(camera_image_topic, rclcpp::SensorDataQoS());
+    if (camera_use_compressed_image) {
+        gx_compressed_image_pub = global_node->create_publisher<sensor_msgs::msg::CompressedImage>(
+            camera_image_topic + "/compressed", rclcpp::SensorDataQoS());
+    }
+    gx_camera_info_pub = global_node->create_publisher<sensor_msgs::msg::CameraInfo>(
+        camera_info_topic,
+        rclcpp::QoS(1).transient_local());
+}
+
 void ConfigureCamera() {
-    Cam.Configure().AutoExposure.Value = GX_EXPOSURE_AUTO_OFF;
-    LoadParamCompat<double>({"camera_param.ExposureTime", "camera_param/ExposureTime"}, Cam.Configure().ExposureTime.Value, 4000.0);
-    Cam.Configure().AutoGain.Value = GX_GAIN_AUTO_OFF;
-    LoadParamCompat<double>({"camera_param.Gain", "camera_param/Gain"}, Cam.Configure().Gain.Value, 12.0);
-    LoadParamCompat<double>({"camera_param.RedBalanceRatio", "camera_param/RedBalanceRatio"}, Cam.Configure().RedBalanceRatio.Value, 1.2266);
-    LoadParamCompat<double>({"camera_param.GreenBalanceRatio", "camera_param/GreenBalanceRatio"}, Cam.Configure().GreenBalanceRatio.Value, 1.0);
-    LoadParamCompat<double>({"camera_param.BlueBalanceRatio", "camera_param/BlueBalanceRatio"}, Cam.Configure().BlueBalanceRatio.Value, 1.3711);
+    auto& config = Cam.Configure();
+    int auto_exposure = static_cast<int>(config.AutoExposure.Value);
+    LoadParamCompat<int>({"gx_camera_node.auto_exposure", "gx_camera_node/auto_exposure"}, auto_exposure, static_cast<int>(GX_EXPOSURE_AUTO_OFF));
+    config.AutoExposure.Value = static_cast<GX_EXPOSURE_AUTO_ENTRY>(auto_exposure);
+    LoadParamCompat<double>({"gx_camera_node.exposure_time", "gx_camera_node/exposure_time", "camera_param.ExposureTime", "camera_param/ExposureTime"}, config.ExposureTime.Value, 4000.0);
+    LoadParamCompat<double>({"gx_camera_node.auto_exposure_time_max", "gx_camera_node/auto_exposure_time_max"}, config.AutoExposureTimeMax.Value, 10000.0);
+    LoadParamCompat<double>({"gx_camera_node.auto_exposure_time_min", "gx_camera_node/auto_exposure_time_min"}, config.AutoExposureTimeMin.Value, 1000.0);
+    int auto_gain = static_cast<int>(config.AutoGain.Value);
+    LoadParamCompat<int>({"gx_camera_node.auto_gain", "gx_camera_node/auto_gain"}, auto_gain, static_cast<int>(GX_GAIN_AUTO_OFF));
+    config.AutoGain.Value = static_cast<GX_GAIN_AUTO_ENTRY>(auto_gain);
+    LoadParamCompat<double>({"gx_camera_node.gain", "gx_camera_node/gain", "camera_param.Gain", "camera_param/Gain"}, config.Gain.Value, 12.0);
+    LoadParamCompat<double>({"gx_camera_node.auto_gain_max", "gx_camera_node/auto_gain_max"}, config.AutoGainMax.Value, 12.0);
+    LoadParamCompat<double>({"gx_camera_node.auto_gain_min", "gx_camera_node/auto_gain_min"}, config.AutoGainMin.Value, 2.0);
+    LoadParamCompat<double>({"gx_camera_node.red_balance_ratio", "gx_camera_node/red_balance_ratio", "camera_param.RedBalanceRatio", "camera_param/RedBalanceRatio"}, config.RedBalanceRatio.Value, 1.2266);
+    LoadParamCompat<double>({"gx_camera_node.green_balance_ratio", "gx_camera_node/green_balance_ratio", "camera_param.GreenBalanceRatio", "camera_param/GreenBalanceRatio"}, config.GreenBalanceRatio.Value, 1.0);
+    LoadParamCompat<double>({"gx_camera_node.blue_balance_ratio", "gx_camera_node/blue_balance_ratio", "camera_param.BlueBalanceRatio", "camera_param/BlueBalanceRatio"}, config.BlueBalanceRatio.Value, 1.3711);
 }
 
 std::string ResolvePathFromDetectorShare(const std::string& configured_path,
@@ -452,8 +575,8 @@ bool ProjectWorldPointToImage(
     const double yaw_rad = static_cast<double>(gimbal_angles.yaw) * M_PI / 180.0;
     const double pitch_rad = static_cast<double>(gimbal_angles.pitch) * M_PI / 180.0;
     const Eigen::Matrix3d world_to_gimbal =
-        Eigen::AngleAxisd(-yaw_rad, Eigen::Vector3d::UnitZ()).toRotationMatrix() *
-        Eigen::AngleAxisd(pitch_rad, Eigen::Vector3d::UnitY()).toRotationMatrix();
+        Eigen::AngleAxisd(pitch_rad, Eigen::Vector3d::UnitY()).toRotationMatrix() *
+        Eigen::AngleAxisd(-yaw_rad, Eigen::Vector3d::UnitZ()).toRotationMatrix();
     const Eigen::Vector3d gimbal = world_to_gimbal * world;
     const Eigen::Vector3d camera = overlay_camera_rotation_matrix.inverse() * (gimbal - overlay_camera_offset);
     if (!camera.allFinite() || camera.x() < 1e-4) {
@@ -784,20 +907,34 @@ void ImageLoop() {
     boost::lockfree::stack<AngleFrame> angle_image_stack(MAX_STACK_SIZE);
 
     std::jthread imagepub_thread{[&] {
-        rclcpp::WallRate rate(80); // ROS2 推荐使用 WallRate
+        rclcpp::WallRate rate(camera_publish_rate > 0.0 ? camera_publish_rate : 100.0);
         while (rclcpp::ok()) {
             if (!image_queue.empty()) {
                 cv::Mat publish_image = image_queue.wait_and_pop();
                 
-                // ROS2 中消息头处理
                 std_msgs::msg::Header header;
                 header.stamp = global_node->now();
-                header.frame_id = "camera";
+                header.frame_id = camera_frame_id;
+
+                if (gx_image_pub) {
+                    auto image_msg = cv_bridge::CvImage(header, "bgr8", publish_image).toImageMsg();
+                    gx_image_pub->publish(*image_msg);
+                }
 
                 auto compressed_msg = cv_bridge::CvImage(header, "bgr8", publish_image)
                                         .toCompressedImageMsg(cv_bridge::JPG);
+                if (camera_use_compressed_image && gx_compressed_image_pub) {
+                    compressed_msg->data.clear();
+                    std::vector<int> jpeg_params = {cv::IMWRITE_JPEG_QUALITY, camera_jpeg_quality};
+                    cv::imencode(".jpg", publish_image, compressed_msg->data, jpeg_params);
+                    gx_compressed_image_pub->publish(*compressed_msg);
+                }
 
-                // global_node.Publisher 映射到 ROS2 的 publish 调用
+                if (gx_camera_info_pub) {
+                    gx_camera_info_msg.header.stamp = header.stamp;
+                    gx_camera_info_pub->publish(gx_camera_info_msg);
+                }
+
                 global_node->Publisher<ly_compressed_image>()->publish(*compressed_msg);
                 rate.sleep();
             }
@@ -1091,11 +1228,7 @@ int main(int argc, char **argv) try {
             }
         } else {
             ConfigureCamera();
-            if (camera_sn.empty()) {
-                std::cerr << "[ERROR] camera_param.camera_sn (or camera_param/camera_sn) is empty." << std::endl;
-                return -1;
-            }
-            if (!Cam.Initialize("", camera_sn)) {
+            if (!Cam.Initialize("", camera_sn, camera_device_index)) {
                 std::cerr << "[ERROR] Failed to initialize camera with SN: " << camera_sn << std::endl;
                 return -1;
             }
@@ -1109,6 +1242,7 @@ int main(int argc, char **argv) try {
     if(web_show){
         VideoStreamer::init();
     }
+    ConfigureGxCameraPublishers();
     
     LoadParamCompat<std::string>({"detector_config.classifier_path", "detector_config/classifier_path"}, classifier_path, "");
     LoadParamCompat<std::string>({"detector_config.detector_path", "detector_config/detector_path"}, detector_path, "");

@@ -18,9 +18,14 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
+import os
 
 
 def generate_launch_description():
+    behavior_tree_share = get_package_share_directory("behavior_tree")
+    default_config_file = os.path.join(behavior_tree_share, "config", "base_config.yaml")
+
     def build_node(context):
         config_file_value = LaunchConfiguration("config_file").perform(context).strip()
         output_value = LaunchConfiguration("output")
@@ -48,8 +53,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "config_file",
-            default_value="",
-            description="Optional YAML config file for gimbal_driver. Empty keeps built-in defaults.",
+            default_value=default_config_file,
+            description="YAML config file for gimbal_driver. Defaults to shared base_config.yaml.",
         ),
         DeclareLaunchArgument(
             "output",
