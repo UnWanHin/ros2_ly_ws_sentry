@@ -987,6 +987,10 @@ void ImageLoop() {
 
                 if(!use_ros_bag){
                     if (!Cam.GetImage(image)) continue;
+                    if (!use_video) {
+                        // Match sentry.aim: Daheng camera returns RGB, detector works on BGR.
+                        cv::cvtColor(image, image, cv::COLOR_RGB2BGR);
+                    }
                 }
 
                 rclcpp::spin_some(global_node);
