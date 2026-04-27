@@ -728,6 +728,54 @@ namespace BehaviorTree {
                 continue;
             }
 
+            if (runtimeRearmStartGate_ && !is_game_begin) {
+                const auto now = std::chrono::steady_clock::now();
+                if (!runtimeStartGateActive_) {
+                    runtimeStartGateActive_ = true;
+                    runtimeStartGateLastLogTime_ = now;
+                    LoggerPtr->Info("Runtime start gate armed: waiting /ly/game/is_start=true.");
+                } else if (LoggerPtr && (now - runtimeStartGateLastLogTime_ > std::chrono::seconds(2))) {
+                    LoggerPtr->Debug("Runtime start gate waiting for /ly/game/is_start=true...");
+                    runtimeStartGateLastLogTime_ = now;
+                }
+
+                SET_POSITION(Home, team);
+                if (publishNaviGoal_ && naviCommandRateClock.trigger()) {
+                    naviCommandRateClock.tick();
+                    const bool use_tf_goal_bridge =
+                        config.NaviSettings.UseXY &&
+                        config.NaviSettings.UseTfGoalBridge &&
+                        config.ChaseSettings.Enable &&
+                        config.ChaseSettings.UseRelativeTargetTopic;
+                    if (config.NaviSettings.UseXY && !use_tf_goal_bridge) {
+                        PubNaviGoalPos();
+                    } else {
+                        PubNaviGoal();
+                    }
+                }
+
+                naviVelocityInput = VelocityType{0, 0};
+                naviVelocity = VelocityType{0, 0};
+                postureCommand = 0;
+                PublishSafeControl("runtime_start_gate");
+                UpdateBlackBoard();
+                if (decisionTraceEnabled_) {
+                    WriteDecisionTrace("tick");
+                }
+                treeTickRateClock.sleep();
+                continue;
+            }
+            if (runtimeRearmStartGate_ && runtimeStartGateActive_ && is_game_begin) {
+                runtimeStartGateActive_ = false;
+                gameStartTime = std::chrono::steady_clock::now();
+                if (LoggerPtr) {
+                    LoggerPtr->Info("Runtime start gate opened: resume decision loop.");
+                }
+                if (decisionTraceEnabled_) {
+                    WriteDecisionTrace("game_start");
+                }
+            }
+
             const auto now = std::chrono::steady_clock::now();
             if (now - lastTreeTickLogTime_ > std::chrono::seconds(2)) {
                 LoggerPtr->Debug("BehaviorTree Root Tick...");

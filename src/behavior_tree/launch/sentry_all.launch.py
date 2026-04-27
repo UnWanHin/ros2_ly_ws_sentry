@@ -90,6 +90,7 @@ def generate_launch_description():
     bt_config_file = LaunchConfiguration("bt_config_file")
     bt_tree_file = LaunchConfiguration("bt_tree_file")
     debug_bypass_is_start = LaunchConfiguration("debug_bypass_is_start")
+    runtime_rearm_start_gate = LaunchConfiguration("runtime_rearm_start_gate")
     publish_navi_goal = LaunchConfiguration("publish_navi_goal")
     wait_for_game_start_timeout_sec = LaunchConfiguration("wait_for_game_start_timeout_sec")
     league_referee_stale_timeout_ms = LaunchConfiguration("league_referee_stale_timeout_ms")
@@ -171,6 +172,11 @@ def generate_launch_description():
             description="Debug only: true will bypass waiting /ly/game/is_start gate.",
         ),
         DeclareLaunchArgument(
+            "runtime_rearm_start_gate",
+            default_value="false",
+            description="Debug only: when true, game loop re-enters start gate if /ly/game/is_start becomes false.",
+        ),
+        DeclareLaunchArgument(
             "publish_navi_goal",
             default_value="true",
             description="Whether behavior_tree publishes /ly/navi/goal and /ly/navi/goal_pos.",
@@ -235,6 +241,7 @@ def generate_launch_description():
         LogInfo(msg=["[sentry_all] resolved_bt_config_file: ", resolved_bt_config_file]),
         LogInfo(msg=["[sentry_all] bt_tree_file: ", bt_tree_file]),
         LogInfo(msg=["[sentry_all] debug_bypass_is_start: ", debug_bypass_is_start]),
+        LogInfo(msg=["[sentry_all] runtime_rearm_start_gate: ", runtime_rearm_start_gate]),
         LogInfo(msg=["[sentry_all] publish_navi_goal: ", publish_navi_goal]),
         LogInfo(msg=["[sentry_all] wait_for_game_start_timeout_sec: ", wait_for_game_start_timeout_sec]),
         LogInfo(msg=["[sentry_all] league_referee_stale_timeout_ms: ", league_referee_stale_timeout_ms]),
@@ -356,6 +363,7 @@ def generate_launch_description():
                     "bt_config_file": resolved_bt_config_file,
                     "bt_tree_file": bt_tree_file,
                     "debug_bypass_is_start": debug_bypass_is_start,
+                    "runtime_rearm_start_gate": runtime_rearm_start_gate,
                     "publish_navi_goal": publish_navi_goal,
                     "wait_for_game_start_timeout_sec": wait_for_game_start_timeout_sec,
                     "league_referee_stale_timeout_ms": league_referee_stale_timeout_ms,

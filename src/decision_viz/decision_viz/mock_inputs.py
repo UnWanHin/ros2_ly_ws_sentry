@@ -131,6 +131,9 @@ def main(argv: list[str] | None = None) -> int:
             if not command:
                 return
             if command == "start":
+                if self.time_left_float <= 0.0:
+                    self.time_left_float = float(self.match_duration_sec)
+                    self._clamp_time_left()
                 self.match_started = True
                 self.match_running = True
                 return

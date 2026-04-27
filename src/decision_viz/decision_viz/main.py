@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
 from pathlib import Path
 
 from .config import goals_by_id, load_config, load_plugin_points, resolve_path
-from .control_bus import append_command
-from .trace import build_changes, load_trace, load_trace_incremental
+from .trace import build_changes, load_trace, load_trace_incremental, normalize_record
 from .validation import format_validation, validate_records
 from .viewer import Viewer
 
@@ -34,7 +32,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--speed", type=float, default=0.0, help="Initial playback speed. 0 keeps YAML default.")
     parser.add_argument("--follow", action="store_true", help="Follow a growing trace file and update the view in real time.")
     parser.add_argument("--follow-poll", type=float, default=0.25, help="Follow mode poll interval in seconds (default: 0.25).")
-    parser.add_argument("--follow-wait", type=float, default=20.0, help="Wait up to N seconds for first trace records in follow mode.")
+    parser.add_argument(
+        "--follow-wait",
+        type=float,
+        default=20.0,
+        help="Compatibility option; follow mode now opens the viewer immediately before first trace records arrive.",
+    )
     parser.add_argument(
         "--web-stream",
         dest="web_stream",
@@ -73,133 +76,71 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def wait_for_follow_records(
-    trace_path: Path,
-    goal_names: dict[int, str],
-    follow_poll: float,
-    follow_wait: float,
-    map_path: Path | None = None,
-    pygame=None,
-    config: dict | None = None,
-    streamer=None,
-    control_file: Path | None = None,
-) -> tuple[list, int, int] | None:
-    deadline = time.monotonic() + max(0.0, follow_wait)
-    records: list = []
-    bad_lines = 0
-    follow_offset = 0
-    poll_sec = max(0.05, float(follow_poll))
-    next_poll = 0.0
-
-    screen = None
-    font = None
-    small_font = None
-    clock = None
-    fps = 60
-    if pygame is not None and isinstance(config, dict):
-        window = config.get("window", {}) if isinstance(config.get("window"), dict) else {}
-        width = int(window.get("width", 1500))
-        height = int(window.get("height", 900))
-        min_width = int(window.get("min_width", 960))
-        min_height = int(window.get("min_height", 620))
-        fps = int(window.get("fps", 60))
-        screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
-        pygame.display.set_caption("LY Decision Visualization (Waiting Trace)")
-        font = pygame.font.SysFont("DejaVu Sans", 24, bold=True)
-        small_font = pygame.font.SysFont("DejaVu Sans", 16)
-        clock = pygame.time.Clock()
-
-    wait_map = None
-    wait_map_size = (1, 1)
-    if pygame is not None and map_path is not None and map_path.exists():
-        try:
-            wait_map = pygame.image.load(str(map_path)).convert_alpha()
-            wait_map_size = wait_map.get_size()
-        except Exception:
-            wait_map = None
-
-    while True:
-        now = time.monotonic()
-        if screen is not None:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    return None
-                if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_q):
-                    return None
-                if event.type == pygame.KEYDOWN and event.key in (pygame.K_s, pygame.K_RETURN):
-                    if control_file is not None:
-                        try:
-                            append_command(control_file, "start")
-                        except OSError:
-                            pass
-                if event.type == pygame.KEYDOWN and event.key in (pygame.K_r,):
-                    if control_file is not None:
-                        try:
-                            append_command(control_file, "reset")
-                        except OSError:
-                            pass
-                if event.type == pygame.VIDEORESIZE:
-                    new_w = max(min_width, event.w)
-                    new_h = max(min_height, event.h)
-                    screen = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
-
-        if now >= next_poll:
-            next_poll = now + poll_sec
-            if trace_path.exists():
-                records, bad_lines, follow_offset = load_trace_incremental(
-                    trace_path,
-                    goal_names,
-                    start_offset=0,
-                    start_index=0,
-                )
-            if records:
-                return records, bad_lines, follow_offset
-
-        if now >= deadline:
-            raise TimeoutError(f"no trace records loaded from {trace_path} within {follow_wait:.1f}s")
-
-        if screen is None:
-            time.sleep(min(0.2, poll_sec))
-            continue
-
-        remaining = max(0.0, deadline - now)
-        screen.fill(pygame.Color("#101216"))
-        if wait_map is not None:
-            area = pygame.Rect(18, 18, max(200, screen.get_width() - 36), max(120, screen.get_height() - 120))
-            src_w, src_h = wait_map_size
-            scale = min(area.width / src_w, area.height / src_h)
-            draw_w = int(src_w * scale)
-            draw_h = int(src_h * scale)
-            draw_rect = pygame.Rect(
-                area.x + (area.width - draw_w) // 2,
-                area.y + (area.height - draw_h) // 2,
-                draw_w,
-                draw_h,
-            )
-            scaled = pygame.transform.smoothscale(wait_map, (draw_w, draw_h))
-            screen.blit(scaled, draw_rect)
-            pygame.draw.rect(screen, pygame.Color("#3a424d"), draw_rect, 1, border_radius=4)
-
-        title = font.render("Waiting for decision trace...", True, pygame.Color("#edf2f7"))
-        hint = small_font.render(f"trace: {trace_path}", True, pygame.Color("#a8b0ba"))
-        remain = small_font.render(f"remaining: {remaining:.1f}s", True, pygame.Color("#a8b0ba"))
-        cancel = small_font.render("Press ESC or close window to cancel.", True, pygame.Color("#a8b0ba"))
-        start_hint = None
-        if control_file is not None:
-            start_hint = small_font.render("Press S or Enter to start offline match gate.", True, pygame.Color("#f5c542"))
-        cx = screen.get_width() // 2
-        screen.blit(title, (cx - title.get_width() // 2, screen.get_height() // 2 - 80))
-        screen.blit(hint, (cx - hint.get_width() // 2, screen.get_height() // 2 - 24))
-        screen.blit(remain, (cx - remain.get_width() // 2, screen.get_height() // 2 + 8))
-        if start_hint is not None:
-            screen.blit(start_hint, (cx - start_hint.get_width() // 2, screen.get_height() // 2 + 38))
-            screen.blit(cancel, (cx - cancel.get_width() // 2, screen.get_height() // 2 + 68))
-        else:
-            screen.blit(cancel, (cx - cancel.get_width() // 2, screen.get_height() // 2 + 40))
-        if streamer is not None:
-            streamer.publish_surface(screen, pygame)
-        pygame.display.flip()
-        clock.tick(max(15, min(120, fps)))
+def make_bootstrap_record(config: dict, goals: dict[int, dict], goal_names: dict[int, str]):
+    field = config.get("field_cm", {}) if isinstance(config.get("field_cm"), dict) else {}
+    match_cfg = config.get("match_control", {}) if isinstance(config.get("match_control"), dict) else {}
+    duration_sec = int(match_cfg.get("duration_sec", 420) or 420)
+    home = goals.get(0, {})
+    home_pos = home.get("red") or (0.0, 0.0)
+    home_name = str(home.get("name", goal_names.get(0, "Home")))
+    raw = {
+        "schema": "ly_decision_trace_v1",
+        "schema_version": 1,
+        "event": "offline_wait_start",
+        "tick": 0,
+        "t": 0.0,
+        "elapsed_sec": 0,
+        "field_cm": {
+            "width": int(field.get("width", 2800) or 2800),
+            "height": int(field.get("height", 1500) or 1500),
+            "frame": str(field.get("frame", "left_bottom_origin_cm")),
+        },
+        "competition_profile": "regional",
+        "strategy_mode": "waiting_start",
+        "team": "red",
+        "aim_mode": "-",
+        "target_armor": {"id": 0, "name": "NoTarget", "distance_m": 0.0},
+        "units": {
+            "friend": [
+                {
+                    "type_id": 7,
+                    "type": "Sentry",
+                    "side": "friend",
+                    "hp": 400,
+                    "max_hp": 400,
+                    "distance_m": 0.0,
+                    "position_cm": {"x": home_pos[0], "y": home_pos[1]},
+                }
+            ],
+            "enemy": [],
+        },
+        "navi_goal": {
+            "id": 0,
+            "base_id": 0,
+            "name": home_name,
+            "side": "red",
+            "publish_allowed": False,
+            "publish_enabled": False,
+            "speed_level": 0,
+            "position_cm": {"x": home_pos[0], "y": home_pos[1]},
+        },
+        "posture": {
+            "command": {"id": 0, "name": "WaitStart"},
+            "state": {"id": 0, "name": "WaitStart"},
+            "last_reason": "offline viewer opened before first trace",
+            "runtime": {
+                "current": {"id": 0, "name": "WaitStart"},
+                "desired": {"id": 0, "name": "WaitStart"},
+                "pending": {"id": 0, "name": "Unknown"},
+            },
+        },
+        "referee": {
+            "self_hp": 400,
+            "ammo": 0,
+            "time_left": duration_sec,
+        },
+    }
+    return normalize_record(raw, 0, goal_names)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -293,40 +234,22 @@ def main(argv: list[str] | None = None) -> int:
             streamer = None
 
     if args.follow:
-        show_wait_window = not args.validate_only
-        if show_wait_window:
-            pygame = import_pygame()
-            pygame.init()
-            pygame_initialized = True
-
-        while True:
+        if trace_path.exists():
             try:
-                follow_result = wait_for_follow_records(
-                    trace_path=trace_path,
-                    goal_names=goal_names,
-                    follow_poll=args.follow_poll,
-                    follow_wait=args.follow_wait,
-                    map_path=map_path,
-                    pygame=pygame if show_wait_window else None,
-                    config=config if show_wait_window else None,
-                    streamer=streamer,
-                    control_file=control_file_path,
+                records, bad_lines, follow_offset = load_trace_incremental(
+                    trace_path,
+                    goal_names,
+                    start_offset=0,
+                    start_index=0,
                 )
-            except (OSError, TimeoutError) as exc:
-                if pygame_initialized:
-                    pygame.quit()
-                if streamer is not None:
-                    streamer.stop()
-                print(str(exc), file=sys.stderr)
-                return 2
-            if follow_result is None:
-                if pygame_initialized:
-                    pygame.quit()
-                if streamer is not None:
-                    streamer.stop()
-                return 130
-            records, bad_lines, follow_offset = follow_result
-            break
+            except OSError:
+                records = []
+                bad_lines = 0
+                follow_offset = 0
+        if not records:
+            records = [make_bootstrap_record(config, goals, goal_names)]
+            bad_lines = 0
+            follow_offset = 0
     else:
         try:
             records, bad_lines = load_trace(trace_path, goal_names)

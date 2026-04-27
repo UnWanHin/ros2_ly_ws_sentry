@@ -154,6 +154,7 @@ std::string DefaultConfigPathForProfile(const std::string& pkg_path, const std::
             const std::string tree_override = ReadStringParameter(*node_, "bt_tree_file", "");
             const std::string config_override = ReadStringParameter(*node_, "bt_config_file", "");
             debugBypassGameStart_ = ReadBoolParameter(*node_, "debug_bypass_is_start", false);
+            runtimeRearmStartGate_ = ReadBoolParameter(*node_, "runtime_rearm_start_gate", false);
             publishNaviGoal_ = ReadBoolParameter(*node_, "publish_navi_goal", true);
             waitForGameStartTimeoutSec_ = std::max(0, ReadIntParameter(*node_, "wait_for_game_start_timeout_sec", 0));
             leagueRefereeStaleTimeoutMs_ = std::max(0, ReadIntParameter(*node_, "league_referee_stale_timeout_ms", 0));
@@ -182,6 +183,7 @@ std::string DefaultConfigPathForProfile(const std::string& pkg_path, const std::
                 LoggerPtr->Info("Competition profile override: {}", competitionProfileOverride_);
             }
             LoggerPtr->Info("debug_bypass_is_start: {}", debugBypassGameStart_ ? "true" : "false");
+            LoggerPtr->Info("runtime_rearm_start_gate: {}", runtimeRearmStartGate_ ? "true" : "false");
             LoggerPtr->Info("publish_navi_goal: {}", publishNaviGoal_ ? "true" : "false");
             LoggerPtr->Info("wait_for_game_start_timeout_sec: {}", waitForGameStartTimeoutSec_);
             LoggerPtr->Info("league_referee_stale_timeout_ms: {}", leagueRefereeStaleTimeoutMs_);

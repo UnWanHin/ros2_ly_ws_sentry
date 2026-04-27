@@ -24,6 +24,7 @@ def generate_launch_description():
     bt_config_file = LaunchConfiguration("bt_config_file")
     bt_tree_file = LaunchConfiguration("bt_tree_file")
     debug_bypass_is_start = LaunchConfiguration("debug_bypass_is_start")
+    runtime_rearm_start_gate = LaunchConfiguration("runtime_rearm_start_gate")
     wait_for_game_start_timeout_sec = LaunchConfiguration("wait_for_game_start_timeout_sec")
     league_referee_stale_timeout_ms = LaunchConfiguration("league_referee_stale_timeout_ms")
     decision_trace_enabled = LaunchConfiguration("decision_trace_enabled")
@@ -55,6 +56,11 @@ def generate_launch_description():
             "debug_bypass_is_start",
             default_value="false",
             description="Debug only: true will bypass waiting /ly/game/is_start gate.",
+        ),
+        DeclareLaunchArgument(
+            "runtime_rearm_start_gate",
+            default_value="false",
+            description="Debug only: when true, game loop re-enters start gate if /ly/game/is_start becomes false.",
         ),
         DeclareLaunchArgument(
             "wait_for_game_start_timeout_sec",
@@ -89,6 +95,7 @@ def generate_launch_description():
         LogInfo(msg=["[behavior_tree] bt_config_file: ", bt_config_file]),
         LogInfo(msg=["[behavior_tree] bt_tree_file: ", bt_tree_file]),
         LogInfo(msg=["[behavior_tree] debug_bypass_is_start: ", debug_bypass_is_start]),
+        LogInfo(msg=["[behavior_tree] runtime_rearm_start_gate: ", runtime_rearm_start_gate]),
         LogInfo(msg=["[behavior_tree] wait_for_game_start_timeout_sec: ", wait_for_game_start_timeout_sec]),
         LogInfo(msg=["[behavior_tree] league_referee_stale_timeout_ms: ", league_referee_stale_timeout_ms]),
         LogInfo(msg=["[behavior_tree] decision_trace_enabled: ", decision_trace_enabled]),
@@ -108,6 +115,7 @@ def generate_launch_description():
                     "bt_config_file": bt_config_file,
                     "bt_tree_file": bt_tree_file,
                     "debug_bypass_is_start": debug_bypass_is_start,
+                    "runtime_rearm_start_gate": runtime_rearm_start_gate,
                     "wait_for_game_start_timeout_sec": wait_for_game_start_timeout_sec,
                     "league_referee_stale_timeout_ms": league_referee_stale_timeout_ms,
                     "decision_trace_enabled": decision_trace_enabled,

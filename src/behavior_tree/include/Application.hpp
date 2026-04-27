@@ -209,9 +209,12 @@ private:
     CompetitionProfile competitionProfile_{CompetitionProfile::Regional};
     std::string competitionProfileOverride_{};
     bool debugBypassGameStart_{false};
+    bool runtimeRearmStartGate_{false};
     bool publishNaviGoal_{true};
     int waitForGameStartTimeoutSec_{0};
     int leagueRefereeStaleTimeoutMs_{0};
+    bool runtimeStartGateActive_{false};
+    std::chrono::steady_clock::time_point runtimeStartGateLastLogTime_{};
     bool leagueRecoveryActive_{false};
     std::chrono::steady_clock::time_point leagueRecoveryStartTime_{};
     std::chrono::steady_clock::time_point leagueRecoveryReach350Time_{};

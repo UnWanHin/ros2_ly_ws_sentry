@@ -126,6 +126,24 @@ class Viewer:
             except OSError:
                 self.control_read_offset = 0
 
+        self.scripted_path = as_dict(config.get("scripted_path"))
+        default_side = self.records[self.current_index].team
+        self.scripted_side = self.normalize_side(str(self.scripted_path.get("side", "auto")), default_side)
+        self.scripted_speed_cmps = max(0.0, self.to_float(self.scripted_path.get("speed_cmps"), 0.0))
+        self.scripted_loop = bool(self.scripted_path.get("loop", False))
+        self.scripted_show_labels = bool(self.scripted_path.get("show_labels", False))
+        self.scripted_show_future = bool(self.scripted_path.get("show_future", False))
+        self.scripted_label = str(self.scripted_path.get("label", "ScriptedPath"))
+        self.scripted_line_width = max(1, int(self.scripted_path.get("line_width", 3)))
+        self.scripted_marker_radius = max(4, int(self.scripted_path.get("marker_radius", 8)))
+        self.scripted_color_raw = str(self.scripted_path.get("color", "#f5c542"))
+        self.scripted_waypoints = self.build_scripted_waypoints()
+        self.scripted_motion_points = self.scripted_waypoints[:]
+        if self.scripted_loop and len(self.scripted_waypoints) > 2:
+            self.scripted_motion_points.append(self.scripted_waypoints[0])
+        self.scripted_segment_lengths, self.scripted_total_length = self.compute_path_lengths(self.scripted_motion_points)
+        self.scripted_enabled = bool(self.scripted_path.get("enabled", False)) and len(self.scripted_waypoints) >= 2
+
         self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
         pygame.display.set_caption("LY Decision Visualization")
         try:
@@ -159,6 +177,10 @@ class Viewer:
             "white": color(pygame, self.colors_raw, "white", "#ffffff"),
             "neutral": color(pygame, self.colors_raw, "neutral", "#4fb3d9"),
         }
+        try:
+            self.scripted_color = pygame.Color(self.scripted_color_raw)
+        except ValueError:
+            self.scripted_color = self.palette["accent"]
 
         self.map_image = pygame.image.load(str(map_path)).convert_alpha()
         self.map_size = self.map_image.get_size()
@@ -287,14 +309,17 @@ class Viewer:
                 self.match_time_left_sec = float(self.match_duration_sec)
             self.match_started = True
             self.match_running = True
+            self.playing = True
             return
         if cmd == "pause":
             self.match_running = False
+            self.playing = False
             return
         if cmd == "reset":
             self.match_time_left_sec = float(self.match_duration_sec)
             self.match_started = False
             self.match_running = False
+            self.playing = False
             return
         if cmd in {"rewind", "forward", "set_time_left"}:
             try:
@@ -416,6 +441,8 @@ class Viewer:
             self.draw_all_goals(image_rect)
         if self.layers.get("goal_path", True):
             self.draw_path(image_rect)
+        if self.layers.get("scripted_path", True):
+            self.draw_scripted_path(image_rect)
         if self.layers.get("units", True):
             self.draw_units(image_rect)
         if self.layers.get("current_goal", True):
@@ -433,6 +460,149 @@ class Viewer:
         sx = image_rect.x + x / field_w * image_rect.width
         sy = image_rect.y + (1.0 - y / field_h) * image_rect.height
         return (round(sx), round(sy))
+
+    @staticmethod
+    def to_float(value: Any, default: float = 0.0) -> float:
+        try:
+            out = float(value)
+        except (TypeError, ValueError):
+            return default
+        return out if math.isfinite(out) else default
+
+    @staticmethod
+    def normalize_side(side: str, fallback: str) -> str:
+        text = str(side).strip().lower()
+        if text == "auto":
+            text = fallback
+        return text if text in ("red", "blue") else fallback
+
+    @staticmethod
+    def compute_path_lengths(points: list[tuple[float, float]]) -> tuple[list[float], float]:
+        if len(points) < 2:
+            return [], 0.0
+        lengths: list[float] = []
+        total = 0.0
+        for idx in range(len(points) - 1):
+            a = points[idx]
+            b = points[idx + 1]
+            seg = math.hypot(b[0] - a[0], b[1] - a[1])
+            lengths.append(seg)
+            total += seg
+        return lengths, total
+
+    def build_scripted_waypoints(self) -> list[tuple[float, float]]:
+        points: list[tuple[float, float]] = []
+        raw_points = as_list(self.scripted_path.get("points_cm"))
+        for raw in raw_points:
+            pos = parse_position(raw)
+            if pos is not None:
+                points.append(pos)
+        if points:
+            return points
+
+        for raw_id in as_list(self.scripted_path.get("goal_ids")):
+            try:
+                goal_id = int(raw_id)
+            except (TypeError, ValueError):
+                continue
+            goal = self.goals.get(goal_id)
+            if not isinstance(goal, dict):
+                continue
+            pos = parse_position(goal.get(self.scripted_side))
+            if pos is None or pos == (0, 0):
+                other_side = "blue" if self.scripted_side == "red" else "red"
+                pos = parse_position(goal.get(other_side))
+            if pos is None or pos == (0, 0):
+                continue
+            points.append(pos)
+        return points
+
+    def scripted_elapsed_sec(self) -> float:
+        controls_available = bool(self.match_control_enabled and self.follow)
+        if controls_available:
+            if not self.match_started:
+                return 0.0
+            return max(0.0, float(self.match_duration_sec) - float(self.match_time_left_sec))
+        return max(0.0, float(self.records[self.current_index].t - self.records[0].t))
+
+    def scripted_motion_state(self) -> tuple[tuple[float, float], int] | None:
+        if not self.scripted_enabled or not self.scripted_waypoints:
+            return None
+        if len(self.scripted_waypoints) == 1:
+            return (self.scripted_waypoints[0], 0)
+        if self.scripted_total_length <= 0.0:
+            return (self.scripted_waypoints[0], 0)
+
+        distance = self.scripted_elapsed_sec() * self.scripted_speed_cmps
+        if not math.isfinite(distance) or distance < 0.0:
+            distance = 0.0
+        if self.scripted_loop:
+            distance = distance % self.scripted_total_length
+        else:
+            distance = min(distance, self.scripted_total_length)
+
+        for idx, seg in enumerate(self.scripted_segment_lengths):
+            start = self.scripted_motion_points[idx]
+            end = self.scripted_motion_points[idx + 1]
+            if seg <= 1e-6:
+                if distance <= seg:
+                    return (start, idx)
+                continue
+            if distance <= seg or idx == len(self.scripted_segment_lengths) - 1:
+                ratio = max(0.0, min(1.0, distance / seg))
+                return (
+                    (start[0] + (end[0] - start[0]) * ratio, start[1] + (end[1] - start[1]) * ratio),
+                    idx,
+                )
+            distance -= seg
+        if self.scripted_motion_points:
+            return (self.scripted_motion_points[-1], max(0, len(self.scripted_segment_lengths) - 1))
+        return (self.scripted_waypoints[-1], 0)
+
+    def scripted_marker_position(self) -> tuple[float, float] | None:
+        state = self.scripted_motion_state()
+        return None if state is None else state[0]
+
+    def draw_scripted_path(self, image_rect: Any) -> None:
+        if not self.scripted_enabled:
+            return
+        pg = self.pg
+        motion_state = self.scripted_motion_state()
+        if motion_state is None:
+            return
+        marker, active_segment_idx = motion_state
+        if self.scripted_show_future:
+            visible_points = self.scripted_waypoints
+        else:
+            visible_points = self.scripted_motion_points[: active_segment_idx + 2]
+            if not visible_points:
+                visible_points = self.scripted_waypoints[:1]
+        path_points = [self.field_to_screen(pos, image_rect) for pos in visible_points]
+        if len(path_points) >= 2:
+            pg.draw.lines(
+                self.screen,
+                self.scripted_color,
+                bool(self.scripted_show_future and self.scripted_loop and len(path_points) > 2),
+                path_points,
+                self.scripted_line_width,
+            )
+        for idx, point in enumerate(path_points):
+            pg.draw.circle(self.screen, self.scripted_color, point, 4)
+            if self.scripted_show_labels or self.show_labels:
+                self.draw_label(f"P{idx}", point[0] + 6, point[1] - 10, image_rect)
+
+        sx, sy = self.field_to_screen(marker, image_rect)
+        pg.draw.circle(self.screen, self.palette["black"], (sx, sy), self.scripted_marker_radius + 3)
+        pg.draw.circle(self.screen, self.scripted_color, (sx, sy), self.scripted_marker_radius)
+        elapsed = int(round(self.scripted_elapsed_sec()))
+        start_idx = active_segment_idx % max(1, len(self.scripted_waypoints))
+        target_idx = (active_segment_idx + 1) % max(1, len(self.scripted_waypoints))
+        self.draw_label(
+            f"{self.scripted_label} P{start_idx}->P{target_idx} v={self.scripted_speed_cmps:.0f}cm/s t={elapsed}s",
+            sx + self.scripted_marker_radius + 6,
+            sy - 24,
+            image_rect,
+        )
 
     def draw_grid(self, image_rect: Any) -> None:
         pg = self.pg
@@ -741,6 +911,10 @@ class Viewer:
             state = "TRACE"
         summary = f"{state} {self.format_mmss(remaining)} / {self.format_mmss(self.match_duration_sec)}"
         y = self.draw_text(summary, x, y, self.mono_font, self.palette["text"], max_width)
+        if self.scripted_enabled:
+            mode = "loop" if self.scripted_loop else "once"
+            path_status = f"path {len(self.scripted_waypoints)}pts {self.scripted_speed_cmps:.0f}cm/s {mode}"
+            y = self.draw_text(path_status, x, y, self.small_font, self.palette["muted"], max_width)
 
         self.control_buttons = {}
         if controls_available:

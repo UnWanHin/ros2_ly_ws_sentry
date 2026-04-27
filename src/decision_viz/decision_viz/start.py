@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -17,6 +19,81 @@ DEFAULT_BT_CONFIG_BY_MODE = {
     "league": "league_competition.json",
     "showcase": "showcase_competition.json",
 }
+
+
+def _collect_pids_by_pattern(pattern: str) -> list[int]:
+    try:
+        proc = subprocess.run(
+            ["pgrep", "-f", pattern],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return []
+    if proc.returncode not in (0, 1):
+        return []
+    pids: list[int] = []
+    for line in proc.stdout.splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            pids.append(int(text))
+        except ValueError:
+            continue
+    return pids
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _terminate_pids(pids: list[int], timeout_sec: float = 1.2) -> list[int]:
+    if not pids:
+        return []
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    deadline = time.monotonic() + max(0.1, timeout_sec)
+    while time.monotonic() < deadline:
+        alive = [pid for pid in pids if _pid_alive(pid)]
+        if not alive:
+            return []
+        time.sleep(0.05)
+    alive = [pid for pid in pids if _pid_alive(pid)]
+    for pid in alive:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    time.sleep(0.05)
+    return [pid for pid in alive if _pid_alive(pid)]
+
+
+def cleanup_stale_live_viewers() -> None:
+    this_pid = os.getpid()
+    targets = sorted(
+        {
+            pid
+            for pattern in ("decision_viz.main", "decision-viz ")
+            for pid in _collect_pids_by_pattern(pattern)
+            if pid != this_pid
+        }
+    )
+    if not targets:
+        return
+    remain = _terminate_pids(targets)
+    if remain:
+        print(f"warning: stale decision_viz.main processes still alive: {remain}", file=sys.stderr)
+    else:
+        print(f"cleaned stale decision_viz.main processes: {targets}")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -357,6 +434,7 @@ def build_start_command(
             ("use_buff", "false"),
             ("use_behavior_tree", "true"),
             ("debug_bypass_is_start", "true" if debug_bypass_is_start else "false"),
+            ("runtime_rearm_start_gate", "true"),
         )
         for key, value in offline_defaults:
             if not has_launch_arg(extra_launch_args, key):
@@ -586,6 +664,7 @@ def main(argv: list[str] | None = None) -> int:
             if trace_path is None:
                 print("trace is disabled but --live-view requested", file=sys.stderr)
                 return 2
+            cleanup_stale_live_viewers()
             if args.live_web_port > 0:
                 print(
                     "live web stream: "

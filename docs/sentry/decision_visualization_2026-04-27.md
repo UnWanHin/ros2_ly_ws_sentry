@@ -18,6 +18,7 @@ In offline mode, it can send file-based control commands to `decision_viz.mock_i
 - Viewer config: `src/decision_viz/config/default.yaml`
 - Default map: `tools/maps/basemaps/buff_map_field.png`
 - Rule-aware structure overlay source: `src/decision_viz/config/default.yaml` -> `structures`
+- Scripted route overlay source: `src/decision_viz/config/default.yaml` -> `scripted_path`
 
 ## Trace Recording
 
@@ -61,13 +62,23 @@ Offline decision + pygame live view:
 PYTHONPATH=src/decision_viz python3 -m decision_viz.start --offline-decision --mode regional --live-view
 ```
 
+Before launching live view, `decision_viz.start` auto-cleans stale old `decision_viz.main` viewer processes.
+
 For regional super confrontation timing, use a 7-minute match clock (`420` seconds):
 
 ```bash
 PYTHONPATH=src/decision_viz python3 -m decision_viz.start --offline-decision --mode regional --live-view --match-duration-sec 420
 ```
 
+One-command fixed regional wrapper:
+
+```bash
+python3 scripts/python/start.py
+```
+
 Offline mode keeps `/ly/game/is_start` gate enabled by default; press `Start` in viewer/web to publish game-start and enter match phase.
+Offline mode enables `runtime_rearm_start_gate:=true` by default. After `Reset`, behavior_tree re-enters start gate,
+holds safe-control, publishes Home navigation goal, and waits for next `Start`.
 Offline mode also forces `NaviSetting.UseTfGoalBridge=false` via a generated temp config, so `/ly/navi/goal_pos` remains official map coordinates.
 Use `--keep-tf-goal-bridge` only when you need transformed bridge output.
 
@@ -154,10 +165,20 @@ Offline match-control defaults are in the same YAML:
 - `match_control.forward_step_sec`
 - `match_control.control_file`
 
+Scripted route defaults are in the same YAML:
+
+- `scripted_path.enabled`
+- `scripted_path.goal_ids` / `scripted_path.points_cm`
+- `scripted_path.speed_cmps`
+- `scripted_path.side` / `scripted_path.loop`
+- `scripted_path.show_future`
+
 Live follow mode panel includes `Start`, `Pause`, `+10s`, `-10s`, `Reset` controls for offline mock match timing.
 The HTTP page (`/`) provides the same control buttons and writes commands to `match_control.control_file`.
 Match clock is rendered as a real-time countdown; pressing `Start` starts countdown immediately.
-If live-view is waiting for first trace records, press `S` or `Enter` in the waiting window to send start gate.
+Live view opens the full viewer immediately, then updates when real trace rows arrive.
+When scripted path is enabled, route marker movement uses `speed_cmps` and elapsed match time.
+By default, only the visited route plus the current target segment is drawn; set `show_future: true` to draw the full planned route.
 
 After build:
 

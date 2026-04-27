@@ -41,6 +41,21 @@ timeline:
   path_history_limit: 500
   jump_step: 25
 
+scripted_path:
+  enabled: true
+  side: auto            # auto/red/blue
+  speed_cmps: 140       # cm/s
+  loop: true
+  show_labels: false
+  show_future: false
+  label: Patrol
+  line_width: 3
+  marker_radius: 8
+  color: "#f5c542"
+  # priority: points_cm > goal_ids
+  points_cm: []
+  goal_ids: [0, 6, 10, 14, 17, 10, 6]
+
 resources:
   ammo_max: 50
 
@@ -51,6 +66,7 @@ layers:
   all_goals: true
   current_goal: true
   goal_path: true
+  scripted_path: true
   units: true
   unit_health_bars: true
   recent_changes: true

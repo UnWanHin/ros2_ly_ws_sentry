@@ -10,6 +10,7 @@ Updated: 2026-04-27
 - Normalizes trace rows into `DecisionOutput` records so future decision internals can change while the viewer stays centered on the final goal output.
 - Draws a 2D map, navigation goals, recent goal path, friendly/enemy units, HP bars, strategy, aim mode, posture, target, ammo, terrain overlays, and recent decision changes.
 - Draws rule-aware structure overlays (walls, energy mechanism, outposts) on top of the 2D map.
+- Supports a YAML-configured scripted path overlay with configurable waypoint list and movement speed.
 - Adds offline match-time control for super confrontation regional tests: start, pause, rewind, forward, reset.
 - Uses `tools/maps/basemaps/buff_map_field.png` by default, but the map is selectable.
 - Keeps window size, field size, colors, point coordinates, terrain overlays, unit styles, layer switches, and web stream defaults in `config/default.yaml`.
@@ -98,6 +99,8 @@ PYTHONPATH=src/decision_viz python3 -m decision_viz.start \
   --live-view
 ```
 
+Before launching live view, `decision_viz.start` now auto-cleans stale old `decision_viz.main` viewer processes.
+
 For super confrontation regional logic, keep `--mode regional` and use a 7-minute match clock (`420` seconds):
 
 ```bash
@@ -108,8 +111,16 @@ PYTHONPATH=src/decision_viz python3 -m decision_viz.start \
   --match-duration-sec 420
 ```
 
+One-command fixed regional wrapper:
+
+```bash
+python3 scripts/python/start.py
+```
+
 Offline mode now keeps `/ly/game/is_start` gate enabled by default (no `debug_bypass_is_start`).
 Use the viewer/web `Start` control to publish game-start and begin countdown.
+Offline mode also enables `runtime_rearm_start_gate:=true` by default:
+`Reset` closes the gate again, holds safe-control, publishes Home navigation goal, and waits for next `Start`.
 
 By default, offline mode also writes a temporary BT config with `NaviSetting.UseTfGoalBridge=false`,
 so goal position publish uses official map coordinates (no transformed bridge output).
@@ -183,6 +194,7 @@ Stream defaults can be configured in YAML:
 - `src/decision_viz/config/default.yaml` -> `web_stream.jpeg_quality`
 - `src/decision_viz/config/default.yaml` -> `structures` (walls/energy mechanism/outposts)
 - `src/decision_viz/config/default.yaml` -> `match_control` (duration/control-file/button step)
+- `src/decision_viz/config/default.yaml` -> `scripted_path` (goal route / custom points / speed)
 
 Headless smoke test:
 
@@ -225,7 +237,25 @@ python3 -m pip install -r src/decision_viz/requirements.txt
 - The HTTP page (`/`) now has the same control buttons and writes commands to `match_control.control_file`
 - Keyboard shortcuts for offline mock control: `S` start, `P` pause, `[` rewind, `]` forward, `R` reset
 - Match clock is a real-time countdown: `Start` begins countdown immediately, then syncs with incoming trace `time_left`
-- In follow waiting screen (before first trace), press `S` or `Enter` to send start gate and unblock trace generation
+- Follow mode opens the full viewer immediately, then updates when real trace rows arrive.
+
+## Scripted Path Config
+
+Use `scripted_path` in `src/decision_viz/config/default.yaml`:
+
+```yaml
+scripted_path:
+  enabled: true
+  side: auto      # auto/red/blue
+  speed_cmps: 320
+  loop: true
+  show_future: false
+  points_cm: []   # if non-empty, this is used first
+  goal_ids: [0, 6, 10, 14, 17, 10, 6]
+```
+
+The marker moves by `speed_cmps` and match elapsed time. By default, only the visited route plus the current target segment is drawn; set `show_future: true` to draw the full planned route.
+In follow offline mode, elapsed time comes from match clock (`Start/Pause/Rewind/Forward/Reset`).
 
 ## Maintenance Contract
 
