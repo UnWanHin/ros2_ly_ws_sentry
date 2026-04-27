@@ -67,6 +67,10 @@ For regional super confrontation timing, use a 7-minute match clock (`420` secon
 PYTHONPATH=src/decision_viz python3 -m decision_viz.start --offline-decision --mode regional --live-view --match-duration-sec 420
 ```
 
+Offline mode keeps `/ly/game/is_start` gate enabled by default; press `Start` in viewer/web to publish game-start and enter match phase.
+Offline mode also forces `NaviSetting.UseTfGoalBridge=false` via a generated temp config, so `/ly/navi/goal_pos` remains official map coordinates.
+Use `--keep-tf-goal-bridge` only when you need transformed bridge output.
+
 Live view now also serves the same pygame frame to HTTP by default (port from YAML `web_stream.port`, default `9000`):
 
 - `http://127.0.0.1:9000/` for local browser
@@ -153,6 +157,7 @@ Offline match-control defaults are in the same YAML:
 Live follow mode panel includes `Start`, `Pause`, `+10s`, `-10s`, `Reset` controls for offline mock match timing.
 The HTTP page (`/`) provides the same control buttons and writes commands to `match_control.control_file`.
 Match clock is rendered as a real-time countdown; pressing `Start` starts countdown immediately.
+If live-view is waiting for first trace records, press `S` or `Enter` in the waiting window to send start gate.
 
 After build:
 

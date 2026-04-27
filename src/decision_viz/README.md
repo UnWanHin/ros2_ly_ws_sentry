@@ -108,6 +108,13 @@ PYTHONPATH=src/decision_viz python3 -m decision_viz.start \
   --match-duration-sec 420
 ```
 
+Offline mode now keeps `/ly/game/is_start` gate enabled by default (no `debug_bypass_is_start`).
+Use the viewer/web `Start` control to publish game-start and begin countdown.
+
+By default, offline mode also writes a temporary BT config with `NaviSetting.UseTfGoalBridge=false`,
+so goal position publish uses official map coordinates (no transformed bridge output).
+Use `--keep-tf-goal-bridge` if you explicitly need transformed output.
+
 By default, `--offline-decision` keeps trace off. Add `--trace-on` if you want JSONL output at the same time:
 
 ```bash
@@ -218,6 +225,7 @@ python3 -m pip install -r src/decision_viz/requirements.txt
 - The HTTP page (`/`) now has the same control buttons and writes commands to `match_control.control_file`
 - Keyboard shortcuts for offline mock control: `S` start, `P` pause, `[` rewind, `]` forward, `R` reset
 - Match clock is a real-time countdown: `Start` begins countdown immediately, then syncs with incoming trace `time_left`
+- In follow waiting screen (before first trace), press `S` or `Enter` to send start gate and unblock trace generation
 
 ## Maintenance Contract
 

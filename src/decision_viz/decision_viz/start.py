@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shlex
 import subprocess
 import sys
@@ -113,6 +114,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=0.0,
         help="Mock /ly/gimbal/angles pitch (default: 0).",
+    )
+    parser.add_argument(
+        "--bypass-is-start",
+        action="store_true",
+        help="Debug only: bypass /ly/game/is_start gate in offline mode.",
+    )
+    parser.add_argument(
+        "--keep-tf-goal-bridge",
+        action="store_true",
+        help=(
+            "Offline mode only: keep NaviSetting.UseTfGoalBridge from source config. "
+            "Default is to force official map coordinates (UseTfGoalBridge=false)."
+        ),
     )
     parser.add_argument(
         "--match-duration-sec",
@@ -309,6 +323,7 @@ def build_start_command(
     entry: str,
     mode: str,
     bt_config_launch: str,
+    debug_bypass_is_start: bool,
     trace_enabled: bool,
     trace_path: Path | None,
     every: int,
@@ -341,7 +356,7 @@ def build_start_command(
             ("use_outpost", "false"),
             ("use_buff", "false"),
             ("use_behavior_tree", "true"),
-            ("debug_bypass_is_start", "true"),
+            ("debug_bypass_is_start", "true" if debug_bypass_is_start else "false"),
         )
         for key, value in offline_defaults:
             if not has_launch_arg(extra_launch_args, key):
@@ -411,6 +426,27 @@ def build_mock_command(root: Path, args: argparse.Namespace) -> tuple[list[str],
     return (["bash", "-lc", shell_cmd], shell_cmd)
 
 
+def build_offline_bt_config(root: Path, source_config: Path) -> Path:
+    with source_config.open("r", encoding="utf-8") as stream:
+        data = json.load(stream)
+    if not isinstance(data, dict):
+        raise ValueError(f"invalid config root (expect object): {source_config}")
+
+    navi = data.get("NaviSetting")
+    if not isinstance(navi, dict):
+        navi = {}
+        data["NaviSetting"] = navi
+    navi["UseTfGoalBridge"] = False
+
+    out_dir = (root / "log" / "decision_viz").resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{source_config.stem}.offline_official_goal_pos.json"
+    with out_path.open("w", encoding="utf-8") as stream:
+        json.dump(data, stream, ensure_ascii=False, indent=2)
+        stream.write("\n")
+    return out_path
+
+
 def run_viewer(trace_path: Path) -> int:
     cmd = [sys.executable, "-m", "decision_viz.main", trace_path.as_posix()]
     return subprocess.run(cmd, check=False).returncode
@@ -435,7 +471,7 @@ def start_live_viewer(
         "--follow-poll",
         f"{follow_poll}",
         "--follow-wait",
-        "40",
+        "600",
     ]
     if web_host.strip():
         cmd.extend(["--web-host", web_host.strip()])
@@ -465,6 +501,19 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    if args.offline_decision and not args.keep_tf_goal_bridge:
+        try:
+            offline_config = build_offline_bt_config(root, config_file)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(f"failed to prepare offline BT config: {exc}", file=sys.stderr)
+            return 2
+        config_file = offline_config
+        bt_config_launch = offline_config.as_posix()
+        print(f"offline BT config (official map goal_pos): {offline_config}")
 
     trace_enabled = should_enable_trace(args)
     trace_path: Path | None = None
@@ -477,6 +526,7 @@ def main(argv: list[str] | None = None) -> int:
         entry=args.entry,
         mode=args.mode,
         bt_config_launch=bt_config_launch,
+        debug_bypass_is_start=args.bypass_is_start,
         trace_enabled=trace_enabled,
         trace_path=trace_path,
         every=args.every,

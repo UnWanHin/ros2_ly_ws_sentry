@@ -59,6 +59,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Override viewer/mock control JSONL path (default: decision_viz.start default).",
     )
     parser.add_argument(
+        "--bypass-is-start",
+        action="store_true",
+        help="Debug only: bypass /ly/game/is_start gate in offline mode.",
+    )
+    parser.add_argument(
+        "--keep-tf-goal-bridge",
+        action="store_true",
+        help="Keep transformed goal-pos bridge in offline mode (default is official map coords only).",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print command only.",
@@ -248,6 +258,10 @@ def main(argv: list[str] | None = None) -> int:
         decision_cmd.extend(["--match-duration-sec", str(args.match_duration_sec)])
     if args.control_file.strip():
         decision_cmd.extend(["--control-file", str(Path(args.control_file).expanduser().resolve())])
+    if args.bypass_is_start:
+        decision_cmd.append("--bypass-is-start")
+    if args.keep_tf_goal_bridge:
+        decision_cmd.append("--keep-tf-goal-bridge")
     if args.trace:
         decision_cmd.append("--trace-on")
     if args.dry_run:

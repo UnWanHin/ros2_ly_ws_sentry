@@ -33,19 +33,18 @@ def color(pg: Any, colors: dict[str, str], name: str, fallback: str) -> Any:
 
 
 def record_position(record: TraceRecord, goals: dict[int, dict[str, Any]]) -> tuple[float, float] | None:
-    if record.output.goal_pos_cm is not None and record.output.uses_goal_pos:
-        return record.output.goal_pos_cm
     if record.output.kind == "relative_target_bridge":
         return None
+    goal = goals.get(record.goal_base_id)
+    if goal:
+        pos = goal.get(record.goal_side)
+        if pos is not None and pos != (0, 0):
+            return pos
+    if record.output.goal_pos_cm is not None and record.output.uses_goal_pos:
+        return record.output.goal_pos_cm
     if record.output.goal_pos_cm is not None:
         return record.output.goal_pos_cm
-    goal = goals.get(record.goal_base_id)
-    if not goal:
-        return None
-    pos = goal.get(record.goal_side)
-    if pos == (0, 0):
-        return None
-    return pos
+    return None
 
 
 class Viewer:

@@ -115,6 +115,8 @@ python3 ./scripts/python/start.py
 - 端口画面流：`http://127.0.0.1:<port>/`（默认读 `src/decision_viz/config/default.yaml` 的 `web_stream.port`，默认值 9000）
 - 分区赛超对抗 7 分钟离线比赛时钟（默认 420 秒）
 - 右侧控制按钮：`Start` / `Pause` / `+10s` / `-10s` / `Reset`
+- 默认保留 `/ly/game/is_start` 门控；点击 `Start` 才会进入开赛状态
+- 默认离线仅发官方地图坐标（关闭 tf goal bridge 转换）
 
 可选：
 
@@ -125,6 +127,8 @@ python3 ./scripts/python/start.py --no-view
 python3 ./scripts/python/start.py --web-port 9010
 python3 ./scripts/python/start.py --match-duration-sec 420
 python3 ./scripts/python/start.py --control-file /tmp/decision_viz_match_control.jsonl
+python3 ./scripts/python/start.py --bypass-is-start
+python3 ./scripts/python/start.py --keep-tf-goal-bridge
 ```
 
 ### 3. `showcase` 是什么

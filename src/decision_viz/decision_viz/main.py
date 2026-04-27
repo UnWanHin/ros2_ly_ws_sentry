@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from .config import goals_by_id, load_config, load_plugin_points, resolve_path
+from .control_bus import append_command
 from .trace import build_changes, load_trace, load_trace_incremental
 from .validation import format_validation, validate_records
 from .viewer import Viewer
@@ -81,6 +82,7 @@ def wait_for_follow_records(
     pygame=None,
     config: dict | None = None,
     streamer=None,
+    control_file: Path | None = None,
 ) -> tuple[list, int, int] | None:
     deadline = time.monotonic() + max(0.0, follow_wait)
     records: list = []
@@ -124,6 +126,18 @@ def wait_for_follow_records(
                     return None
                 if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_q):
                     return None
+                if event.type == pygame.KEYDOWN and event.key in (pygame.K_s, pygame.K_RETURN):
+                    if control_file is not None:
+                        try:
+                            append_command(control_file, "start")
+                        except OSError:
+                            pass
+                if event.type == pygame.KEYDOWN and event.key in (pygame.K_r,):
+                    if control_file is not None:
+                        try:
+                            append_command(control_file, "reset")
+                        except OSError:
+                            pass
                 if event.type == pygame.VIDEORESIZE:
                     new_w = max(min_width, event.w)
                     new_h = max(min_height, event.h)
@@ -170,11 +184,18 @@ def wait_for_follow_records(
         hint = small_font.render(f"trace: {trace_path}", True, pygame.Color("#a8b0ba"))
         remain = small_font.render(f"remaining: {remaining:.1f}s", True, pygame.Color("#a8b0ba"))
         cancel = small_font.render("Press ESC or close window to cancel.", True, pygame.Color("#a8b0ba"))
+        start_hint = None
+        if control_file is not None:
+            start_hint = small_font.render("Press S or Enter to start offline match gate.", True, pygame.Color("#f5c542"))
         cx = screen.get_width() // 2
         screen.blit(title, (cx - title.get_width() // 2, screen.get_height() // 2 - 80))
         screen.blit(hint, (cx - hint.get_width() // 2, screen.get_height() // 2 - 24))
         screen.blit(remain, (cx - remain.get_width() // 2, screen.get_height() // 2 + 8))
-        screen.blit(cancel, (cx - cancel.get_width() // 2, screen.get_height() // 2 + 40))
+        if start_hint is not None:
+            screen.blit(start_hint, (cx - start_hint.get_width() // 2, screen.get_height() // 2 + 38))
+            screen.blit(cancel, (cx - cancel.get_width() // 2, screen.get_height() // 2 + 68))
+        else:
+            screen.blit(cancel, (cx - cancel.get_width() // 2, screen.get_height() // 2 + 40))
         if streamer is not None:
             streamer.publish_surface(screen, pygame)
         pygame.display.flip()
@@ -226,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     control_file = str(match_cfg.get("control_file", "")).strip()
     if control_file:
         control_file = str(Path(control_file).expanduser().resolve())
+    control_file_path = Path(control_file) if control_file else None
     control_step_sec = int(match_cfg.get("rewind_step_sec", 10) or 10)
 
     trace_path = resolve_path(args.trace or paths.get("sample_trace", "src/decision_viz/sample/sample_trace.jsonl"))
@@ -288,6 +310,7 @@ def main(argv: list[str] | None = None) -> int:
                     pygame=pygame if show_wait_window else None,
                     config=config if show_wait_window else None,
                     streamer=streamer,
+                    control_file=control_file_path,
                 )
             except (OSError, TimeoutError) as exc:
                 if pygame_initialized:
